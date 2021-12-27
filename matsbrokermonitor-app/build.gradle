@@ -1,0 +1,33 @@
+
+
+dependencies {
+    api "io.mats3:mats-api:$matsVersion"
+
+    // TESTING
+
+    // We need an implementation of the MatsSerializer, the MatsSerializerJson
+    testImplementation "io.mats3:mats-serial-json:$matsVersion"
+    // Testing tools for Mats
+    testImplementation "io.mats3:mats-test-junit:$matsVersion"
+    // Mats Spring
+    testImplementation "io.mats3:mats-spring:$matsVersion"
+    // Mats Spring JMS
+    testImplementation "io.mats3:mats-spring-jms:$matsVersion"
+    // Mats Spring Test
+    testImplementation "io.mats3:mats-spring-test:$matsVersion"
+
+    // We want the standard logging, which will be auto-installed by being on the classpath.
+    testImplementation "io.mats3:mats-intercept-logging:$matsVersion"
+
+    // Need logging system in tests
+    testRuntimeOnly "org.slf4j:log4j-over-slf4j:$slf4jVersion"
+    testRuntimeOnly "ch.qos.logback:logback-classic:$logbackVersion"
+}
+
+configurations.all {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'org.springframework') {
+            details.useVersion "$springVersion"
+        }
+    }
+}

@@ -1,0 +1,13 @@
+// MatsBrokerInterface for ActiveMQ
+
+dependencies {
+    api project(":brokerinterface-spi")
+
+    implementation "javax.jms:jms-api:$jmsApiVersion"
+    implementation "org.apache.activemq:activemq-broker:$activeMqVersion"
+
+
+    // TEST
+    implementation "org.slf4j:log4j-over-slf4j:$slf4jVersion"
+    implementation "ch.qos.logback:logback-classic:$logbackVersion"
+}

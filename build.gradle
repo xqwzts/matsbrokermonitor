@@ -1,0 +1,177 @@
+// Customize the Gradle Wrapper generation task.
+wrapper {
+    gradleVersion = "7.3.2"
+    // Use "-all"-version of distribution, since IntelliJ works better then..
+    setDistributionType(Wrapper.DistributionType.ALL)
+}
+
+allprojects {
+    group = 'io.mats3'
+    version = '0.0.1-SNAPSHOT'
+}
+
+// Versions for all libraries used throughout the subprojects
+ext {
+    matsVersion = '0.18.4-2021-11-17'
+    activeMqVersion = '5.16.3'
+    artemisMqVersion = '2.17.0'
+    springVersion = '5.3.14'
+
+    jacksonVersion = '2.11.4'
+    slf4jVersion = '1.7.30'
+    micrometerVersion = '1.7.3' // 1.7 is LTS. 1.7.3 most recent as of 2021-08-12
+
+    jmsApiVersion = '1.1-rev-1'
+    javaxInjectVersion = '1'
+    javaxAnnotationVersion = '1.3.2'
+
+    // For the JUnit system tests, and the JUnit testing tools
+    junitVersion = '4.13.2'
+    // For the Jupiter testing tools
+    jupiterVersion = '5.7.2'
+    jupiterPlatformVersion = '1.7.2'
+
+    // For testing
+    logbackVersion = '1.2.3'
+    h2Version = '1.4.200'
+    jettyVersion = '9.4.41.v20210516'
+    hibernateVersion = '5.5.0.Final'
+}
+
+subprojects {
+    apply plugin: 'java-library'
+
+    repositories { mavenCentral() }
+
+    project.buildDir = 'build-gradle'
+
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+
+    compileJava {
+        options.encoding = 'UTF-8'
+        options.deprecation = true
+        options.incremental = true
+        options.compilerArgs += ['-Werror', '-Xlint:all', '-Xlint:-serial']
+    }
+
+    javadoc {
+        // without the -quiet option, the build fails due to errors&warns
+        options.addStringOption('Xdoclint:none', '-quiet')
+    }
+
+    jar {
+        manifest {
+            attributes 'Implementation-Title': 'MatsBrokerMonitor',
+                    'Implementation-Version': archiveVersion
+        }
+    }
+
+    test {
+        /*
+         * It is possible to change the broker to which tests are run. Check mats3/build.gradle for more doc.
+         *
+         * An example:
+         *
+         * == Run all tests against an external Artemis MQ broker on localhost:
+         * ./gradlew -Pmats.test.broker=artemis -Pmats.test.brokerurl=localhost clean test
+         */
+        systemProperties project.properties.subMap(["mats.test.brokerurl", "mats.test.broker"])
+    }
+
+    // ------------------------------------------------
+    // -- Simple tools
+
+    // Define dependency report task that all subprojects gets. Invoke with "./gradlew allDeps | less"
+    task allDeps(type: DependencyReportTask) {}
+
+    // Some info about current gradle environment.
+    task systemInformation {
+        doLast {
+            println "\n** Java properties [System.getProperties()], sorted:\n"
+            System.properties.sort().each { k, v ->
+                println("$k = $v")
+            }
+            println "\n** Environment [System.getenv()], sorted:\n"
+            System.env.sort().each { k, v ->
+                println("$k = $v")
+            }
+            println ''
+            println "** Java Version:   " + System.getProperty("java.version")
+            println "** Groovy Version: " + GroovySystem.getVersion()
+            println "** Gradle Version: " + gradle.gradleVersion
+        }
+    }
+}
+
+// For publishing subprojects: All, minus 'mats-api-test'
+configure(subprojects.findAll {it.name != 'mats-api-test'}) {
+    apply plugin: 'signing'
+    apply plugin: 'maven-publish'
+
+    java {
+        withJavadocJar()
+        withSourcesJar()
+    }
+
+
+    signing {
+        // "configurations.archives" didn't sign anything, while this overeagerly even signs the MD5s and SHAs..
+        sign publishing.publications
+    }
+
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+                pom {
+                    name = 'Mats Broker Monitor'
+                    description = 'Monitoring solution for the backend message broker of Mats'
+                    url = 'https://github.com/centiservice/matsbrokermonitor'
+                    licenses {
+                        license {
+                            name = 'Source Available, commercial'
+                            url = 'https://github.com/centiservice/matsbrokermonitor/blob/main/LICENSE.md'
+                        }
+                    }
+                    developers {
+                        developer {
+                            id = 'stolsvik'
+                            name = 'Endre Stølsvik'
+                            email = 'endre@stolsvik.com'
+                        }
+                    }
+                    scm {
+                        connection = 'scm:git:https://github.com/centiservice/matsbrokermonitor.git'
+                        developerConnection = 'scm:git:ssh://github.com:centiservice/matsbrokermonitor.git'
+                        url = 'https://github.com/centiservice/matsbrokermonitor'
+                    }
+                }
+                from components.java
+            }
+        }
+        repositories {
+            maven {
+                name 'SonatypeOSSRHSnapshot'
+                url 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
+                credentials {
+                    // using findProperty(..) to be able to build without it being defined.
+                    username findProperty('sonatypeUsername') as String ?: "should be in different file"
+                    password findProperty('sonatypePassword') as String ?: "should be in different file"
+                }
+            }
+            maven {
+                name 'SonatypeOSSRHStaging'
+                url 'https://s01.oss.sonatype.org/service/local/staging/deploy/maven2'
+                credentials {
+                    // using findProperty(..) to be able to build without it being defined.
+                    username findProperty('sonatypeUsername') as String ?: "should be in different file"
+                    password findProperty('sonatypePassword') as String ?: "should be in different file"
+                }
+            }
+        }
+    }
+
+    // Tasks to publish to Sonatype's OSSRH (OSS Repository Hosting), Snapshot and Staging
+    task matsPublishSnapshot(dependsOn: [publishAllPublicationsToSonatypeOSSRHSnapshotRepository])
+    task matsPublishStaging(dependsOn: [publishAllPublicationsToSonatypeOSSRHStagingRepository])
+}

@@ -1,0 +1,5 @@
+// HTML GUI
+
+dependencies {
+    api project(":brokerinterface-spi")
+}
