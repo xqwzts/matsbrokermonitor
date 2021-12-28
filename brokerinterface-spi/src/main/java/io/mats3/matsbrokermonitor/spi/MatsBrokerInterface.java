@@ -1,36 +1,42 @@
 package io.mats3.matsbrokermonitor.spi;
 
-import java.time.Instant;
-import java.util.Iterator;
+import java.io.Closeable;
+import java.util.Map;
+import java.util.Set;
 import java.util.SortedSet;
+import java.util.function.Consumer;
 
 /**
  * @author Endre Stølsvik 2021-12-16 23:10 - http://stolsvik.com/, endre@stolsvik.com
  */
-public interface MatsBrokerInterface {
+public interface MatsBrokerInterface extends Closeable {
 
     void start();
 
-    void stop();
+    void close();
 
-    SortedSet<BrokerDestination> getQueues();
+    void registerListener(Consumer<DestinationUpdateEvent> listener);
 
-    SortedSet<BrokerDestination> getTopics();
+    interface DestinationUpdateEvent {
+        Map<String, MatsBrokerDestination> getNewOrUpdatedDestinations();
 
-
-    interface BrokerDestination {
-        String matsStageId();
-
-        int getNumberOfMessages();
-
-        Iterator<BrokerMessage> getMessages(int limit);
-
-        boolean isDlq();
+        /**
+         * @return the set of destinations (queues or topics) that have disappeared - notice that this might happen
+         * with existing Mats endpoints if the broker removes the queue or topic e.g. due to inactivity or boot. Such
+         * a situation should just be interpreted as that stageId not having any messages in queue.
+         */
+        Set<String> getRemovedDestinations();
     }
 
-    interface BrokerMessage {
-        BrokerDestination getBrokerDestination();
+    Map<String, MatsBrokerDestination> getMatsDestinations();
 
-        Instant getEnqueueTime();
+    interface MatsBrokerDestination {
+        String matsStageId();
+
+        boolean isQueue();
+
+        boolean isDlq();
+
+        int getNumberOfMessages();
     }
 }

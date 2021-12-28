@@ -6,7 +6,7 @@ wrapper {
 }
 
 allprojects {
-    group = 'io.mats3'
+    group = 'io.mats3.matsbrokermonitor'
     version = '0.0.1-SNAPSHOT'
 }
 

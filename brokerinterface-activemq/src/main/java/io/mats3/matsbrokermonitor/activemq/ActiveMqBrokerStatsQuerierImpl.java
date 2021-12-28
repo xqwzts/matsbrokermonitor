@@ -1,7 +1,15 @@
 package io.mats3.matsbrokermonitor.activemq;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.Enumeration;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
@@ -14,28 +22,22 @@ import javax.jms.MessageProducer;
 import javax.jms.Queue;
 import javax.jms.Session;
 import javax.jms.Topic;
-import java.time.Clock;
-import java.time.Instant;
-import java.util.Enumeration;
-import java.util.Locale;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author Endre Stølsvik 2021-12-20 18:00 - http://stolsvik.com/, endre@stolsvik.com
  */
-public class RepeatedlyQueryActiveMqForStatistics {
+public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerier {
 
-    private static final Logger log = LoggerFactory.getLogger(RepeatedlyQueryActiveMqForStatistics.class);
+    private static final Logger log = LoggerFactory.getLogger(ActiveMqBrokerStatsQuerierImpl.class);
 
     private static final int CHILL_MILLIS_BEFORE_FIRST_REQUEST = 200;
     private static final int INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS = 5 * 1000;
     private static final int CHILL_MILLIS_WAIT_AFTER_RECEIVE_LOOPS_THROWABLE = 10 * 1000;
-    private static final int TIMEOUT_MILLIS_FOR_LAST_MESSAGE_OF_DESTINATION_BATCH = 500;
+    private static final int TIMEOUT_MILLIS_FOR_LAST_MESSAGE_IN_BATCH_FOR_DESTINATIONS = 500;
+    private static final int TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN = 500;
 
     private static final String QUERY_REQUEST_BROKER = "ActiveMQ.Statistics.Broker";
     /**
@@ -48,25 +50,50 @@ public class RepeatedlyQueryActiveMqForStatistics {
     private static final String QUERY_RESPONSE_BROKER_TOPIC = "matscontrol.MatsBrokerMonitor.ActiveMQ.Broker";
     private static final String QUERY_RESPONSE_DESTINATION_TOPIC = "matscontrol.MatsBrokerMonitor.ActiveMQ.Destinations";
 
-
     private final ConnectionFactory _connectionFactory;
 
     private final Clock _clock;
 
-    static RepeatedlyQueryActiveMqForStatistics create(ConnectionFactory connectionFactory) {
-        return new RepeatedlyQueryActiveMqForStatistics(connectionFactory, Clock.systemUTC());
+    static ActiveMqBrokerStatsQuerierImpl create(ConnectionFactory connectionFactory) {
+        return new ActiveMqBrokerStatsQuerierImpl(connectionFactory, Clock.systemUTC());
     }
 
-    private RepeatedlyQueryActiveMqForStatistics(ConnectionFactory connectionFactory, Clock clock) {
+    private ActiveMqBrokerStatsQuerierImpl(ConnectionFactory connectionFactory, Clock clock) {
         _connectionFactory = connectionFactory;
         _clock = clock;
     }
 
+    // Initial==true, set to false in close(). Cannot be restarted.
+    private boolean _runFlag = true;
+    private volatile Thread _sendStatsRequestMessages_Thread;
+    private volatile Thread _receiveBrokerStatsReplyMessages_Thread;
+    private volatile Connection _receiveBrokerStatsReplyMessages_Connection;
+    private volatile Thread _receiveDestinationsStatsReplyMessages_Thread;
+    private volatile Connection _receiveDestinationsStatsReplyMessages_Connection;
+
+    private final AtomicInteger _countOfDestinationsReceivedAfterRequest = new AtomicInteger();
+    private volatile long _timeRequestFiredOff = 0;
+
+    private volatile BrokerStatsDto _currentBrokerStatsDto;
+    private final ConcurrentNavigableMap<String, DestinationStatsDto> _currentDestinationStatsDtos = new ConcurrentSkipListMap<>();
+
+    private final CopyOnWriteArrayList<Consumer<ActiveMqBrokerStatsEvent>> _listeners = new CopyOnWriteArrayList<>();
+
     public void start() {
-        log.info("Starting ActiveMQ Broker interactor.");
-        _sendStatsRequestMessages_Thread = new Thread(this::sendStatsRequestMessages, "MatsBrokerMonitor.ActiveMQ: Sending Statistics request messages");
-        _receiveBrokerStatsReplyMessages_Thread = new Thread(this::receiveBrokerStatsReplyMessages, "MatsBrokerMonitor.ActiveMQ: Receive Broker Statistics reply messages");
-        _receiveDestinationsStatsReplyMessages_Thread = new Thread(this::receiveDestinationStatsReplyMessages, "MatsBrokerMonitor.ActiveMQ: Receive Destination Statistics reply messages");
+        if (!_runFlag) {
+            throw new IllegalStateException("Asked to start, but runFlag==false, so must already have been stopped.");
+        }
+        if ((_sendStatsRequestMessages_Thread != null) && _sendStatsRequestMessages_Thread.isAlive()) {
+            log.info("Asked to start, but already running. Ignoring.");
+            return;
+        }
+        log.info("Starting ActiveMQ Broker statistics querier.");
+        _sendStatsRequestMessages_Thread = new Thread(this::sendStatsRequestMessages,
+                "MatsBrokerMonitor.ActiveMQ: Sending Statistics request messages");
+        _receiveBrokerStatsReplyMessages_Thread = new Thread(this::receiveBrokerStatsReplyMessages,
+                "MatsBrokerMonitor.ActiveMQ: Receive Broker Statistics reply messages");
+        _receiveDestinationsStatsReplyMessages_Thread = new Thread(this::receiveDestinationStatsReplyMessages,
+                "MatsBrokerMonitor.ActiveMQ: Receive Destination Statistics reply messages");
 
         // :: First start reply consumers
         _receiveBrokerStatsReplyMessages_Thread.start();
@@ -75,10 +102,19 @@ public class RepeatedlyQueryActiveMqForStatistics {
         _sendStatsRequestMessages_Thread.start();
     }
 
-    public void stop() {
-        log.info("Asked to stop. Setting runFlag to false, closing Connections and interrupting threads.");
+    @Override
+    public void close() {
+        if (!_runFlag) {
+            log.warn("Asked to close, but runFlag==false, so must already have been stopped. Ignoring.");
+        }
+        if (_sendStatsRequestMessages_Thread == null) {
+            log.warn("Asked to close, but there is no request Thread running, so either not started,"
+                    + " or already stopped. Ignoring.");
+            return;
+        }
         // First set runFlag to false, so that any loop and "if" will exit.
         _runFlag = false;
+        log.info("Asked to close. Set runFlag to false, closing Connections and interrupting threads.");
         // Interrupt the sender - it'll close the Connection on its way out.
         interruptThread(_sendStatsRequestMessages_Thread);
         // Closing Connections for the receivers - they'll wake up from 'con.receive()'.
@@ -86,9 +122,9 @@ public class RepeatedlyQueryActiveMqForStatistics {
         closeConnectionIgnoreException(_receiveDestinationsStatsReplyMessages_Connection);
         // Check that all threads exit
         try {
-            _sendStatsRequestMessages_Thread.join(CHILL_MILLIS_BEFORE_FIRST_REQUEST);
-            _receiveBrokerStatsReplyMessages_Thread.join(CHILL_MILLIS_BEFORE_FIRST_REQUEST);
-            _receiveDestinationsStatsReplyMessages_Thread.join(CHILL_MILLIS_BEFORE_FIRST_REQUEST);
+            _sendStatsRequestMessages_Thread.join(TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN);
+            _receiveBrokerStatsReplyMessages_Thread.join(TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN);
+            _receiveDestinationsStatsReplyMessages_Thread.join(TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN);
         }
         catch (InterruptedException e) {
             /* ignore */
@@ -110,7 +146,8 @@ public class RepeatedlyQueryActiveMqForStatistics {
             connection.close();
         }
         catch (JMSException e) {
-            log.warn("Got [" + e.getClass().getSimpleName() + "] when trying to close Connection [" + connection + "], ignoring.");
+            log.warn("Got [" + e.getClass().getSimpleName() + "] when trying to close Connection [" + connection
+                    + "], ignoring.");
         }
     }
 
@@ -120,13 +157,9 @@ public class RepeatedlyQueryActiveMqForStatistics {
         }
     }
 
-    private final CopyOnWriteArrayList<Consumer<ActiveMqBrokerStatsEvent>> _listeners = new CopyOnWriteArrayList<>();
-
-    void registerListener(Consumer<ActiveMqBrokerStatsEvent> listener) {
+    @Override
+    public void registerListener(Consumer<ActiveMqBrokerStatsEvent> listener) {
         _listeners.add(listener);
-    }
-
-    interface ActiveMqBrokerStatsEvent {
     }
 
     private static class ActiveMqBrokerStatsEventImpl implements ActiveMqBrokerStatsEvent {
@@ -246,28 +279,15 @@ public class RepeatedlyQueryActiveMqForStatistics {
         }
     }
 
-    Optional<BrokerStatsDto> getCurrentBrokerStatsDto() {
+    public Optional<BrokerStatsDto> getCurrentBrokerStatsDto() {
         return Optional.ofNullable(_currentBrokerStatsDto);
     }
 
-    ConcurrentNavigableMap<String, DestinationStatsDto> getCurrentDestinationStatsDtos() {
+    public ConcurrentNavigableMap<String, DestinationStatsDto> getCurrentDestinationStatsDtos() {
         return _currentDestinationStatsDtos;
     }
 
     // ===== IMPLEMENTATION =====
-
-    private boolean _runFlag = true;
-    private volatile Thread _sendStatsRequestMessages_Thread;
-    private volatile Thread _receiveBrokerStatsReplyMessages_Thread;
-    private volatile Connection _receiveBrokerStatsReplyMessages_Connection;
-    private volatile Thread _receiveDestinationsStatsReplyMessages_Thread;
-    private volatile Connection _receiveDestinationsStatsReplyMessages_Connection;
-
-    private final AtomicInteger _countOfDestinationsReceivedAfterRequest = new AtomicInteger();
-    private volatile long _timeRequestFiredOff = 0;
-
-    private volatile BrokerStatsDto _currentBrokerStatsDto;
-    private final ConcurrentNavigableMap<String, DestinationStatsDto> _currentDestinationStatsDtos = new ConcurrentSkipListMap<>();
 
     private void sendStatsRequestMessages() {
         Connection sendRequestMessages_Connection = null;
@@ -333,18 +353,18 @@ public class RepeatedlyQueryActiveMqForStatistics {
                 chill(CHILL_MILLIS_WAIT_AFTER_RECEIVE_LOOPS_THROWABLE);
             }
         }
-        // To exit, we're signalled via interrupt - it is our job to close Connection.
+        // To exit, we're signalled via interrupt - it is our job to close Connection (it is a local variable)
         closeConnectionIgnoreException(sendRequestMessages_Connection);
         log.info("Got asked to exit, and that we do!");
     }
 
     private void receiveBrokerStatsReplyMessages() {
-        OUTERLOOP:
-        while (_runFlag) {
+        OUTERLOOP: while (_runFlag) {
             try {
                 _receiveBrokerStatsReplyMessages_Connection = _connectionFactory.createConnection();
                 _receiveBrokerStatsReplyMessages_Connection.start();
-                Session session = _receiveBrokerStatsReplyMessages_Connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+                Session session = _receiveBrokerStatsReplyMessages_Connection.createSession(false,
+                        Session.AUTO_ACKNOWLEDGE);
                 Topic replyTopic = session.createTopic(QUERY_RESPONSE_BROKER_TOPIC);
                 MessageConsumer consumer = session.createConsumer(replyTopic);
 
@@ -357,12 +377,10 @@ public class RepeatedlyQueryActiveMqForStatistics {
                         if (!_runFlag) {
                             break OUTERLOOP;
                         }
-                        throw new UnexpectedNullMessageReceivedException("Null message received, but runFlag still true?!");
+                        throw new UnexpectedNullMessageReceivedException(
+                                "Null message received, but runFlag still true?!");
                     }
-
                     _currentBrokerStatsDto = mapMessageToBrokerStatsDto(replyMsg);
-                    if (log.isDebugEnabled())
-                        log.debug("== Received Broker statistics reply message: " + replyMsg + ":\n" + _currentBrokerStatsDto);
                 }
             }
             catch (Throwable t) {
@@ -384,19 +402,20 @@ public class RepeatedlyQueryActiveMqForStatistics {
 
     @SuppressWarnings("unchecked")
     private void receiveDestinationStatsReplyMessages() {
-        OUTERLOOP:
-        while (_runFlag) {
+        OUTERLOOP: while (_runFlag) {
             try {
                 _receiveDestinationsStatsReplyMessages_Connection = _connectionFactory.createConnection();
                 _receiveDestinationsStatsReplyMessages_Connection.start();
-                Session session = _receiveDestinationsStatsReplyMessages_Connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+                Session session = _receiveDestinationsStatsReplyMessages_Connection.createSession(false,
+                        Session.AUTO_ACKNOWLEDGE);
                 Topic replyTopic = session.createTopic(QUERY_RESPONSE_DESTINATION_TOPIC);
                 MessageConsumer consumer = session.createConsumer(replyTopic);
 
                 long lastMessageReceived = 0;
                 while (_runFlag) {
                     // Go into timed receive.
-                    MapMessage replyMsg = (MapMessage) consumer.receive(TIMEOUT_MILLIS_FOR_LAST_MESSAGE_OF_DESTINATION_BATCH);
+                    MapMessage replyMsg = (MapMessage) consumer.receive(
+                            TIMEOUT_MILLIS_FOR_LAST_MESSAGE_IN_BATCH_FOR_DESTINATIONS);
                     // ?: Did we get a null BUT runFlag still true?
                     if ((replyMsg == null) && _runFlag) {
                         // -> null, but runFlag==true, so this was a timeout.
@@ -420,7 +439,8 @@ public class RepeatedlyQueryActiveMqForStatistics {
                         }
 
                         // ----- So, either startup, or we've finished a batch of messages:
-                        // Go into indefinite receive, waiting for next batch of messages triggered by next stats request.
+                        // Go into indefinite receive, waiting for next batch of messages triggered by next stats
+                        // request.
                         replyMsg = (MapMessage) consumer.receive();
                     }
                     // ?: Was this a null-message, most probably denoting that we're exiting?
@@ -430,7 +450,8 @@ public class RepeatedlyQueryActiveMqForStatistics {
                         if (!_runFlag) {
                             break OUTERLOOP;
                         }
-                        throw new UnexpectedNullMessageReceivedException("Null message received, but runFlag still true?!");
+                        throw new UnexpectedNullMessageReceivedException(
+                                "Null message received, but runFlag still true?!");
                     }
 
                     // This was a destination stats message - count it
@@ -458,7 +479,6 @@ public class RepeatedlyQueryActiveMqForStatistics {
         _receiveDestinationsStatsReplyMessages_Connection = null;
         log.info("Got asked to exit, and that we do!");
     }
-
 
     private BrokerStatsDto mapMessageToBrokerStatsDto(MapMessage mm) throws JMSException {
         BrokerStatsDto dto = new BrokerStatsDto();
@@ -524,10 +544,11 @@ public class RepeatedlyQueryActiveMqForStatistics {
     @SuppressWarnings("unchecked")
     private StringBuilder produceTextRepresentationOfMapMessage(MapMessage replyMsg) throws JMSException {
         StringBuilder buf = new StringBuilder();
-        for (Enumeration<String> e = (Enumeration<String>) replyMsg.getMapNames(); e.hasMoreElements(); ) {
+        for (Enumeration<String> e = (Enumeration<String>) replyMsg.getMapNames(); e.hasMoreElements();) {
             String name = e.nextElement();
             Object object = replyMsg.getObject(name);
-            buf.append("dto." + name + " = (" + object.getClass().getSimpleName().toLowerCase(Locale.ROOT) + ") mm.getObject(\"" + name + "\");\n");
+            buf.append("dto." + name + " = (" + object.getClass().getSimpleName().toLowerCase(Locale.ROOT)
+                    + ") mm.getObject(\"" + name + "\");\n");
         }
         return buf;
     }
@@ -535,7 +556,7 @@ public class RepeatedlyQueryActiveMqForStatistics {
     @SuppressWarnings("unchecked")
     private StringBuilder produceTextRepresentationOfMapMessage_old(MapMessage replyMsg) throws JMSException {
         StringBuilder buf = new StringBuilder();
-        for (Enumeration<String> e = (Enumeration<String>) replyMsg.getMapNames(); e.hasMoreElements(); ) {
+        for (Enumeration<String> e = (Enumeration<String>) replyMsg.getMapNames(); e.hasMoreElements();) {
             String name = e.nextElement();
             buf.append("  ").append(name);
             buf.append(" = ");
