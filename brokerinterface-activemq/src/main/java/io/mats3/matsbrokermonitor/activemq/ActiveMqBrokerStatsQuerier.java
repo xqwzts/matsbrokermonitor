@@ -16,6 +16,8 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
 
     void close();
 
+    void setMatsDestinationPrefix(String matsDestinationPrefix);
+
     void registerListener(Consumer<ActiveMqBrokerStatsEvent> listener);
 
     interface ActiveMqBrokerStatsEvent {

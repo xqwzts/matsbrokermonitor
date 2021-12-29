@@ -13,10 +13,15 @@ public class Runner {
     public static void main(String[] args) throws InterruptedException {
         ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory();
         ActiveMqBrokerStatsQuerierImpl querier = ActiveMqBrokerStatsQuerierImpl.create(connectionFactory);
-        ActiveMqMatsBrokerInterface activeMqMatsBrokerInterface = new ActiveMqMatsBrokerInterface(querier);
-        querier.start();
+        ActiveMqMatsBrokerMonitor activeMqMatsBrokerInterface = new ActiveMqMatsBrokerMonitor(querier, "endre:");
+
+        activeMqMatsBrokerInterface.registerListener(destinationUpdateEvent -> {
+            log.info("Got update! "+destinationUpdateEvent);
+        });
+        activeMqMatsBrokerInterface.start();
 
         Thread.sleep(7 * 1000);
         querier.close();
+        log.info("Exiting");
     }
 }

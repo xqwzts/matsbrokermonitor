@@ -45,7 +45,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
      * message for every destination of the same type as which the query was sent on (that is, if the query is sent on a
      * queue, you'll get answers for queues, and sent on topic gives answers for topics).
      */
-    private static final String QUERY_REQUEST_DESTINATION = "ActiveMQ.Statistics.Destination";
+    private static final String QUERY_REQUEST_DESTINATION_PREFIX = "ActiveMQ.Statistics.Destination";
 
     private static final String QUERY_RESPONSE_BROKER_TOPIC = "matscontrol.MatsBrokerMonitor.ActiveMQ.Broker";
     private static final String QUERY_RESPONSE_DESTINATION_TOPIC = "matscontrol.MatsBrokerMonitor.ActiveMQ.Destinations";
@@ -63,8 +63,18 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         _clock = clock;
     }
 
-    // Initial==true, set to false in close(). Cannot be restarted.
-    private boolean _runFlag = true;
+    private enum RunStatus {
+        NOT_STARTED,
+
+        RUNNING,
+
+        CLOSED
+    }
+
+    private String _matsDestinationPrefix;
+
+    // RunStatus: NOT_STARTED -> RUNNING -> CLOSED. Not restartable.
+    private volatile RunStatus _runStatus = RunStatus.NOT_STARTED;
     private volatile Thread _sendStatsRequestMessages_Thread;
     private volatile Thread _receiveBrokerStatsReplyMessages_Thread;
     private volatile Connection _receiveBrokerStatsReplyMessages_Connection;
@@ -80,13 +90,15 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     private final CopyOnWriteArrayList<Consumer<ActiveMqBrokerStatsEvent>> _listeners = new CopyOnWriteArrayList<>();
 
     public void start() {
-        if (!_runFlag) {
-            throw new IllegalStateException("Asked to start, but runFlag==false, so must already have been stopped.");
+        if (_runStatus == RunStatus.CLOSED) {
+            throw new IllegalStateException("Asked to start, but runStatus==CLOSED, so have already been closed.");
         }
-        if ((_sendStatsRequestMessages_Thread != null) && _sendStatsRequestMessages_Thread.isAlive()) {
+        if (_runStatus == RunStatus.RUNNING) {
             log.info("Asked to start, but already running. Ignoring.");
             return;
         }
+        // First set _runStatus to RUNNING, so threads will be happy
+        _runStatus = RunStatus.RUNNING;
         log.info("Starting ActiveMQ Broker statistics querier.");
         _sendStatsRequestMessages_Thread = new Thread(this::sendStatsRequestMessages,
                 "MatsBrokerMonitor.ActiveMQ: Sending Statistics request messages");
@@ -104,17 +116,20 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
     @Override
     public void close() {
-        if (!_runFlag) {
-            log.warn("Asked to close, but runFlag==false, so must already have been stopped. Ignoring.");
-        }
-        if (_sendStatsRequestMessages_Thread == null) {
-            log.warn("Asked to close, but there is no request Thread running, so either not started,"
-                    + " or already stopped. Ignoring.");
+        if (_runStatus == RunStatus.CLOSED) {
+            log.warn("Asked to close, but runStatus==CLOSED, so must already have been stopped. Ignoring.");
             return;
         }
-        // First set runFlag to false, so that any loop and "if" will exit.
-        _runFlag = false;
-        log.info("Asked to close. Set runFlag to false, closing Connections and interrupting threads.");
+        if (_runStatus == RunStatus.NOT_STARTED) {
+            log.warn("Asked to close, but runStatus==NOT_STARTED, so have never been started."
+                    + " Setting directly to CLOSED.");
+            _runStatus = RunStatus.CLOSED;
+            return;
+        }
+
+        // First set _runStatus to CLOSED, so that any loops and checks will exit.
+        _runStatus = RunStatus.CLOSED;
+        log.info("Asked to close. Set runStatus to CLOSED, closing Connections and interrupting threads.");
         // Interrupt the sender - it'll close the Connection on its way out.
         interruptThread(_sendStatsRequestMessages_Thread);
         // Closing Connections for the receivers - they'll wake up from 'con.receive()'.
@@ -136,6 +151,14 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         _sendStatsRequestMessages_Thread = null;
         _receiveBrokerStatsReplyMessages_Thread = null;
         _receiveDestinationsStatsReplyMessages_Thread = null;
+    }
+
+    @Override
+    public void setMatsDestinationPrefix(String matsDestinationPrefix) {
+        if (_runStatus != RunStatus.NOT_STARTED) {
+            throw new IllegalStateException("Tried setting matsDestinationPrefix, but runStatus != NOT_STARTED.");
+        }
+        _matsDestinationPrefix = matsDestinationPrefix;
     }
 
     private void closeConnectionIgnoreException(Connection connection) {
@@ -166,7 +189,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     }
 
     static class CommonStatsDto {
-        Instant statsReceivedTimeMillis;
+        Instant statsReceived;
 
         String brokerId;
         String brokerName;
@@ -214,7 +237,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         @Override
         public String toString() {
             return "BrokerStatsDto{" +
-                    "statsReceivedTimeMillis=" + statsReceivedTimeMillis + "\n" +
+                    "statsReceivedTimeMillis=" + statsReceived + "\n" +
                     ", brokerId='" + brokerId + '\'' + "\n" +
                     ", brokerName='" + brokerName + '\'' + "\n" +
                     ", size=" + size + "\n" +
@@ -255,7 +278,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         @Override
         public String toString() {
             return "DestinationStatsDto{" +
-                    "statsReceivedTimeMillis=" + statsReceivedTimeMillis + "\n" +
+                    "statsReceivedTimeMillis=" + statsReceived + "\n" +
                     ", brokerId='" + brokerId + '\'' + "\n" +
                     ", brokerName='" + brokerName + '\'' + "\n" +
                     ", size=" + size + "\n" +
@@ -291,7 +314,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
     private void sendStatsRequestMessages() {
         Connection sendRequestMessages_Connection = null;
-        while (_runFlag) {
+        while (_runStatus == RunStatus.RUNNING) {
             try {
                 sendRequestMessages_Connection = _connectionFactory.createConnection();
                 sendRequestMessages_Connection.start();
@@ -302,9 +325,60 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 // Just to point out that there is no need to save these messages if they cannot be handled.
                 producer.setDeliveryMode(DeliveryMode.NON_PERSISTENT);
 
+                /*
+                 * So, here I'll throw in a bit of premature optimization: If the MatsDestinationPrefix is a proper
+                 * "path-based" prefix with a dot as last character, like it is per default ("mats."), we'll use a
+                 * specific query that only requests these. However, we'll then also need to ask specifically for the
+                 * DLQs, which again are pre-prefixed with "DLQ.", and for the global DLQ just in case the user hasn't
+                 * configured his message broker sanely with /individual DLQ policies/.
+                 *
+                 * Thus: If the MatsDestinationPrefix isn't set, or it is a crap prefix that cannot be used in the
+                 * wildcard syntax of ActiveMQ (e.g. "endre:", which doesn't end in a dot), we ask one query to get
+                 * every single queue and topic (well, two, since one for queues and one for topics, go figure) - but
+                 * then get tons of replies which we don't care about (at least all advisory topics for every single
+                 * queue and topic, and these statistics queues and topics - as well as any other queues that the user
+                 * also run on the ActiveMQ instance). If it is a good prefix that can be used with the wildcard syntax,
+                 * we have to ask three queries (well, four), but only get exactly the ones we care about.
+                 *
+                 * (The reason for this badness is my current main user of Mats which for legacy reasons employ such a
+                 * bad prefix.)
+                 */
+
+                Queue requestQueuesQueue_main;
+                Topic requestTopicsTopic_main;
+                Queue requestQueuesQueue_individualDlq = null;
+                Queue requestQueuesQueue_globalDlq = null;
+
+                // ?: Do we have a proper "path-style" prefix, i.e. ending with a "."?
+                if ((_matsDestinationPrefix != null) && _matsDestinationPrefix.endsWith(".")) {
+                    // -> Yes, this is a proper "path-style" prefix, so we can reduce the query from "all" to "mats
+                    // only".
+                    String queryRequestDestination_specific = QUERY_REQUEST_DESTINATION_PREFIX + "."
+                            + _matsDestinationPrefix + ">";
+                    String queryRequestDestination_specific_DLQ = QUERY_REQUEST_DESTINATION_PREFIX + ".DLQ."
+                            + _matsDestinationPrefix + ">";
+                    log.info("The matsDestinationPrefix was set to [" + _matsDestinationPrefix + "], and it is a proper"
+                            + " \"path-style\" prefix (i.e. ending with a dot), thus restricting the query destination"
+                            + " by employing [" + queryRequestDestination_specific + "], ["
+                            + queryRequestDestination_specific_DLQ + "]"
+                            + "and [" + Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME + "]");
+                    requestQueuesQueue_main = session.createQueue(queryRequestDestination_specific);
+                    requestTopicsTopic_main = session.createTopic(queryRequestDestination_specific);
+                    requestQueuesQueue_individualDlq = session.createQueue(queryRequestDestination_specific_DLQ);
+                    requestQueuesQueue_globalDlq = session.createQueue(Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME);
+                }
+                else {
+                    String queryRequestDestination_all = QUERY_REQUEST_DESTINATION_PREFIX + ".>";
+
+                    log.info("The matsDestinationPrefix was set to [" + _matsDestinationPrefix + "], but this isn't"
+                            + " a proper \"path-style\" prefix (it is not ending with a dot), thus cannot restrict"
+                            + " the query to mats-specific destinations, but must query for all destinations,#"
+                            + " employing [" + queryRequestDestination_all + "]");
+                    requestQueuesQueue_main = session.createQueue(queryRequestDestination_all);
+                    requestTopicsTopic_main = session.createTopic(queryRequestDestination_all);
+                }
+
                 Topic requestBrokerTopic = session.createTopic(QUERY_REQUEST_BROKER);
-                Queue requestQueuesQueue = session.createQueue(QUERY_REQUEST_DESTINATION + ".>");
-                Topic requestTopicsTopic = session.createTopic(QUERY_REQUEST_DESTINATION + ".>");
 
                 Topic responseBrokerTopic = session.createTopic(QUERY_RESPONSE_BROKER_TOPIC);
                 Topic responseDestinationsTopic = session.createTopic(QUERY_RESPONSE_DESTINATION_TOPIC);
@@ -313,7 +387,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 // Notice: It isn't particularly bad if they haven't, they'll just miss the first request/reply.
                 chill(CHILL_MILLIS_BEFORE_FIRST_REQUEST);
 
-                while (_runFlag) {
+                while (_runStatus == RunStatus.RUNNING) {
                     // :: Request stats for Broker
                     Message requestBrokerMsg = session.createMessage();
                     requestBrokerMsg.setJMSReplyTo(responseBrokerTopic);
@@ -334,8 +408,26 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     // :: Send destination stats messages
                     _countOfDestinationsReceivedAfterRequest.set(0);
                     _timeRequestFiredOff = System.currentTimeMillis();
-                    producer.send(requestQueuesQueue, requestQueuesMsg);
-                    producer.send(requestTopicsTopic, requestTopicsMsg);
+                    producer.send(requestQueuesQueue_main, requestQueuesMsg);
+                    producer.send(requestTopicsTopic_main, requestTopicsMsg);
+
+                    // ?: Are we using a proper "path-style" mats destination prefix?
+                    if (requestQueuesQueue_individualDlq != null) {
+                        // -> Yes, we're using a "path-style" mats destination prefix.
+                        // Therefore, we'll also need to ask for the individual DLQs, and for the ActiveMQ Global DLQ.
+                        // (Asking for the Global DLQ is just to point things out for users that haven't configured
+                        // individual DLQ policy. We won't try to fix this problem fully, i.e. won't "distribute"
+                        // these DLQs to the individual mats stages they really belong to, as it is pretty much
+                        // infeasible if there are more than very few, and that the proper fix is very simple: Use a
+                        // frikkin' individual DLQ policy.)
+                        Message requestIndividualDlqMsg = session.createMessage();
+                        requestIndividualDlqMsg.setJMSReplyTo(responseDestinationsTopic);
+                        Message requestGlobalDlqMsg = session.createMessage();
+                        requestGlobalDlqMsg.setJMSReplyTo(responseDestinationsTopic);
+
+                        producer.send(requestQueuesQueue_individualDlq, requestIndividualDlqMsg);
+                        producer.send(requestQueuesQueue_globalDlq, requestGlobalDlqMsg);
+                    }
 
                     // :: Chill and loop
                     chill(INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS);
@@ -343,7 +435,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
             }
             catch (Throwable t) {
                 // ?: Exiting?
-                if (!_runFlag) {
+                if (_runStatus != RunStatus.RUNNING) {
                     // -> Yes, exiting, so get out.
                     break;
                 }
@@ -359,7 +451,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     }
 
     private void receiveBrokerStatsReplyMessages() {
-        OUTERLOOP: while (_runFlag) {
+        OUTERLOOP: while (_runStatus == RunStatus.RUNNING) {
             try {
                 _receiveBrokerStatsReplyMessages_Connection = _connectionFactory.createConnection();
                 _receiveBrokerStatsReplyMessages_Connection.start();
@@ -368,13 +460,13 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 Topic replyTopic = session.createTopic(QUERY_RESPONSE_BROKER_TOPIC);
                 MessageConsumer consumer = session.createConsumer(replyTopic);
 
-                while (_runFlag) {
+                while (_runStatus == RunStatus.RUNNING) {
                     MapMessage replyMsg = (MapMessage) consumer.receive();
                     // ?: Was this a null-message, most probably denoting that we're exiting?
                     if (replyMsg == null) {
                         // -> Yes, null message received.
                         log.info("Received null message from consumer.receive(), assuming shutdown.");
-                        if (!_runFlag) {
+                        if (_runStatus != RunStatus.RUNNING) {
                             break OUTERLOOP;
                         }
                         throw new UnexpectedNullMessageReceivedException(
@@ -385,7 +477,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
             }
             catch (Throwable t) {
                 // ?: Exiting?
-                if (!_runFlag) {
+                if (_runStatus != RunStatus.RUNNING) {
                     // -> Yes, exiting, so get out.
                     break;
                 }
@@ -402,7 +494,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
     @SuppressWarnings("unchecked")
     private void receiveDestinationStatsReplyMessages() {
-        OUTERLOOP: while (_runFlag) {
+        OUTERLOOP: while (_runStatus == RunStatus.RUNNING) {
             try {
                 _receiveDestinationsStatsReplyMessages_Connection = _connectionFactory.createConnection();
                 _receiveDestinationsStatsReplyMessages_Connection.start();
@@ -412,13 +504,13 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 MessageConsumer consumer = session.createConsumer(replyTopic);
 
                 long lastMessageReceived = 0;
-                while (_runFlag) {
+                while (_runStatus == RunStatus.RUNNING) {
                     // Go into timed receive.
                     MapMessage replyMsg = (MapMessage) consumer.receive(
                             TIMEOUT_MILLIS_FOR_LAST_MESSAGE_IN_BATCH_FOR_DESTINATIONS);
                     // ?: Did we get a null BUT runFlag still true?
-                    if ((replyMsg == null) && _runFlag) {
-                        // -> null, but runFlag==true, so this was a timeout.
+                    if ((replyMsg == null) && (_runStatus == RunStatus.RUNNING)) {
+                        // -> null, but runStatus==RUNNING, so this was a timeout.
 
                         // ?: Have we gotten (bunch of) stats messages by now?
                         if (_countOfDestinationsReceivedAfterRequest.get() > 0) {
@@ -447,7 +539,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     if (replyMsg == null) {
                         // -> Yes, null message received.
                         log.info("Received null message from consumer.receive(), assuming shutdown.");
-                        if (!_runFlag) {
+                        if (_runStatus != RunStatus.RUNNING) {
                             break OUTERLOOP;
                         }
                         throw new UnexpectedNullMessageReceivedException(
@@ -465,7 +557,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
             }
             catch (Throwable t) {
                 // ?: Exiting?
-                if (!_runFlag) {
+                if (_runStatus != RunStatus.RUNNING) {
                     // -> Yes, exiting, so get out.
                     break;
                 }
@@ -513,7 +605,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     }
 
     private void mapMessageToCommonStatsDto(MapMessage mm, CommonStatsDto dto) throws JMSException {
-        dto.statsReceivedTimeMillis = Instant.now(_clock);
+        dto.statsReceived = Instant.now(_clock);
 
         dto.brokerId = (String) mm.getObject("brokerId");
         dto.brokerName = (String) mm.getObject("brokerName");

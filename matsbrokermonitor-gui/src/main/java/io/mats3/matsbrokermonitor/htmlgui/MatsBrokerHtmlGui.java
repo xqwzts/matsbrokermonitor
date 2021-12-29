@@ -1,6 +1,6 @@
 package io.mats3.matsbrokermonitor.htmlgui;
 
-import io.mats3.matsbrokermonitor.spi.MatsBrokerInterface;
+import io.mats3.matsbrokermonitor.spi.MatsBrokerMonitor;
 
 import java.io.IOException;
 import java.text.DecimalFormat;
@@ -11,14 +11,14 @@ import java.util.Locale;
  * @author Endre Stølsvik 2021-12-17 10:22 - http://stolsvik.com/, endre@stolsvik.com
  */
 public class MatsBrokerHtmlGui {
-    public static MatsBrokerHtmlGui create(MatsBrokerInterface matsBrokerInterface) {
-        return new MatsBrokerHtmlGui(matsBrokerInterface);
+    public static MatsBrokerHtmlGui create(MatsBrokerMonitor matsBrokerMonitor) {
+        return new MatsBrokerHtmlGui(matsBrokerMonitor);
     }
 
-    private MatsBrokerInterface _matsBrokerInterface;
+    private MatsBrokerMonitor _matsBrokerMonitor;
 
-    MatsBrokerHtmlGui(MatsBrokerInterface matsBrokerInterface) {
-        _matsBrokerInterface = matsBrokerInterface;
+    MatsBrokerHtmlGui(MatsBrokerMonitor matsBrokerMonitor) {
+        _matsBrokerMonitor = matsBrokerMonitor;
     }
 
     /**
