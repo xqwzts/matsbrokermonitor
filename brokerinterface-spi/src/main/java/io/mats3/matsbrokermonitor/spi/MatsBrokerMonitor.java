@@ -19,6 +19,11 @@ import java.util.function.Consumer;
  * <li>Biggest point: <b>The number of messages on the destination or Dead Letter Queue</b></li>
  * </ul>
  *
+ * Note: "Fully Qualified Destination Name" means that the name fully specifies the queue or topic, e.g. for ActiveMQ
+ * this includes a schema-like notation "queue://" or "topic://" as prefix. This to handle a queue having the same name
+ * as a topic - even though the Mats API forbids this: An "endpointId" shall fully qualify a Mats endpoint, no matter if
+ * it is e.g. a "terminator" (queue-based) or "subscriptionTerminator" (topic-based).
+ *
  * @author Endre Stølsvik 2021-12-16 23:10 - http://stolsvik.com/, endre@stolsvik.com
  */
 public interface MatsBrokerMonitor extends Closeable {
@@ -26,6 +31,12 @@ public interface MatsBrokerMonitor extends Closeable {
     void start();
 
     void close();
+
+    /**
+     * @return a Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination}] for currently known Mats-relevant
+     *         destinations.
+     */
+    Map<String, MatsBrokerDestination> getMatsDestinations();
 
     void registerListener(Consumer<DestinationUpdateEvent> listener);
 
@@ -41,18 +52,25 @@ public interface MatsBrokerMonitor extends Closeable {
          */
         boolean isFullUpdate();
 
+        /**
+         * @return a Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination}] for any new or updated
+         *         Mats-relevant destinations.
+         */
         Map<String, MatsBrokerDestination> getNewOrUpdatedDestinations();
 
         /**
-         * @return the set of destinations (queues or topics) that have disappeared (not seen for a while) - notice that
-         *         this might happen with existing Mats endpoints if the broker removes the queue or topic e.g. due to
-         *         inactivity or boot. Such a situation should just be interpreted as that stageId not having any
-         *         messages in queue.
+         * @return the set of fully qualified destination names (queues or topics) that are new since last update.
+         */
+        Set<String> getNewDestinations();
+
+        /**
+         * @return the set of fully qualified destination names (queues or topics) that have disappeared since last
+         *         update (computed by "scavenging", i.e. not seen for a while) - notice that this might happen with
+         *         existing Mats endpoints if the broker removes the queue or topic e.g. due to inactivity or boot. Such
+         *         a situation should just be interpreted as that stageId not having any messages in queue.
          */
         Set<String> getRemovedDestinations();
     }
-
-    Map<String, MatsBrokerDestination> getMatsDestinations();
 
     interface MatsBrokerDestination {
         /**
@@ -61,9 +79,9 @@ public interface MatsBrokerMonitor extends Closeable {
         long getLastUpdateMillis();
 
         /**
-         * @return the raw destination name, i.e. "mats.ServiceName.serviceMethodName" or "ActiveMQ.DLQ" - but not
-         *         including any scheme prefix like "queue://" or "topic://" (they aren't standard). To get whether it
-         *         is a queue or topic, use {@link #isQueue()}.
+         * @return the raw destination name, but not "fully qualified", i.e. "mats.ServiceName.serviceMethodName" or
+         *         "ActiveMQ.DLQ" - but not including any scheme prefix like "queue://" or "topic://" (they aren't
+         *         standard). To get whether it is a queue or topic, use {@link #isQueue()}.
          * @see #getMatsStageId()
          */
         String getDestinationName();

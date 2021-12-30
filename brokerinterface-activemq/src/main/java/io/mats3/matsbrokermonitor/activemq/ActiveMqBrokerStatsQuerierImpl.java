@@ -388,6 +388,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 chill(CHILL_MILLIS_BEFORE_FIRST_REQUEST);
 
                 while (_runStatus == RunStatus.RUNNING) {
+                    if (log.isDebugEnabled()) log.debug("Sending stats queries to ActiveMQ.");
                     // :: Request stats for Broker
                     Message requestBrokerMsg = session.createMessage();
                     requestBrokerMsg.setJMSReplyTo(responseBrokerTopic);
@@ -395,7 +396,6 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
                     // ::: Destinations
                     // (Notice: Directing replyTo for both Queues and Topics reply to same receiver.)
-
                     // :: Request stats for Queues
                     Message requestQueuesMsg = session.createMessage();
                     // NOTE: The _producer_ has set both TTL and NON_PERSISTENT.

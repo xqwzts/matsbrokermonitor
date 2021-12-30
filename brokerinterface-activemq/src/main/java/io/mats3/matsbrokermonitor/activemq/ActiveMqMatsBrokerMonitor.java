@@ -22,12 +22,14 @@ import io.mats3.matsbrokermonitor.spi.MatsBrokerMonitor;
 public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor {
     private static final Logger log = LoggerFactory.getLogger(ActiveMqMatsBrokerMonitor.class);
 
-    private final ActiveMqBrokerStatsQuerier _querier;
-    private final String _matsDestinationPrefix;
-
     static ActiveMqMatsBrokerMonitor create(ActiveMqBrokerStatsQuerierImpl querier, String matsDestinationPrefix) {
         return new ActiveMqMatsBrokerMonitor(querier, matsDestinationPrefix);
     }
+
+    private final ActiveMqBrokerStatsQuerier _querier;
+
+    private final String _matsDestinationPrefix;
+    private final String _matsDestinationIndividualDlqPrefix;
 
     ActiveMqMatsBrokerMonitor(ActiveMqBrokerStatsQuerier querier, String matsDestinationPrefix) {
         if (querier == null) {
@@ -37,9 +39,11 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor {
             throw new NullPointerException("matsDestinationPrefix");
         }
         _querier = querier;
-        _matsDestinationPrefix = matsDestinationPrefix;
         _querier.setMatsDestinationPrefix(matsDestinationPrefix);
         _querier.registerListener(this::eventFromQuerier);
+
+        _matsDestinationPrefix = matsDestinationPrefix;
+        _matsDestinationIndividualDlqPrefix = Statics.INDIVIDUAL_DLQ_PREFIX + matsDestinationPrefix;
     }
 
     private final CopyOnWriteArrayList<Consumer<DestinationUpdateEvent>> _listeners = new CopyOnWriteArrayList<>();
@@ -128,6 +132,11 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor {
         }
 
         @Override
+        public Set<String> getNewDestinations() {
+            return null;
+        }
+
+        @Override
         public Set<String> getRemovedDestinations() {
             return null;
         }
@@ -140,36 +149,47 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor {
         ConcurrentNavigableMap<String, DestinationStatsDto> destStatsDtos = _querier
                 .getCurrentDestinationStatsDtos();
 
-        String fullMatsStageDlqPrefix = Statics.INDIVIDUAL_DLQ_PREFIX + _matsDestinationPrefix;
-
         for (Entry<String, DestinationStatsDto> entry : destStatsDtos.entrySet()) {
             String fqName = entry.getKey();
-            String destinationName = fqName.substring(8); // remove both "queue://" and "topic://", both are 8 length.
-            boolean isQueue = fqName.startsWith("queue://");
+            // DestinationName: remove both "queue://" and "topic://", both are 8 length.
+            String destinationName = fqName.substring(8);
 
-            // Whether this is a queue/topic for a MatsStage, or an individual DLQ for such.
-            boolean isForSpecificMatsStage = destinationName.startsWith(_matsDestinationPrefix)
-                    || destinationName.startsWith(fullMatsStageDlqPrefix);
+            // Whether this is a queue/topic for a MatsStage
+            boolean isMatsStageDestination = destinationName.startsWith(_matsDestinationPrefix);
 
-            // Whether this is a DLQ, check for both "individual DLQ strategy", and ActiveMQ-specific global DLQ.
-            boolean isDlq = destinationName.startsWith(Statics.INDIVIDUAL_DLQ_PREFIX)
-                    || Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME.equals(destinationName);
+            // Whether this is an individual DLQ for a MatsStage
+            boolean isMatsStageDlq = destinationName.startsWith(_matsDestinationIndividualDlqPrefix);
+
+            // Whether this is the global DLQ
+            boolean isGlobalDlq = Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME.equals(destinationName);
 
             // Whether we care about this destination: Either Mats stage or individual DLQ for such, or global DLQ
-            boolean relevant = isForSpecificMatsStage || Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME.equals(destinationName);
+            boolean relevant = isMatsStageDestination || isMatsStageDlq || isGlobalDlq;
 
+            // ?: Do we care?
             if (!relevant) {
+                // -> No, so go to next.
                 continue;
             }
 
             // ----- This is a Mats relevant destination!
 
+            // Is this a queue?
+            boolean isQueue = fqName.startsWith("queue://");
+
+            // Whether this is a DLQ: Individual DLQ or global DLQ.
+            boolean isDlq = isMatsStageDlq || isGlobalDlq;
+
             // :: Find the MatsStageId for this destination, chop off "mats." or "DLQ.mats."
-            String matsStageId = null;
-            if (isForSpecificMatsStage) {
-                matsStageId = isDlq
-                        ? destinationName.substring(fullMatsStageDlqPrefix.length())
-                        : destinationName.substring(_matsDestinationPrefix.length());
+            String matsStageId;
+            if (isMatsStageDestination) {
+                matsStageId = destinationName.substring(_matsDestinationPrefix.length());
+            }
+            else if (isMatsStageDlq) {
+                matsStageId = destinationName.substring(_matsDestinationIndividualDlqPrefix.length());
+            }
+            else {
+                matsStageId = null;
             }
 
             DestinationStatsDto stats = entry.getValue();
