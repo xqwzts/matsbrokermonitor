@@ -17,10 +17,12 @@ public class Runner {
 
         activeMqMatsBrokerInterface.registerListener(destinationUpdateEvent -> {
             log.info("Got update! "+destinationUpdateEvent);
+            destinationUpdateEvent.getNewOrUpdatedDestinations().forEach((fqName, matsBrokerDestination) ->
+                    log.info(".. updated: ["+fqName+"] = ["+matsBrokerDestination+"]"));
         });
         activeMqMatsBrokerInterface.start();
 
-        Thread.sleep(7 * 1000);
+        Thread.sleep(5 * 60 * 1000);
         querier.close();
         log.info("Exiting");
     }

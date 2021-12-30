@@ -3,6 +3,7 @@ package io.mats3.matsbrokermonitor.activemq;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Enumeration;
+import java.util.Iterator;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentNavigableMap;
@@ -29,26 +30,9 @@ import org.slf4j.LoggerFactory;
 /**
  * @author Endre Stølsvik 2021-12-20 18:00 - http://stolsvik.com/, endre@stolsvik.com
  */
-public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerier {
+public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerier, Statics {
 
     private static final Logger log = LoggerFactory.getLogger(ActiveMqBrokerStatsQuerierImpl.class);
-
-    private static final int CHILL_MILLIS_BEFORE_FIRST_REQUEST = 200;
-    private static final int INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS = 5 * 1000;
-    private static final int CHILL_MILLIS_WAIT_AFTER_RECEIVE_LOOPS_THROWABLE = 10 * 1000;
-    private static final int TIMEOUT_MILLIS_FOR_LAST_MESSAGE_IN_BATCH_FOR_DESTINATIONS = 500;
-    private static final int TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN = 500;
-
-    private static final String QUERY_REQUEST_BROKER = "ActiveMQ.Statistics.Broker";
-    /**
-     * Note: This should be postfixed with ".{which destination}", which handles wildcards - so ".>" will return a
-     * message for every destination of the same type as which the query was sent on (that is, if the query is sent on a
-     * queue, you'll get answers for queues, and sent on topic gives answers for topics).
-     */
-    private static final String QUERY_REQUEST_DESTINATION_PREFIX = "ActiveMQ.Statistics.Destination";
-
-    private static final String QUERY_RESPONSE_BROKER_TOPIC = "matscontrol.MatsBrokerMonitor.ActiveMQ.Broker";
-    private static final String QUERY_RESPONSE_DESTINATION_TOPIC = "matscontrol.MatsBrokerMonitor.ActiveMQ.Destinations";
 
     private final ConnectionFactory _connectionFactory;
 
@@ -385,7 +369,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
                 // Chill a small tad before sending first request, so that receivers hopefully have started.
                 // Notice: It isn't particularly bad if they haven't, they'll just miss the first request/reply.
-                chill(CHILL_MILLIS_BEFORE_FIRST_REQUEST);
+                chill(CHILL_MILLIS_BEFORE_FIRST_STATS_REQUEST);
 
                 while (_runStatus == RunStatus.RUNNING) {
                     if (log.isDebugEnabled()) log.debug("Sending stats queries to ActiveMQ.");
@@ -442,7 +426,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 log.warn("Got a [" + t.getClass().getSimpleName() + "] in the query-loop."
                         + " Attempting to close JMS Connection if gotten, then chill-waiting, then trying again.", t);
                 closeConnectionIgnoreException(sendRequestMessages_Connection);
-                chill(CHILL_MILLIS_WAIT_AFTER_RECEIVE_LOOPS_THROWABLE);
+                chill(CHILL_MILLIS_WAIT_AFTER_THROWABLE_IN_RECEIVE_LOOPS);
             }
         }
         // To exit, we're signalled via interrupt - it is our job to close Connection (it is a local variable)
@@ -484,7 +468,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 log.warn("Got a [" + t.getClass().getSimpleName() + "] in the receive-loop."
                         + " Attempting to close JMS Connection if gotten, then chill-waiting, then trying again.", t);
                 closeConnectionIgnoreException(_receiveBrokerStatsReplyMessages_Connection);
-                chill(CHILL_MILLIS_WAIT_AFTER_RECEIVE_LOOPS_THROWABLE);
+                chill(CHILL_MILLIS_WAIT_AFTER_THROWABLE_IN_RECEIVE_LOOPS);
             }
         }
         // To exit, we're signalled via the JMS Connection being closed; Our job is just to null it on our way out.
@@ -507,7 +491,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 while (_runStatus == RunStatus.RUNNING) {
                     // Go into timed receive.
                     MapMessage replyMsg = (MapMessage) consumer.receive(
-                            TIMEOUT_MILLIS_FOR_LAST_MESSAGE_IN_BATCH_FOR_DESTINATIONS);
+                            TIMEOUT_MILLIS_FOR_LAST_MESSAGE_IN_BATCH_FOR_DESTINATION_STATS);
                     // ?: Did we get a null BUT runFlag still true?
                     if ((replyMsg == null) && (_runStatus == RunStatus.RUNNING)) {
                         // -> null, but runStatus==RUNNING, so this was a timeout.
@@ -520,6 +504,18 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             log.info("We've received a batch of [" + _countOfDestinationsReceivedAfterRequest.get()
                                     + "] destination stats messages, time taken between request sent and last message"
                                     + " of batch received: [" + millisTaken + "] ms. Notifying listeners.");
+
+                            // :: Scavenge old statistics no longer getting updates (i.e. not existing anymore).
+                            Iterator<DestinationStatsDto> currentStatsIterator = _currentDestinationStatsDtos.values().iterator();
+                            long longAgo = System.currentTimeMillis() - SCAVENGE_OLD_STATS_SECONDS * 1000;
+                            while (currentStatsIterator.hasNext()) {
+                                DestinationStatsDto next = currentStatsIterator.next();
+                                if (next.statsReceived.toEpochMilli() < longAgo) {
+                                    log.info("Removing destination [" + next.destinationName + "]");
+                                    currentStatsIterator.remove();
+                                }
+                            }
+
                             ActiveMqBrokerStatsEventImpl event = new ActiveMqBrokerStatsEventImpl();
                             for (Consumer<ActiveMqBrokerStatsEvent> listener : _listeners) {
                                 listener.accept(event);
@@ -564,7 +560,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 log.warn("Got a [" + t.getClass().getSimpleName() + "] in the receive-loop."
                         + " Attempting to close JMS Connection if gotten, then chill-waiting, then trying again.", t);
                 closeConnectionIgnoreException(_receiveDestinationsStatsReplyMessages_Connection);
-                chill(CHILL_MILLIS_WAIT_AFTER_RECEIVE_LOOPS_THROWABLE);
+                chill(CHILL_MILLIS_WAIT_AFTER_THROWABLE_IN_RECEIVE_LOOPS);
             }
         }
         // To exit, we're signalled via the JMS Connection being closed; Our job is just to null it on our way out.

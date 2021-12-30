@@ -2,8 +2,8 @@ package io.mats3.matsbrokermonitor.spi;
 
 import java.io.Closeable;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -44,11 +44,9 @@ public interface MatsBrokerMonitor extends Closeable {
         /**
          * A full update might be sent periodically.
          *
-         * @return whether this is a full update, in which case the receiver should consider the
-         *         {@link #getNewOrUpdatedDestinations()} as authoritative information about all existing known
-         *         destinations on the broker, thus overwriting any local view kept by incrementally updating, and that
-         *         the {@link #getRemovedDestinations()} won't contain anything (anything not in this update doesn't
-         *         exist).
+         * @return whether this is a full update (<code>true</code>), in which case the receiver should consider the
+         *         {@link #getNewOrUpdatedDestinations()} as authoritative information about all currently known
+         *         destinations on the broker, thus overwriting any local view kept by incremental updates.
          */
         boolean isFullUpdate();
 
@@ -56,20 +54,7 @@ public interface MatsBrokerMonitor extends Closeable {
          * @return a Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination}] for any new or updated
          *         Mats-relevant destinations.
          */
-        Map<String, MatsBrokerDestination> getNewOrUpdatedDestinations();
-
-        /**
-         * @return the set of fully qualified destination names (queues or topics) that are new since last update.
-         */
-        Set<String> getNewDestinations();
-
-        /**
-         * @return the set of fully qualified destination names (queues or topics) that have disappeared since last
-         *         update (computed by "scavenging", i.e. not seen for a while) - notice that this might happen with
-         *         existing Mats endpoints if the broker removes the queue or topic e.g. due to inactivity or boot. Such
-         *         a situation should just be interpreted as that stageId not having any messages in queue.
-         */
-        Set<String> getRemovedDestinations();
+        NavigableMap<String, MatsBrokerDestination> getNewOrUpdatedDestinations();
     }
 
     interface MatsBrokerDestination {

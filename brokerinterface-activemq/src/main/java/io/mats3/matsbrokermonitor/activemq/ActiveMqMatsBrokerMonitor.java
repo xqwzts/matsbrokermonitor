@@ -1,9 +1,14 @@
 package io.mats3.matsbrokermonitor.activemq;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.NavigableMap;
 import java.util.Optional;
-import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -19,7 +24,7 @@ import io.mats3.matsbrokermonitor.spi.MatsBrokerMonitor;
 /**
  * @author Endre Stølsvik 2021-12-27 14:40 - http://stolsvik.com/, endre@stolsvik.com
  */
-public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor {
+public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
     private static final Logger log = LoggerFactory.getLogger(ActiveMqMatsBrokerMonitor.class);
 
     static ActiveMqMatsBrokerMonitor create(ActiveMqBrokerStatsQuerierImpl querier, String matsDestinationPrefix) {
@@ -43,7 +48,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor {
         _querier.registerListener(this::eventFromQuerier);
 
         _matsDestinationPrefix = matsDestinationPrefix;
-        _matsDestinationIndividualDlqPrefix = Statics.INDIVIDUAL_DLQ_PREFIX + matsDestinationPrefix;
+        _matsDestinationIndividualDlqPrefix = INDIVIDUAL_DLQ_PREFIX + matsDestinationPrefix;
     }
 
     private final CopyOnWriteArrayList<Consumer<DestinationUpdateEvent>> _listeners = new CopyOnWriteArrayList<>();
@@ -121,33 +126,34 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor {
 
     private static class DestinationUpdateEventImpl implements DestinationUpdateEvent {
 
+        private final boolean _isFullUpdate;
+        private final NavigableMap<String, MatsBrokerDestination> _newOrUpdatedDestinations;
+
+        public DestinationUpdateEventImpl(boolean isFullUpdate,
+                NavigableMap<String, MatsBrokerDestination> newOrUpdatedDestinations) {
+            _isFullUpdate = isFullUpdate;
+            _newOrUpdatedDestinations = newOrUpdatedDestinations;
+        }
+
         @Override
         public boolean isFullUpdate() {
-            return false;
+            return _isFullUpdate;
         }
 
         @Override
-        public Map<String, MatsBrokerDestination> getNewOrUpdatedDestinations() {
-            return null;
-        }
-
-        @Override
-        public Set<String> getNewDestinations() {
-            return null;
-        }
-
-        @Override
-        public Set<String> getRemovedDestinations() {
-            return null;
+        public NavigableMap<String, MatsBrokerDestination> getNewOrUpdatedDestinations() {
+            return _newOrUpdatedDestinations;
         }
     }
 
-    private final ConcurrentNavigableMap<String, MatsBrokerDestination> _destinationsMap = new ConcurrentSkipListMap<>();
+    private final ConcurrentNavigableMap<String, MatsBrokerDestination> _currentDestinationsMap = new ConcurrentSkipListMap<>();
 
     private void eventFromQuerier(ActiveMqBrokerStatsEvent event) {
         log.info("Got event [" + event + "].");
         ConcurrentNavigableMap<String, DestinationStatsDto> destStatsDtos = _querier
                 .getCurrentDestinationStatsDtos();
+
+        List<String> fqDestinationsNewOrUpdated = new ArrayList<>();
 
         for (Entry<String, DestinationStatsDto> entry : destStatsDtos.entrySet()) {
             String fqName = entry.getKey();
@@ -161,7 +167,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor {
             boolean isMatsStageDlq = destinationName.startsWith(_matsDestinationIndividualDlqPrefix);
 
             // Whether this is the global DLQ
-            boolean isGlobalDlq = Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME.equals(destinationName);
+            boolean isGlobalDlq = ACTIVE_MQ_GLOBAL_DLQ_NAME.equals(destinationName);
 
             // Whether we care about this destination: Either Mats stage or individual DLQ for such, or global DLQ
             boolean relevant = isMatsStageDestination || isMatsStageDlq || isGlobalDlq;
@@ -202,16 +208,45 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor {
                     + "], isQueue:[" + isQueue + "], isDlq:[" + isDlq +
                     "], queuedMessages:[" + numberOfQueuedMessages + "]");
 
+            // Create the representation
             MatsBrokerDestinationImpl matsBrokerDestination = new MatsBrokerDestinationImpl(lastUpdateMillis,
                     destinationName, matsStageId, isQueue, isDlq, numberOfQueuedMessages);
-
-            // TODO: Evaluate equal-ness before putting
-            _destinationsMap.put(destinationName, matsBrokerDestination);
+            // Put it in the map.
+            MatsBrokerDestination existingInfo = _currentDestinationsMap.put(fqName, matsBrokerDestination);
+            // ?: Was this new, or there an update in number of queued messages?
+            if ((existingInfo == null) || existingInfo.getNumberOfQueuedMessages() != numberOfQueuedMessages) {
+                // -> Yes, new or updated - so then it is new-or-changed!
+                fqDestinationsNewOrUpdated.add(fqName);
+            }
         }
 
-        // We've parsed the update.
+        // ----- We've parsed the update from the Querier.
 
-        DestinationUpdateEventImpl update = new DestinationUpdateEventImpl();
+        // :: Scavenge old destinations no longer getting updates (i.e. not existing anymore).
+        Iterator<MatsBrokerDestination> currentDestinationsIterator = _currentDestinationsMap.values().iterator();
+        long longAgo = System.currentTimeMillis() - SCAVENGE_OLD_DESTINATIONS_SECONDS * 1000;
+        while (currentDestinationsIterator.hasNext()) {
+            MatsBrokerDestination next = currentDestinationsIterator.next();
+            if (next.getLastUpdateMillis() < longAgo) {
+                log.info("Removing destination [" + next.getDestinationName() + "]");
+                currentDestinationsIterator.remove();
+            }
+        }
+
+        // :: Construct the update-map
+        NavigableMap<String, MatsBrokerDestination> newOrUpdatedDestinations;
+        if (!fqDestinationsNewOrUpdated.isEmpty()) {
+            newOrUpdatedDestinations = new TreeMap<>();
+            for (String fqDestination : fqDestinationsNewOrUpdated) {
+                newOrUpdatedDestinations.put(fqDestination, _currentDestinationsMap.get(fqDestination));
+            }
+        }
+        else {
+            newOrUpdatedDestinations = Collections.emptyNavigableMap();
+        }
+
+        // :: Construct and send the update event to listeners.
+        DestinationUpdateEventImpl update = new DestinationUpdateEventImpl(false, newOrUpdatedDestinations);
         for (Consumer<DestinationUpdateEvent> listener : _listeners) {
             try {
                 listener.accept(update);
@@ -221,10 +256,5 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor {
                         + " Ignoring.", t);
             }
         }
-
-        // NOTE: We don't know whether this was all the destinations there are, due to the extreme asynchronous-ness of
-        // these updates. So we can't know whether this was a 70% update, with the 30% rest coming in a second update.
-        // Thus, we need to keep some kind of tally on what has updated. In particular with the "removed" part.
-
     }
 }
