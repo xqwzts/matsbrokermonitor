@@ -23,6 +23,8 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
     interface ActiveMqBrokerStatsEvent {
     }
 
+    void forceUpdate();
+
     Optional<BrokerStatsDto> getCurrentBrokerStatsDto();
 
     ConcurrentNavigableMap<String, DestinationStatsDto> getCurrentDestinationStatsDtos();

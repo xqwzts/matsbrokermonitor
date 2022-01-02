@@ -1,7 +1,7 @@
 // MatsBrokerInterface for ActiveMQ
 
 dependencies {
-    api project(":brokerinterface-spi")
+    api project(":brokerinterface-api")
 
     implementation "javax.jms:jms-api:$jmsApiVersion"
     implementation "org.apache.activemq:activemq-broker:$activeMqVersion"

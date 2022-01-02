@@ -57,6 +57,9 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
     private String _matsDestinationPrefix;
 
+    private final Object _requestWaitAndPingObject = new Object();
+    private int _forceUpdateRequestCount = 0;
+
     // RunStatus: NOT_STARTED -> RUNNING -> CLOSED. Not restartable.
     private volatile RunStatus _runStatus = RunStatus.NOT_STARTED;
     private volatile Thread _sendStatsRequestMessages_Thread;
@@ -114,8 +117,10 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         // First set _runStatus to CLOSED, so that any loops and checks will exit.
         _runStatus = RunStatus.CLOSED;
         log.info("Asked to close. Set runStatus to CLOSED, closing Connections and interrupting threads.");
-        // Interrupt the sender - it'll close the Connection on its way out.
-        interruptThread(_sendStatsRequestMessages_Thread);
+        // Notify the request sender - it'll close the Connection on its way out.
+        synchronized (_requestWaitAndPingObject) {
+            _requestWaitAndPingObject.notifyAll();
+        }
         // Closing Connections for the receivers - they'll wake up from 'con.receive()'.
         closeConnectionIgnoreException(_receiveBrokerStatsReplyMessages_Connection);
         closeConnectionIgnoreException(_receiveDestinationsStatsReplyMessages_Connection);
@@ -128,6 +133,8 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         catch (InterruptedException e) {
             /* ignore */
         }
+        // .. interrupt the request sender if the above didn't work.
+        interruptThread(_sendStatsRequestMessages_Thread);
         // .. interrupt the receivers too if they haven't gotten out.
         interruptThread(_receiveBrokerStatsReplyMessages_Thread);
         interruptThread(_receiveDestinationsStatsReplyMessages_Thread);
@@ -167,6 +174,14 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     @Override
     public void registerListener(Consumer<ActiveMqBrokerStatsEvent> listener) {
         _listeners.add(listener);
+    }
+
+    @Override
+    public void forceUpdate() {
+        synchronized (_requestWaitAndPingObject) {
+            _forceUpdateRequestCount++;
+            _requestWaitAndPingObject.notifyAll();
+        }
     }
 
     private static class ActiveMqBrokerStatsEventImpl implements ActiveMqBrokerStatsEvent {
@@ -345,7 +360,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             + " \"path-style\" prefix (i.e. ending with a dot), thus restricting the query destination"
                             + " by employing [" + queryRequestDestination_specific + "], ["
                             + queryRequestDestination_specific_DLQ + "]"
-                            + "and [" + Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME + "]");
+                            + " and the Global DLQ [" + Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME + "]");
                     requestQueuesQueue_main = session.createQueue(queryRequestDestination_specific);
                     requestTopicsTopic_main = session.createTopic(queryRequestDestination_specific);
                     requestQueuesQueue_individualDlq = session.createQueue(queryRequestDestination_specific_DLQ);
@@ -372,6 +387,10 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 chill(CHILL_MILLIS_BEFORE_FIRST_STATS_REQUEST);
 
                 while (_runStatus == RunStatus.RUNNING) {
+
+                    // TODO: Do NOT send such request if we've already received a reply (from other node's request)
+                    // within short period.
+
                     if (log.isDebugEnabled()) log.debug("Sending stats queries to ActiveMQ.");
                     // :: Request stats for Broker
                     Message requestBrokerMsg = session.createMessage();
@@ -414,7 +433,27 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     }
 
                     // :: Chill and loop
-                    chill(INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS);
+                    synchronized (_requestWaitAndPingObject) {
+                        // ?: Exiting?
+                        if (_runStatus != RunStatus.RUNNING) {
+                            // -> Yes, exiting, so shortcut out, avoiding going into wait.
+                            break;
+                        }
+                        // ?: Do we have a force update already waiting?
+                        if (_forceUpdateRequestCount > 0) {
+                            // -> Yes, so decrement and immediately do the new request.
+                            _forceUpdateRequestCount--;
+                            continue;
+                        }
+                        // Go into wait - either interval, or force update.
+                        _requestWaitAndPingObject.wait(INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS);
+                        // NOTE: If this was a "we are going down!"-wakeup, the loop conditional takes care of it.
+                        // ?: Was this a force update wakeup?
+                        if (_forceUpdateRequestCount > 0) {
+                            // -> Yes, so decrement before looping.
+                            _forceUpdateRequestCount--;
+                        }
+                    }
                 }
             }
             catch (Throwable t) {

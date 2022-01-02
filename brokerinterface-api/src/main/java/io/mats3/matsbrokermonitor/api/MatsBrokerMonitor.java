@@ -1,9 +1,9 @@
-package io.mats3.matsbrokermonitor.spi;
+package io.mats3.matsbrokermonitor.api;
 
 import java.io.Closeable;
-import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.function.Consumer;
 
 /**
@@ -13,16 +13,16 @@ import java.util.function.Consumer;
  * These data are:
  * <ul>
  * <li>Which destinations exist, and whether they are queues and topics (however, the total number of Mats endpoints can
- * been found by asking all MatsFactories)</li>
+ * been found by asking all MatsFactories).</li>
  * <li>Dead Letter Queues - both properly configured (on the broker) Individual Dead Letter Queues, and any unfortunate
- * (typically default) global DLQs</li>
- * <li>Biggest point: <b>The number of messages on the destination or Dead Letter Queue</b></li>
+ * (typically default) global DLQs.</li>
+ * <li>Biggest point: <b>The number of messages on the destination or Dead Letter Queue.</b></li>
  * </ul>
  *
  * Note: "Fully Qualified Destination Name" means that the name fully specifies the queue or topic, e.g. for ActiveMQ
  * this includes a schema-like notation "queue://" or "topic://" as prefix. This to handle a queue having the same name
- * as a topic - even though the Mats API forbids this: An "endpointId" shall fully qualify a Mats endpoint, no matter if
- * it is e.g. a "terminator" (queue-based) or "subscriptionTerminator" (topic-based).
+ * as a topic - even though the Mats API forbids this: An "endpointId" fully qualifies a Mats endpoint seen from the
+ * MatsFactory's side, no matter if it is e.g. a "terminator" (queue-based) or "subscriptionTerminator" (topic-based).
  *
  * @author Endre Stølsvik 2021-12-16 23:10 - http://stolsvik.com/, endre@stolsvik.com
  */
@@ -36,9 +36,11 @@ public interface MatsBrokerMonitor extends Closeable {
      * @return a Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination}] for currently known Mats-relevant
      *         destinations.
      */
-    Map<String, MatsBrokerDestination> getMatsDestinations();
+    ConcurrentNavigableMap<String, MatsBrokerDestination> getMatsDestinations();
 
     void registerListener(Consumer<DestinationUpdateEvent> listener);
+
+    void forceUpdate();
 
     interface DestinationUpdateEvent {
         /**
@@ -82,20 +84,20 @@ public interface MatsBrokerMonitor extends Closeable {
         boolean isDlq();
 
         /**
-         * If this {@link #getDestinationName()} represent a Mats StageId (both a normal Queue or Topic for a Stage, or
-         * an individual DLQ for a Mats Stage), then this will be the name of it - i.e. the destination name with the
+         * If this {@link #getDestinationName()} represent a Mats Stage (both a normal Queue or Topic for a Mats Stage,
+         * or an individual DLQ for a Mats Stage), then this will be the StageId - i.e. the destination name with the
          * MatsDestinationPrefix (default "mats."), or and any "DLQ." prefix (thus standard/default "DLQ.mats.") cropped
          * off.
-         * <p />
+         * <p/>
          * If the broker isn't properly configured with a broker-specific <i>Individual Dead Letter Queue policy</i>
          * where each queue gets its own DLQ (being the original queue name prefixed with "DLQ."), then there will be a
          * global DLQ. This is not very good - but it will nevertheless be reported. This method will then return
          * {@link Optional#empty()}, while get {@link #getDestinationName()} will be the actual DLQ name (e.g. for
          * ActiveMQ, it is <code>"ActiveMQ.DLQ"</code>, while for Artemis it is <code>"DLQ"</code>).
          * <p/>
-         * <b>It is highly recommended to use individual DLQ policies.</b>
+         * <b>Note: It is highly recommended to configure the broker with an individual DLQ policy!</b>
          *
-         * @return the Mats StageId if the {@link #getDestinationName()} represent a Mats Stage.
+         * @return the Mats StageId if the {@link #getDestinationName()} represent a Mats Stage, or DLQ for such.
          * @see #getDestinationName()
          */
         Optional<String> getMatsStageId();
