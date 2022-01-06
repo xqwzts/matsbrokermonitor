@@ -7,10 +7,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -139,25 +139,40 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
     private static class MatsBrokerDestinationImpl implements MatsBrokerDestination {
         private final long _lastUpdateMillis;
+        private final long _lastUpdateBrokerMillis;
         private final String _destinationName;
         private final String _matsStageId;
         private final boolean _isQueue;
         private final boolean _isDlq;
         private final long _numberOfQueuedMessages;
+        private final long _numberOfInFlightMessages;
+        private final long _headMessageAgeMillis;
 
-        public MatsBrokerDestinationImpl(long lastUpdateMillis, String destinationName, String matsStageId,
-                boolean isQueue, boolean isDlq, long numberOfQueuedMessages) {
+        public MatsBrokerDestinationImpl(long lastUpdateMillis, long lastUpdateBrokerMillis, String destinationName,
+                String matsStageId, boolean isQueue, boolean isDlq, long numberOfQueuedMessages,
+                long numberOfInFlightMessages, long headMessageAgeMillis) {
             _lastUpdateMillis = lastUpdateMillis;
+            _lastUpdateBrokerMillis = lastUpdateBrokerMillis;
             _destinationName = destinationName;
             _matsStageId = matsStageId;
             _isQueue = isQueue;
             _isDlq = isDlq;
             _numberOfQueuedMessages = numberOfQueuedMessages;
+            _numberOfInFlightMessages = numberOfInFlightMessages;
+            _headMessageAgeMillis = headMessageAgeMillis;
         }
 
         @Override
-        public long getLastUpdateMillis() {
+        public long getLastUpdateLocalMillis() {
             return _lastUpdateMillis;
+        }
+
+        @Override
+        public OptionalLong getLastUpdateBrokerMillis() {
+            if (_lastUpdateBrokerMillis == 0) {
+                return OptionalLong.empty();
+            }
+            return OptionalLong.of(_lastUpdateBrokerMillis);
         }
 
         @Override
@@ -186,15 +201,40 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         }
 
         @Override
+        public OptionalLong getNumberOfInflightMessages() {
+            if (_numberOfInFlightMessages == 0) {
+                return OptionalLong.empty();
+            }
+            return OptionalLong.of(_numberOfInFlightMessages);
+        }
+
+        @Override
+        public OptionalLong getHeadMessageAgeMillis() {
+            if (_headMessageAgeMillis == 0) {
+                return OptionalLong.empty();
+            }
+            return OptionalLong.of(_headMessageAgeMillis);
+        }
+
+        @Override
         public String toString() {
             return "MatsBrokerDestinationImpl{" +
-                    "_lastUpdateMillis=" + LocalDateTime.ofInstant(Instant.ofEpochMilli(_lastUpdateMillis), ZoneId
-                            .systemDefault()) +
+                    "_lastUpdateMillis=" + LocalDateTime.ofInstant(Instant.ofEpochMilli(_lastUpdateMillis),
+                            ZoneId.systemDefault()) +
+                    ", _lastUpdateBrokerMillis=" + (_lastUpdateBrokerMillis == 0 ? "{not present}"
+                            : LocalDateTime.ofInstant(Instant.ofEpochMilli(_lastUpdateBrokerMillis),
+                                    ZoneId.systemDefault())) +
                     ", _destinationName='" + _destinationName + '\'' +
                     ", _matsStageId='" + _matsStageId + '\'' +
                     ", _isQueue=" + _isQueue +
                     ", _isDlq=" + _isDlq +
                     ", _numberOfQueuedMessages=" + _numberOfQueuedMessages +
+                    ", _numberOfInFlightMessages=" + (_numberOfInFlightMessages == 0
+                            ? "{not present}"
+                            : _numberOfInFlightMessages) +
+                    ", _headMessageAgeMillis=" + (_headMessageAgeMillis == 0
+                            ? "{not present}"
+                            : _headMessageAgeMillis) +
                     '}';
         }
     }
@@ -282,13 +322,24 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
             long numberOfQueuedMessages = stats.size;
 
+            long numberOfInflightMessages = stats.inflightCount;
+
+            long lastUpdateBrokerMillis = stats.brokerTime.map(Instant::toEpochMilli).orElse(0L);
+
+            // If present: Calculate age: If lastUpdateBrokerMillis present, use this, otherwise lastUpdateMillis
+            long headMessageAgeMillis = stats.headMessageBrokerInTime.map(instant -> (lastUpdateBrokerMillis != 0
+                    ? lastUpdateBrokerMillis
+                    : lastUpdateMillis) - instant.toEpochMilli())
+                    .orElse(0L);
+
             if (log.isDebugEnabled()) log.debug("FQ Name: " + fqName + ", destinationName:[" + destinationName
                     + "], matsStageId:[" + matsStageId + "], isQueue:[" + isQueue + "], isDlq:[" + isDlq
                     + "], queuedMessages:[" + numberOfQueuedMessages + "]");
 
             // Create the representation
             MatsBrokerDestinationImpl matsBrokerDestination = new MatsBrokerDestinationImpl(lastUpdateMillis,
-                    destinationName, matsStageId, isQueue, isDlq, numberOfQueuedMessages);
+                    lastUpdateBrokerMillis, destinationName, matsStageId, isQueue, isDlq, numberOfQueuedMessages,
+                    numberOfInflightMessages, headMessageAgeMillis);
             // Put it in the map.
             MatsBrokerDestination existingInfo = _currentDestinationsMap.put(fqName, matsBrokerDestination);
             // ?: Was this new, or there an update in number of queued messages?
@@ -310,7 +361,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         int removedMatsDestinations = 0;
         while (currentDestinationsIterator.hasNext()) {
             MatsBrokerDestination next = currentDestinationsIterator.next();
-            if (next.getLastUpdateMillis() < longAgo) {
+            if (next.getLastUpdateLocalMillis() < longAgo) {
                 log.info("Removing destination [" + next.getDestinationName() + "]");
                 currentDestinationsIterator.remove();
                 removedMatsDestinations++;

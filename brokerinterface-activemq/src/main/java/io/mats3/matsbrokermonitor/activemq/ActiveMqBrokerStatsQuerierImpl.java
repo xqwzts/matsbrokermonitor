@@ -4,7 +4,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Enumeration;
 import java.util.Iterator;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -69,7 +68,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     private volatile Connection _receiveDestinationsStatsReplyMessages_Connection;
 
     private final AtomicInteger _countOfDestinationsReceivedAfterRequest = new AtomicInteger();
-    private volatile long _timeRequestFiredOff = 0;
+    private volatile long _nanosAtStart_RequestQuery = 0;
 
     private volatile BrokerStatsDto _currentBrokerStatsDto;
     private final ConcurrentNavigableMap<String, DestinationStatsDto> _currentDestinationStatsDtos = new ConcurrentSkipListMap<>();
@@ -187,24 +186,74 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     private static class ActiveMqBrokerStatsEventImpl implements ActiveMqBrokerStatsEvent {
     }
 
+    /**
+     * NOTE: Explanations from
+     * <a href="https://www.mail-archive.com/users@activemq.apache.org/msg08847.html">users@activemq.apache.org
+     * mail-archive: "Re: Topic counts explanation"</a>, or
+     * <a href="https://stackoverflow.com/a/1719942/39334">Stackoverflow: What do some of the fields returned from
+     * ActiveMQ.Agent query mean?</a>, or
+     * <a href="https://activemq.apache.org/how-do-i-find-the-size-of-a-queue">ActiveMQ Docs: How do I find the Size of
+     * a Queue</a>
+     */
     static class CommonStatsDto {
         Instant statsReceived;
 
         String brokerId;
         String brokerName;
+        // To-be feature created by me:
+        Optional<Instant> brokerTime;
 
+        /**
+         * The number of messages that currently reside in the queue.
+         * <p/>
+         * (Endre: Seems to be {@link #enqueueCount} - {@link #dequeueCount}).
+         */
         long size;
+        /**
+         * The number of messages that have been written to the queue over the lifetime of the queue (since last
+         * restart).
+         */
         long enqueueCount;
+        /**
+         * The number of messages that have been successfully (i.e., they’ve been acknowledged from the consumer) read
+         * off the queue over the lifetime of the queue (since last restart).
+         */
         long dequeueCount;
+        /**
+         * The number of messages that were not delivered because they were expired (since last restart).
+         */
         long expiredCount;
+        /**
+         * The number of messages that have been dispatched (sent) to the consumer over the lifetime of the queue. Note
+         * that dispatched messages may not have all been acknowledged (since last restart).
+         * <p/>
+         * (Endre: This number can evidently be higher than {@link #enqueueCount}, which I assume means that
+         * redeliveries are included.)
+         */
         long dispatchCount;
+        /**
+         * The number of messages that have been dispatched and are currently awaiting acknowledgment from the consumer.
+         * So as this number decreases, the DequeueCount increases.
+         * <p/>
+         * (Endre: This number is included in the {@link #size} number, as inflight messages are not yet dequeued).
+         */
         long inflightCount;
 
         long producerCount;
         long consumerCount;
 
+        /**
+         * The minimum amount of time that messages remained enqueued.
+         */
         double minEnqueueTime;
+        /**
+         * On average, the amount of time (ms) that messages remained enqueued. Or average time it is taking the
+         * consumers to successfully process messages.
+         */
         double averageEnqueueTime;
+        /**
+         * The maximum amount of time that messages remained enqueued.
+         */
         double maxEnqueueTime;
 
         long memoryUsage;
@@ -236,67 +285,72 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         @Override
         public String toString() {
             return "BrokerStatsDto{" +
-                    "statsReceivedTimeMillis=" + statsReceived + "\n" +
-                    ", brokerId='" + brokerId + '\'' + "\n" +
-                    ", brokerName='" + brokerName + '\'' + "\n" +
-                    ", size=" + size + "\n" +
-                    ", enqueueCount=" + enqueueCount + "\n" +
-                    ", dequeueCount=" + dequeueCount + "\n" +
-                    ", expiredCount=" + expiredCount + "\n" +
-                    ", dispatchCount=" + dispatchCount + "\n" +
-                    ", inflightCount=" + inflightCount + "\n" +
-                    ", producerCount=" + producerCount + "\n" +
-                    ", consumerCount=" + consumerCount + "\n" +
-                    ", minEnqueueTime=" + minEnqueueTime + "\n" +
-                    ", averageEnqueueTime=" + averageEnqueueTime + "\n" +
-                    ", maxEnqueueTime=" + maxEnqueueTime + "\n" +
-                    ", memoryUsage=" + memoryUsage + "\n" +
-                    ", memoryLimit=" + memoryLimit + "\n" +
-                    ", memoryPercentUsage=" + memoryPercentUsage + "\n" +
-                    ", averageMessageSize=" + averageMessageSize + "\n" +
-                    ", messagesCached=" + messagesCached + "\n" +
-                    ", stompSsl='" + stompSsl + '\'' + "\n" +
-                    ", ssl='" + ssl + '\'' + "\n" +
-                    ", stomp='" + stomp + '\'' + "\n" +
-                    ", openwire='" + openwire + '\'' + "\n" +
-                    ", vm='" + vm + '\'' + "\n" +
-                    ", dataDirectory='" + dataDirectory + '\'' + "\n" +
-                    ", storeUsage=" + storeUsage + "\n" +
-                    ", storeLimit=" + storeLimit + "\n" +
-                    ", storePercentUsage=" + storePercentUsage + "\n" +
-                    ", tempUsage=" + tempUsage + "\n" +
-                    ", tempLimit=" + tempLimit + "\n" +
-                    ", tempPercentUsage=" + tempPercentUsage + "\n" +
+                    "statsReceivedTimeMillis=" + statsReceived +
+                    ", brokerId='" + brokerId + '\'' +
+                    ", brokerName='" + brokerName + '\'' +
+                    ", brokerTime='" + brokerTime + '\'' +
+                    ", size=" + size +
+                    ", enqueueCount=" + enqueueCount +
+                    ", dequeueCount=" + dequeueCount +
+                    ", expiredCount=" + expiredCount +
+                    ", dispatchCount=" + dispatchCount +
+                    ", inflightCount=" + inflightCount +
+                    ", producerCount=" + producerCount +
+                    ", consumerCount=" + consumerCount +
+                    ", minEnqueueTime=" + minEnqueueTime +
+                    ", averageEnqueueTime=" + averageEnqueueTime +
+                    ", maxEnqueueTime=" + maxEnqueueTime +
+                    ", memoryUsage=" + memoryUsage +
+                    ", memoryLimit=" + memoryLimit +
+                    ", memoryPercentUsage=" + memoryPercentUsage +
+                    ", averageMessageSize=" + averageMessageSize +
+                    ", messagesCached=" + messagesCached +
+                    ", stompSsl='" + stompSsl + '\'' +
+                    ", ssl='" + ssl + '\'' +
+                    ", stomp='" + stomp + '\'' +
+                    ", openwire='" + openwire + '\'' +
+                    ", vm='" + vm + '\'' +
+                    ", dataDirectory='" + dataDirectory + '\'' +
+                    ", storeUsage=" + storeUsage +
+                    ", storeLimit=" + storeLimit +
+                    ", storePercentUsage=" + storePercentUsage +
+                    ", tempUsage=" + tempUsage +
+                    ", tempLimit=" + tempLimit +
+                    ", tempPercentUsage=" + tempPercentUsage +
                     '}';
         }
     }
 
     static class DestinationStatsDto extends CommonStatsDto {
         String destinationName;
+        // To-be feature created by me, also it is only present if there is a head message present:
+        Optional<Instant> headMessageBrokerInTime;
 
         @Override
         public String toString() {
             return "DestinationStatsDto{" +
-                    "statsReceivedTimeMillis=" + statsReceived + "\n" +
-                    ", brokerId='" + brokerId + '\'' + "\n" +
-                    ", brokerName='" + brokerName + '\'' + "\n" +
-                    ", size=" + size + "\n" +
-                    ", enqueueCount=" + enqueueCount + "\n" +
-                    ", dequeueCount=" + dequeueCount + "\n" +
-                    ", expiredCount=" + expiredCount + "\n" +
-                    ", dispatchCount=" + dispatchCount + "\n" +
-                    ", inflightCount=" + inflightCount + "\n" +
-                    ", producerCount=" + producerCount + "\n" +
-                    ", consumerCount=" + consumerCount + "\n" +
-                    ", minEnqueueTime=" + minEnqueueTime + "\n" +
-                    ", averageEnqueueTime=" + averageEnqueueTime + "\n" +
-                    ", maxEnqueueTime=" + maxEnqueueTime + "\n" +
-                    ", memoryUsage=" + memoryUsage + "\n" +
-                    ", memoryLimit=" + memoryLimit + "\n" +
-                    ", memoryPercentUsage=" + memoryPercentUsage + "\n" +
-                    ", averageMessageSize=" + averageMessageSize + "\n" +
-                    ", messagesCached=" + messagesCached + "\n" +
-                    ", destinationName='" + destinationName + '\'' + "\n" +
+                    "statsReceivedTimeMillis=" + statsReceived +
+                    ", destinationName='" + destinationName + '\'' +
+                    ", headMessageBrokerInTime='" + headMessageBrokerInTime + '\'' +
+                    ", brokerId='" + brokerId + '\'' +
+                    ", brokerName='" + brokerName + '\'' +
+                    ", brokerTime='" + brokerTime + '\'' +
+                    ", size=" + size +
+                    ", enqueueCount=" + enqueueCount +
+                    ", dequeueCount=" + dequeueCount +
+                    ", expiredCount=" + expiredCount +
+                    ", dispatchCount=" + dispatchCount +
+                    ", inflightCount=" + inflightCount +
+                    ", producerCount=" + producerCount +
+                    ", consumerCount=" + consumerCount +
+                    ", minEnqueueTime=" + minEnqueueTime +
+                    ", averageEnqueueTime=" + averageEnqueueTime +
+                    ", maxEnqueueTime=" + maxEnqueueTime +
+                    ", memoryUsage=" + memoryUsage +
+                    ", memoryLimit=" + memoryLimit +
+                    ", memoryPercentUsage=" + memoryPercentUsage +
+                    ", averageMessageSize=" + averageMessageSize +
+                    ", messagesCached=" + messagesCached +
                     '}';
         }
     }
@@ -364,23 +418,27 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     requestQueuesQueue_main = session.createQueue(queryRequestDestination_specific);
                     requestTopicsTopic_main = session.createTopic(queryRequestDestination_specific);
                     requestQueuesQueue_individualDlq = session.createQueue(queryRequestDestination_specific_DLQ);
-                    requestQueuesQueue_globalDlq = session.createQueue(Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME);
+                    // Note: Using undocumented feature to request a "null message" after last reply-message for query.
+                    requestQueuesQueue_globalDlq = session.createQueue(QUERY_REQUEST_DESTINATION_PREFIX + "."
+                            + Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME + QUERY_REQUEST_DENOTE_END_LIST);
                 }
                 else {
                     String queryRequestDestination_all = QUERY_REQUEST_DESTINATION_PREFIX + ".>";
 
                     log.info("The matsDestinationPrefix was set to [" + _matsDestinationPrefix + "], but this isn't"
                             + " a proper \"path-style\" prefix (it is not ending with a dot), thus cannot restrict"
-                            + " the query to mats-specific destinations, but must query for all destinations,#"
+                            + " the query to mats-specific destinations, but must query for all destinations by"
                             + " employing [" + queryRequestDestination_all + "]");
                     requestQueuesQueue_main = session.createQueue(queryRequestDestination_all);
-                    requestTopicsTopic_main = session.createTopic(queryRequestDestination_all);
+                    // Note: Using undocumented feature to request a "null message" after last reply-message for query.
+                    requestTopicsTopic_main = session.createTopic(queryRequestDestination_all
+                            + QUERY_REQUEST_DENOTE_END_LIST);
                 }
 
                 Topic requestBrokerTopic = session.createTopic(QUERY_REQUEST_BROKER);
 
-                Topic responseBrokerTopic = session.createTopic(QUERY_RESPONSE_BROKER_TOPIC);
-                Topic responseDestinationsTopic = session.createTopic(QUERY_RESPONSE_DESTINATION_TOPIC);
+                Topic responseBrokerTopic = session.createTopic(QUERY_REPLY_BROKER_TOPIC);
+                Topic responseDestinationsTopic = session.createTopic(QUERY_REPLY_DESTINATION_TOPIC);
 
                 // Chill a small tad before sending first request, so that receivers hopefully have started.
                 // Notice: It isn't particularly bad if they haven't, they'll just miss the first request/reply.
@@ -401,16 +459,17 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     // (Notice: Directing replyTo for both Queues and Topics reply to same receiver.)
                     // :: Request stats for Queues
                     Message requestQueuesMsg = session.createMessage();
-                    // NOTE: The _producer_ has set both TTL and NON_PERSISTENT.
+                    set_includeFirstMessageTimestamp(requestQueuesMsg);
                     requestQueuesMsg.setJMSReplyTo(responseDestinationsTopic);
 
                     // :: Request stats for Topics
                     Message requestTopicsMsg = session.createMessage();
+                    set_includeFirstMessageTimestamp(requestTopicsMsg);
                     requestTopicsMsg.setJMSReplyTo(responseDestinationsTopic);
 
                     // :: Send destination stats messages
                     _countOfDestinationsReceivedAfterRequest.set(0);
-                    _timeRequestFiredOff = System.currentTimeMillis();
+                    _nanosAtStart_RequestQuery = System.nanoTime();
                     producer.send(requestQueuesQueue_main, requestQueuesMsg);
                     producer.send(requestTopicsTopic_main, requestTopicsMsg);
 
@@ -424,8 +483,11 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                         // infeasible if there are more than very few, and that the proper fix is very simple: Use a
                         // frikkin' individual DLQ policy.)
                         Message requestIndividualDlqMsg = session.createMessage();
+                        set_includeFirstMessageTimestamp(requestIndividualDlqMsg);
                         requestIndividualDlqMsg.setJMSReplyTo(responseDestinationsTopic);
+
                         Message requestGlobalDlqMsg = session.createMessage();
+                        set_includeFirstMessageTimestamp(requestGlobalDlqMsg);
                         requestGlobalDlqMsg.setJMSReplyTo(responseDestinationsTopic);
 
                         producer.send(requestQueuesQueue_individualDlq, requestIndividualDlqMsg);
@@ -473,6 +535,10 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         log.info("Got asked to exit, and that we do!");
     }
 
+    private void set_includeFirstMessageTimestamp(Message msg) throws JMSException {
+        msg.setBooleanProperty(QUERY_REQUEST_DESTINATION_INCLUDE_HEAD_MESSAGE_BROKER_IN_TIME, true);
+    }
+
     private void receiveBrokerStatsReplyMessages() {
         OUTERLOOP: while (_runStatus == RunStatus.RUNNING) {
             try {
@@ -480,7 +546,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 _receiveBrokerStatsReplyMessages_Connection.start();
                 Session session = _receiveBrokerStatsReplyMessages_Connection.createSession(false,
                         Session.AUTO_ACKNOWLEDGE);
-                Topic replyTopic = session.createTopic(QUERY_RESPONSE_BROKER_TOPIC);
+                Topic replyTopic = session.createTopic(QUERY_REPLY_BROKER_TOPIC);
                 MessageConsumer consumer = session.createConsumer(replyTopic);
 
                 while (_runStatus == RunStatus.RUNNING) {
@@ -523,29 +589,36 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 _receiveDestinationsStatsReplyMessages_Connection.start();
                 Session session = _receiveDestinationsStatsReplyMessages_Connection.createSession(false,
                         Session.AUTO_ACKNOWLEDGE);
-                Topic replyTopic = session.createTopic(QUERY_RESPONSE_DESTINATION_TOPIC);
+                Topic replyTopic = session.createTopic(QUERY_REPLY_DESTINATION_TOPIC);
                 MessageConsumer consumer = session.createConsumer(replyTopic);
 
-                long lastMessageReceived = 0;
+                long nanosAtEnd_lastMessageReceived = 0;
                 while (_runStatus == RunStatus.RUNNING) {
                     // Go into timed receive.
                     MapMessage replyMsg = (MapMessage) consumer.receive(
                             TIMEOUT_MILLIS_FOR_LAST_MESSAGE_IN_BATCH_FOR_DESTINATION_STATS);
-                    // ?: Did we get a null BUT runFlag still true?
-                    if ((replyMsg == null) && (_runStatus == RunStatus.RUNNING)) {
-                        // -> null, but runStatus==RUNNING, so this was a timeout.
-
+                    // NOTE: We're using an undocumented feature of ActiveMQ's StatisticsBrokerPlugin whereby if we add
+                    // a special marker to the query, the replies will be "empty terminated" by an empty MapMessage.
+                    // ?: Did we get an "empty" MapMessage, OR null, BUT runFlag still true?
+                    if (((replyMsg == null) || (replyMsg.getString("destinationName") == null))
+                            && (_runStatus == RunStatus.RUNNING)) {
+                        // -> empty or null, but runStatus==RUNNING, so this was a "terminator" or timeout.
                         // ?: Have we gotten (bunch of) stats messages by now?
                         if (_countOfDestinationsReceivedAfterRequest.get() > 0) {
                             // -> We've gotten 1 or more stats messages.
                             // We've now (hopefully) received a full set of destination stats.
-                            long millisTaken = lastMessageReceived - _timeRequestFiredOff;
+                            long nanosBetweenQueryAndLastMessageOfBatch = nanosAtEnd_lastMessageReceived
+                                    - _nanosAtStart_RequestQuery;
+                            long nanosBetweenQueryAndNow = System.nanoTime() - _nanosAtStart_RequestQuery;
                             log.info("We've received a batch of [" + _countOfDestinationsReceivedAfterRequest.get()
                                     + "] destination stats messages, time taken between request sent and last message"
-                                    + " of batch received: [" + millisTaken + "] ms. Notifying listeners.");
+                                    + " of reply batch received: [" + nanos3(nanosBetweenQueryAndLastMessageOfBatch)
+                                    + "] ms - this is [" + nanos3(nanosBetweenQueryAndNow)
+                                    + "] ms since request. Notifying listeners.");
 
                             // :: Scavenge old statistics no longer getting updates (i.e. not existing anymore).
-                            Iterator<DestinationStatsDto> currentStatsIterator = _currentDestinationStatsDtos.values().iterator();
+                            Iterator<DestinationStatsDto> currentStatsIterator = _currentDestinationStatsDtos.values()
+                                    .iterator();
                             long longAgo = System.currentTimeMillis() - SCAVENGE_OLD_STATS_SECONDS * 1000;
                             while (currentStatsIterator.hasNext()) {
                                 DestinationStatsDto next = currentStatsIterator.next();
@@ -555,6 +628,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                                 }
                             }
 
+                            // :: Notify listeners
                             ActiveMqBrokerStatsEventImpl event = new ActiveMqBrokerStatsEventImpl();
                             for (Consumer<ActiveMqBrokerStatsEvent> listener : _listeners) {
                                 listener.accept(event);
@@ -577,16 +651,18 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                         if (_runStatus != RunStatus.RUNNING) {
                             break OUTERLOOP;
                         }
-                        throw new UnexpectedNullMessageReceivedException(
-                                "Null message received, but runFlag still true?!");
+                        throw new UnexpectedNullMessageReceivedException("Null message received,"
+                                + " but runFlag still true?!");
                     }
 
                     // This was a destination stats message - count it
                     _countOfDestinationsReceivedAfterRequest.incrementAndGet();
                     // .. log time we received it
-                    lastMessageReceived = System.currentTimeMillis();
+                    nanosAtEnd_lastMessageReceived = System.nanoTime();
 
                     DestinationStatsDto dto = mapMessageToDestinationStatsDto(replyMsg);
+                    // log.debug("### "+produceTextRepresentationOfMapMessage_old(replyMsg));
+                    log.debug("Message DTO: " + dto);
                     _currentDestinationStatsDtos.put(dto.destinationName, dto);
                 }
             }
@@ -635,8 +711,14 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         mapMessageToCommonStatsDto(mm, dto);
 
         dto.destinationName = (String) mm.getObject("destinationName");
+        dto.headMessageBrokerInTime = getTimestampFromMapMessage(mm, "headMessageBrokerInTime");
 
         return dto;
+    }
+
+    private Optional<Instant> getTimestampFromMapMessage(MapMessage mm, String key) throws JMSException {
+        long millis = mm.getLong(key);
+        return millis != 0 ? Optional.of(Instant.ofEpochMilli(millis)) : Optional.empty();
     }
 
     private void mapMessageToCommonStatsDto(MapMessage mm, CommonStatsDto dto) throws JMSException {
@@ -644,6 +726,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
         dto.brokerId = (String) mm.getObject("brokerId");
         dto.brokerName = (String) mm.getObject("brokerName");
+        dto.brokerTime = getTimestampFromMapMessage(mm, "brokerTime");
 
         dto.size = (long) mm.getObject("size");
         dto.enqueueCount = (long) mm.getObject("enqueueCount");
@@ -673,23 +756,11 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         StringBuilder buf = new StringBuilder();
         for (Enumeration<String> e = (Enumeration<String>) replyMsg.getMapNames(); e.hasMoreElements();) {
             String name = e.nextElement();
-            Object object = replyMsg.getObject(name);
-            buf.append("dto." + name + " = (" + object.getClass().getSimpleName().toLowerCase(Locale.ROOT)
-                    + ") mm.getObject(\"" + name + "\");\n");
-        }
-        return buf;
-    }
-
-    @SuppressWarnings("unchecked")
-    private StringBuilder produceTextRepresentationOfMapMessage_old(MapMessage replyMsg) throws JMSException {
-        StringBuilder buf = new StringBuilder();
-        for (Enumeration<String> e = (Enumeration<String>) replyMsg.getMapNames(); e.hasMoreElements();) {
-            String name = e.nextElement();
-            buf.append("  ").append(name);
+            buf.append(name);
             buf.append(" = ");
             Object object = replyMsg.getObject(name);
             buf.append(object.toString());
-            buf.append(" (").append(object.getClass().getSimpleName()).append(")\n");
+            buf.append(" (").append(object.getClass().getSimpleName()).append(") - ");
         }
         return buf;
     }

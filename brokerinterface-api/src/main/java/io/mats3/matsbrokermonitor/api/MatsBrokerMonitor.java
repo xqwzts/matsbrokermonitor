@@ -3,6 +3,7 @@ package io.mats3.matsbrokermonitor.api;
 import java.io.Closeable;
 import java.util.NavigableMap;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.function.Consumer;
 
@@ -61,14 +62,22 @@ public interface MatsBrokerMonitor extends Closeable {
 
     interface MatsBrokerDestination {
         /**
-         * @return the millis-from-Epoch when this was last updated.
+         * @return the millis-since-Epoch when this was last updated, using the time of this receiving computer. Compare
+         *         to {@link #getLastUpdateBrokerMillis()}.
          */
-        long getLastUpdateMillis();
+        long getLastUpdateLocalMillis();
 
         /**
-         * @return the raw destination name, but not "fully qualified", i.e. "mats.ServiceName.serviceMethodName" or
-         *         "ActiveMQ.DLQ" - but not including any scheme prefix like "queue://" or "topic://" (they aren't
-         *         standard). To get whether it is a queue or topic, use {@link #isQueue()}.
+         * @return the millis-since-epoch <i>on the broker side</i> when this update was produced. Compare to
+         *         {@link #getLastUpdateLocalMillis()}.
+         */
+        OptionalLong getLastUpdateBrokerMillis();
+
+        /**
+         * @return the raw destination name (called "physical name" in ActiveMQ code lingo), which isn't "fully
+         *         qualified", i.e. "mats.ServiceName.serviceMethodName" or "ActiveMQ.DLQ" - but not including any
+         *         scheme prefix like "queue://" or "topic://". To get whether it is a queue or topic, use
+         *         {@link #isQueue()}.
          * @see #getMatsStageId()
          */
         String getDestinationName();
@@ -103,9 +112,31 @@ public interface MatsBrokerMonitor extends Closeable {
         Optional<String> getMatsStageId();
 
         /**
-         * @return the number of messages on this destination. Might include "in-flight" messages, i.e. messages that
-         *         are sent to a consumer, but not yet consumed.
+         * @return the number of messages on this destination <i>when this update was produced</i> (i.e. from the
+         *         {@link #getLastUpdateBrokerMillis()}). Will include <i>in-flight messages</i> if that number is set,
+         *         i.e. messages that are sent to a consumer, but not yet acknowledged/consumed - see
+         *         {@link #getNumberOfInflightMessages()}.
          */
         long getNumberOfQueuedMessages();
+
+        /**
+         * @return the number of messages "in flight", i.e. <i>being delivered</i> to consumers, <i>when this update was
+         *         produced</i> (E.g. "in flight count" in ActiveMQ nomenclature, while "delivering count" for Artemis).
+         *         Note the situation described in {@link #getHeadMessageAgeMillis()}, whereby a consumer might have
+         *         been given 1000 messages to consume, but the actual consume loop is stuck.
+         */
+        OptionalLong getNumberOfInflightMessages();
+
+        /**
+         * @return the age of the message at the head of the queue <i>when this update was produced</i> (i.e. from the
+         *         {@link #getLastUpdateBrokerMillis()}) - do note that this might refer to a message that is dispatched
+         *         (sent to a consumer), but where the consumer has not acknowledged it yet (i.e. via ack or commit of
+         *         the transaction where it was received). Note: There is a possibility that a message A has been
+         *         dispatched to a (slow) consumer 1, while there's also a later message B that was dispatched to, and
+         *         already acknowledged by, a consumer 2. The consumer 1 might even be stuck - so you'll see a very old
+         *         message as head (and there might be several of such old messages due to batch-sending from MQ to
+         *         consumers), while the queue actually still progresses since consumer 2 is still chugging along.
+         */
+        OptionalLong getHeadMessageAgeMillis();
     }
 }

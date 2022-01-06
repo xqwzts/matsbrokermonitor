@@ -83,17 +83,17 @@ public class MatsBrokerMonitor_TestJettyServer {
             Integer portNumber = (Integer) sc.getAttribute(CONTEXT_ATTRIBUTE_PORTNUMBER);
             factoryConfig.setName(getClass().getSimpleName() + "_" + portNumber);
             factoryConfig.setNodename(factoryConfig.getNodename() + "_" + portNumber);
+            factoryConfig.setMatsDestinationPrefix("endre:");
             // Put it in ServletContext, for servlet to get
             sc.setAttribute(JmsMatsFactory.class.getName(), _matsFactory);
 
             // :: Create the MatsBrokerMonitor #1
-            MatsBrokerMonitor matsBrokerMonitor1 = ActiveMqMatsBrokerMonitor.create(connFactory);
+            MatsBrokerMonitor matsBrokerMonitor1 = ActiveMqMatsBrokerMonitor.create(connFactory, "endre:");
             // Register a dummy listener
             matsBrokerMonitor1.registerListener(destinationUpdateEvent -> {
                 log.info("Got update! " + destinationUpdateEvent);
                 destinationUpdateEvent.getNewOrUpdatedDestinations().forEach((fqName, matsBrokerDestination) -> log
-                        .info(
-                                ".. new/updated: [" + fqName + "] = [" + matsBrokerDestination + "]"));
+                        .info(".. new/updated: [" + fqName + "] = [" + matsBrokerDestination + "]"));
             });
             matsBrokerMonitor1.start();
             // Put it in ServletContext, for shutdown
@@ -104,7 +104,7 @@ public class MatsBrokerMonitor_TestJettyServer {
 
             // TODO: Enable multiple MQs.
             // Either: an identifier of sorts, so that the MatsBrokerMonitor knows if it is talked to.
-            // Or: .. just use "routing" to target the different, i.e. put them on different paths.
+            // Or: .. just use "URL routing" to target the different, i.e. put them on different URL paths.
             // Worth remembering: This is somewhat different to a MatsFactory, in that it monitors the _underlying_
             // broker, not the "local" MatsFactory.
 
