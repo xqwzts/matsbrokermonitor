@@ -140,23 +140,28 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
     private static class MatsBrokerDestinationImpl implements MatsBrokerDestination {
         private final long _lastUpdateMillis;
         private final long _lastUpdateBrokerMillis;
+        private final String _fqDestinationName;
         private final String _destinationName;
         private final String _matsStageId;
-        private final boolean _isQueue;
+        private final DestinationType _destinationType;
         private final boolean _isDlq;
+        private final boolean _isGlobalDlq;
         private final long _numberOfQueuedMessages;
         private final long _numberOfInFlightMessages;
         private final long _headMessageAgeMillis;
 
-        public MatsBrokerDestinationImpl(long lastUpdateMillis, long lastUpdateBrokerMillis, String destinationName,
-                String matsStageId, boolean isQueue, boolean isDlq, long numberOfQueuedMessages,
-                long numberOfInFlightMessages, long headMessageAgeMillis) {
+        public MatsBrokerDestinationImpl(long lastUpdateMillis, long lastUpdateBrokerMillis, String fqDestinationName,
+                String destinationName, String matsStageId, DestinationType destinationType, boolean isDlq,
+                boolean isGlobalDlq, long numberOfQueuedMessages, long numberOfInFlightMessages,
+                long headMessageAgeMillis) {
             _lastUpdateMillis = lastUpdateMillis;
             _lastUpdateBrokerMillis = lastUpdateBrokerMillis;
+            _fqDestinationName = fqDestinationName;
             _destinationName = destinationName;
             _matsStageId = matsStageId;
-            _isQueue = isQueue;
+            _destinationType = destinationType;
             _isDlq = isDlq;
+            _isGlobalDlq = isGlobalDlq;
             _numberOfQueuedMessages = numberOfQueuedMessages;
             _numberOfInFlightMessages = numberOfInFlightMessages;
             _headMessageAgeMillis = headMessageAgeMillis;
@@ -176,18 +181,28 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         }
 
         @Override
+        public String getFqDestinationName() {
+            return _fqDestinationName;
+        }
+
+        @Override
         public String getDestinationName() {
             return _destinationName;
         }
 
         @Override
-        public boolean isQueue() {
-            return _isQueue;
+        public DestinationType isQueue() {
+            return _destinationType;
         }
 
         @Override
         public boolean isDlq() {
             return _isDlq;
+        }
+
+        @Override
+        public boolean isGlobalDlq() {
+            return _isGlobalDlq;
         }
 
         @Override
@@ -226,8 +241,9 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
                                     ZoneId.systemDefault())) +
                     ", _destinationName='" + _destinationName + '\'' +
                     ", _matsStageId='" + _matsStageId + '\'' +
-                    ", _isQueue=" + _isQueue +
+                    ", _destinationType=" + _destinationType +
                     ", _isDlq=" + _isDlq +
+                    ", _isGlobalDlq=" + _isGlobalDlq +
                     ", _numberOfQueuedMessages=" + _numberOfQueuedMessages +
                     ", _numberOfInFlightMessages=" + (_numberOfInFlightMessages == 0
                             ? "{not present}"
@@ -272,9 +288,9 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         int matsDestinationCount = 0;
 
         for (Entry<String, DestinationStatsDto> entry : destStatsDtos.entrySet()) {
-            String fqName = entry.getKey();
+            String fqDestinationName = entry.getKey();
             // DestinationName: remove both "queue://" and "topic://", both are 8 length.
-            String destinationName = fqName.substring(8);
+            String destinationName = fqDestinationName.substring(8);
 
             // Whether this is a queue/topic for a MatsStage
             boolean isMatsStageDestination = destinationName.startsWith(_matsDestinationPrefix);
@@ -299,7 +315,9 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
             matsDestinationCount++;
 
             // Is this a queue?
-            boolean isQueue = fqName.startsWith("queue://");
+            DestinationType destinationType = fqDestinationName.startsWith("queue://")
+                    ? DestinationType.QUEUE
+                    : DestinationType.TOPIC;
 
             // Whether this is a DLQ: Individual DLQ or global DLQ.
             boolean isDlq = isMatsStageDlq || isGlobalDlq;
@@ -332,20 +350,21 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
                     : lastUpdateMillis) - instant.toEpochMilli())
                     .orElse(0L);
 
-            if (log.isDebugEnabled()) log.debug("FQ Name: " + fqName + ", destinationName:[" + destinationName
-                    + "], matsStageId:[" + matsStageId + "], isQueue:[" + isQueue + "], isDlq:[" + isDlq
+            if (log.isDebugEnabled()) log.debug("FQ Name: " + fqDestinationName + ", destinationName:["
+                    + destinationName
+                    + "], matsStageId:[" + matsStageId + "], destinationType:[" + destinationType + "], isDlq:[" + isDlq
                     + "], queuedMessages:[" + numberOfQueuedMessages + "]");
 
             // Create the representation
             MatsBrokerDestinationImpl matsBrokerDestination = new MatsBrokerDestinationImpl(lastUpdateMillis,
-                    lastUpdateBrokerMillis, destinationName, matsStageId, isQueue, isDlq, numberOfQueuedMessages,
-                    numberOfInflightMessages, headMessageAgeMillis);
+                    lastUpdateBrokerMillis, fqDestinationName, destinationName, matsStageId, destinationType, isDlq,
+                    isGlobalDlq, numberOfQueuedMessages, numberOfInflightMessages, headMessageAgeMillis);
             // Put it in the map.
-            MatsBrokerDestination existingInfo = _currentDestinationsMap.put(fqName, matsBrokerDestination);
+            MatsBrokerDestination existingInfo = _currentDestinationsMap.put(fqDestinationName, matsBrokerDestination);
             // ?: Was this new, or there an update in number of queued messages?
             if ((existingInfo == null) || existingInfo.getNumberOfQueuedMessages() != numberOfQueuedMessages) {
                 // -> Yes, new or updated - so then it is new-or-changed!
-                fqDestinationsNewOrUpdated.add(fqName);
+                fqDestinationsNewOrUpdated.add(fqDestinationName);
             }
         }
 

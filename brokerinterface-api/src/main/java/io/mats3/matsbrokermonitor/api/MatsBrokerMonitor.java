@@ -15,9 +15,10 @@ import java.util.function.Consumer;
  * <ul>
  * <li>Which destinations exist, and whether they are queues and topics (however, the total number of Mats endpoints can
  * been found by asking all MatsFactories).</li>
- * <li>Dead Letter Queues - both properly configured (on the broker) Individual Dead Letter Queues, and any unfortunate
- * (typically default) global DLQs.</li>
- * <li>Biggest point: <b>The number of messages on the destination or Dead Letter Queue.</b></li>
+ * <li>Dead Letter Queues, both properly configured (on the broker) Individual Dead Letter Queues, and any unfortunate
+ * (typically default) global DLQ.</li>
+ * <li>Biggest point: <b>The number of messages on all the destinations and Dead Letter Queues.</b></li>
+ * <li>Bonus point: The age of any head (first) message on the queue.</li>
  * </ul>
  *
  * Note: "Fully Qualified Destination Name" means that the name fully specifies the queue or topic, e.g. for ActiveMQ
@@ -74,6 +75,13 @@ public interface MatsBrokerMonitor extends Closeable {
         OptionalLong getLastUpdateBrokerMillis();
 
         /**
+         * @return the fully qualified destination name, which uniquely specifies the destination (natively) for the
+         *         broker, including whether it is a queue or a topic. For ActiveMq, this looks like
+         *         <code>"queue://mats.ServiceName.serviceMethodName"</code>.
+         */
+        String getFqDestinationName();
+
+        /**
          * @return the raw destination name (called "physical name" in ActiveMQ code lingo), which isn't "fully
          *         qualified", i.e. "mats.ServiceName.serviceMethodName" or "ActiveMQ.DLQ" - but not including any
          *         scheme prefix like "queue://" or "topic://". To get whether it is a queue or topic, use
@@ -85,12 +93,24 @@ public interface MatsBrokerMonitor extends Closeable {
         /**
          * @return whether this is a Queue (<code>true</code>) or a Topic (<code>false</code>).
          */
-        boolean isQueue();
+        DestinationType isQueue();
 
         /**
          * @return whether this is a Dead Letter Queue (<code>true</code>) or not (<code>false</code>).
          */
         boolean isDlq();
+
+        /**
+         * If the broker isn't properly configured with a broker-specific <i>Individual Dead Letter Queue policy</i>
+         * where each queue gets its own DLQ (being the original queue name prefixed with "DLQ."), then there will be a
+         * global DLQ. This is not very good - but it will nevertheless be reported. This method will then return
+         * {@link Optional#empty()}, while get {@link #getDestinationName()} will be the actual DLQ name (e.g. for
+         * ActiveMQ, it is <code>"ActiveMQ.DLQ"</code>, while for Artemis it is <code>"DLQ"</code>).
+         *
+         * @return whether this is the global DLQ for the broker ({@link #isDlq()} will then also return
+         *         <code>true</code>).
+         */
+        boolean isGlobalDlq();
 
         /**
          * If this {@link #getDestinationName()} represent a Mats Stage (both a normal Queue or Topic for a Mats Stage,
@@ -138,5 +158,9 @@ public interface MatsBrokerMonitor extends Closeable {
          *         consumers), while the queue actually still progresses since consumer 2 is still chugging along.
          */
         OptionalLong getHeadMessageAgeMillis();
+    }
+
+    enum DestinationType {
+        QUEUE, TOPIC;
     }
 }
