@@ -54,6 +54,10 @@ public class MatsBrokerMonitor_TestJettyServer {
 
     private static final Logger log = LoggerFactory.getLogger(MatsBrokerMonitor_TestJettyServer.class);
 
+    private static String SERVICE_1 = "MatsTestBrokerMonitor.FirstSubService";
+    private static String SERVICE_2 = "MatsTestBrokerMonitor.SecondSubService";
+    private static String SERVICE_3 = "AnotherService.SubService";
+
     @WebListener
     public static class SCL_Endre implements ServletContextListener {
 
@@ -87,6 +91,11 @@ public class MatsBrokerMonitor_TestJettyServer {
             // Put it in ServletContext, for servlet to get
             sc.setAttribute(JmsMatsFactory.class.getName(), _matsFactory);
 
+            // Setup test endpoints
+            SetupTestMatsEndpoints.setupMatsTestEndpoints(SERVICE_1, _matsFactory);
+            SetupTestMatsEndpoints.setupMatsTestEndpoints(SERVICE_2, _matsFactory);
+            SetupTestMatsEndpoints.setupMatsTestEndpoints(SERVICE_3, _matsFactory);
+
             // :: Create the MatsBrokerMonitor #1
             MatsBrokerMonitor matsBrokerMonitor1 = ActiveMqMatsBrokerMonitor.create(connFactory, "endre:");
             // Register a dummy listener
@@ -110,8 +119,6 @@ public class MatsBrokerMonitor_TestJettyServer {
 
             // Put it in ServletContext, for servlet to get
             sc.setAttribute("matsBrokerMonitorHtmlGui1", matsBrokerMonitorHtmlGui1);
-
-            SetupTestMatsEndpoints.setupMatsTestEndpoints(_matsFactory);
         }
 
         @Override
@@ -175,7 +182,7 @@ public class MatsBrokerMonitor_TestJettyServer {
                         msg.traceId(MatsTestHelp.traceId())
                                 .keepTrace(KeepTrace.FULL)
                                 .from("/sendRequestInitiated")
-                                .to(SetupTestMatsEndpoints.SERVICE)
+                                .to(SERVICE_1 + SetupTestMatsEndpoints.SERVICE_MAIN)
                                 .replyTo(SetupTestMatsEndpoints.TERMINATOR, sto)
                                 .request(dto);
                     });
@@ -250,7 +257,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             if (includeBootstrap3) {
                 out.write("<div style=\"font-size: 114.29%\">\n");
             }
-            out.println("<h1>Introspection GUI 1</h1>");
+            out.println("<h1>MatsBrokerMonitor GUI 1</h1>");
             Map<String, String[]> parameterMap = req.getParameterMap();
             interface1.createOverview(out, parameterMap);
             if (includeBootstrap3) {
@@ -292,6 +299,8 @@ public class MatsBrokerMonitor_TestJettyServer {
         webAppContext.getMetaData().setWebInfClassesDirs(Collections.singletonList(Resource.newResource(
                 classesLocation)));
 
+        webAppContext.setThrowUnavailableOnStartupException(true);
+
         // Create the actual Jetty Server
         Server server = new Server(port);
 
@@ -300,11 +309,31 @@ public class MatsBrokerMonitor_TestJettyServer {
         stats.setHandler(webAppContext);
         server.setHandler(stats);
 
-        // Add a Jetty Lifecycle Listener to cleanly shut down the MatsSocketServer.
+        // Add a Jetty Lifecycle Listener
         server.addLifeCycleListener(new AbstractLifeCycleListener() {
             @Override
+            public void lifeCycleFailure(LifeCycle event, Throwable cause) {
+                log.error("====# FAILURE! ===========================================", cause);
+            }
+
+            @Override
+            public void lifeCycleStarting(LifeCycle event) {
+                log.info("====# STARTING! ===========================================");
+            }
+
+            @Override
+            public void lifeCycleStarted(LifeCycle event) {
+                log.info("====# STARTED! ===========================================");
+            }
+
+            @Override
             public void lifeCycleStopping(LifeCycle event) {
-                log.info("===== STOPPING! ===========================================");
+                log.info("====# STOPPING! ===========================================");
+            }
+
+            @Override
+            public void lifeCycleStopped(LifeCycle event) {
+                log.info("====# STOPPED! ===========================================");
             }
         });
 
@@ -325,6 +354,13 @@ public class MatsBrokerMonitor_TestJettyServer {
         ActiveMQConnectionFactory jmsConnectionFactory = new ActiveMQConnectionFactory();
 
         Server server = createServer(jmsConnectionFactory, 8080);
-        server.start();
+        try {
+            server.start();
+        }
+        catch (Throwable t) {
+            log.error("server.start() got thrown out!", t);
+            System.exit(1);
+        }
+        log.info("MAIN EXITING!!");
     }
 }

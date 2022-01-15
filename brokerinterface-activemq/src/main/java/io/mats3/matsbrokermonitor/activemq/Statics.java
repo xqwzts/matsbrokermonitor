@@ -5,6 +5,9 @@ package io.mats3.matsbrokermonitor.activemq;
  */
 public interface Statics {
 
+    // :: The /type/ of this broker
+    String BROKER_TYPE = "ActiveMQ";
+
     // :: For ActiveMqMatsBrokerMonitor + ActiveMqBrokerStatsQuerierImpl:
 
     String ACTIVE_MQ_GLOBAL_DLQ_NAME = "ActiveMQ.DLQ";

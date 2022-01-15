@@ -2,6 +2,7 @@ package io.mats3.matsbrokermonitor.htmlgui;
 
 import java.util.Objects;
 
+import io.mats3.MatsEndpoint.MatsRefuseMessageException;
 import org.junit.Assert;
 
 import io.mats3.MatsEndpoint;
@@ -12,33 +13,25 @@ import io.mats3.MatsFactory;
  */
 public class SetupTestMatsEndpoints {
 
-    private static MatsFactory __matsFactory;
-
     public static int BASE_CONCURRENCY = 2;
 
-    static void setupMatsTestEndpoints(MatsFactory matsFactory) {
-        __matsFactory = matsFactory;
-        setupMasterMultiStagedService();
-        setupMidMultiStagedService();
-        setupLeafService();
+    static void setupMatsTestEndpoints(String servicePrefix, MatsFactory matsFactory) {
+        setupMainMultiStagedService(servicePrefix, matsFactory);
+        setupMidMultiStagedService(servicePrefix, matsFactory);
+        setupLeafService(servicePrefix, matsFactory);
 
-        setupTerminator();
-        setupSubscriptionTerminator();
+        setupTerminator(servicePrefix, matsFactory);
+        setupSubscriptionTerminator(servicePrefix, matsFactory);
     }
 
-    public static MatsFactory getMatsFactory() {
-        return __matsFactory;
-    }
+    static final String SERVICE_MAIN = ".mainService";
+    static final String SERVICE_MID = ".private.midMethod";
+    static final String SERVICE_LEAF = ".private.leafMethod";
+    static final String TERMINATOR = ".terminator";
+    static final String SUBSCRIPTION_TERMINATOR = ".subscriptionTerminator";
 
-    static final String SERVICE_PREFIX = "MatsBrokerMonitor";
-    static final String SERVICE = SERVICE_PREFIX + ".service";
-    static final String SERVICE_MID = SERVICE_PREFIX + ".service.Mid";
-    static final String SERVICE_LEAF = SERVICE_PREFIX + ".service.Leaf";
-    static final String TERMINATOR = SERVICE_PREFIX + ".terminator";
-    static final String SUBSCRIPTION_TERMINATOR = SERVICE_PREFIX + ".subscriptionTerminator";
-
-    public static void setupLeafService() {
-        MatsEndpoint<DataTO, Void> single = getMatsFactory().single(SERVICE_LEAF, DataTO.class, DataTO.class,
+    public static void setupLeafService(String servicePrefix, MatsFactory matsFactory) {
+        MatsEndpoint<DataTO, Void> single = matsFactory.single(servicePrefix + SERVICE_LEAF, DataTO.class, DataTO.class,
                 (context, dto) -> {
                     // Use the 'multiplier' in the request to formulate the reply.. I.e. multiply the number..!
                     return new DataTO(dto.number * dto.multiplier, dto.string + ":FromLeafService");
@@ -46,8 +39,8 @@ public class SetupTestMatsEndpoints {
         single.getEndpointConfig().setConcurrency(BASE_CONCURRENCY * 6);
     }
 
-    public static void setupMidMultiStagedService() {
-        MatsEndpoint<DataTO, StateTO> ep = getMatsFactory().staged(SERVICE_MID, DataTO.class,
+    public static void setupMidMultiStagedService(String servicePrefix, MatsFactory matsFactory) {
+        MatsEndpoint<DataTO, StateTO> ep = matsFactory.staged(servicePrefix + SERVICE_MID, DataTO.class,
                 StateTO.class);
         ep.stage(DataTO.class, (context, sto, dto) -> {
             Assert.assertEquals(new StateTO(0, 0), sto);
@@ -55,7 +48,7 @@ public class SetupTestMatsEndpoints {
             sto.number1 = dto.multiplier;
             // Add an important number to state..!
             sto.number2 = Math.PI;
-            context.request(SERVICE_LEAF, new DataTO(dto.number, dto.string + ":LeafCall", 2));
+            context.request(servicePrefix + SERVICE_LEAF, new DataTO(dto.number, dto.string + ":LeafCall", 2));
         });
         ep.stage(DataTO.class, (context, sto, dto) -> {
             // Only assert number2, as number1 is differing between calls (it is the multiplier for MidService).
@@ -74,13 +67,14 @@ public class SetupTestMatsEndpoints {
         ep.getEndpointConfig().setConcurrency(BASE_CONCURRENCY * 4);
     }
 
-    public static void setupMasterMultiStagedService() {
-        MatsEndpoint<DataTO, StateTO> ep = getMatsFactory().staged(SERVICE, DataTO.class, StateTO.class);
+    public static void setupMainMultiStagedService(String servicePrefix, MatsFactory matsFactory) {
+        MatsEndpoint<DataTO, StateTO> ep = matsFactory.staged(servicePrefix + SERVICE_MAIN, DataTO.class,
+                StateTO.class);
         ep.stage(DataTO.class, (context, sto, dto) -> {
             Assert.assertEquals(new StateTO(0, 0), sto);
             sto.number1 = Integer.MAX_VALUE;
             sto.number2 = Math.E;
-            context.request(SERVICE_MID, new DataTO(dto.number, dto.string + ":MidCall1", 3));
+            context.request(servicePrefix + SERVICE_MID, new DataTO(dto.number, dto.string + ":MidCall1", 3));
         });
         ep.stage(DataTO.class, (context, sto, dto) -> {
             Assert.assertEquals(new StateTO(Integer.MAX_VALUE, Math.E), sto);
@@ -92,31 +86,34 @@ public class SetupTestMatsEndpoints {
             Assert.assertEquals(new StateTO(1, 2), sto);
             sto.number1 = Integer.MIN_VALUE;
             sto.number2 = Math.E * 2;
-            context.request(SERVICE_MID, new DataTO(dto.number, dto.string + ":MidCall2", 7));
+            context.request(servicePrefix + SERVICE_MID, new DataTO(dto.number, dto.string + ":MidCall2", 7));
         });
         ep.stage(DataTO.class, (context, sto, dto) -> {
             Assert.assertEquals(new StateTO(Integer.MIN_VALUE, Math.E * 2), sto);
             sto.number1 = Integer.MIN_VALUE / 2;
             sto.number2 = Math.E / 2;
-            context.request(SERVICE_LEAF, new DataTO(dto.number, dto.string + ":LeafCall1", 4));
+            if (Math.random() < 0.1) {
+                throw new MatsRefuseMessageException("Random DLQ!");
+            }
+            context.request(servicePrefix + SERVICE_LEAF, new DataTO(dto.number, dto.string + ":LeafCall1", 4));
         });
         ep.stage(DataTO.class, (context, sto, dto) -> {
             Assert.assertEquals(new StateTO(Integer.MIN_VALUE / 2, Math.E / 2), sto);
             sto.number1 = Integer.MIN_VALUE / 4;
             sto.number2 = Math.E / 4;
-            context.request(SERVICE_LEAF, new DataTO(dto.number, dto.string + ":LeafCall2", 6));
+            context.request(servicePrefix + SERVICE_LEAF, new DataTO(dto.number, dto.string + ":LeafCall2", 6));
         });
         ep.stage(DataTO.class, (context, sto, dto) -> {
             Assert.assertEquals(new StateTO(Integer.MIN_VALUE / 4, Math.E / 4), sto);
             sto.number1 = Integer.MAX_VALUE / 2;
             sto.number2 = Math.PI / 2;
-            context.request(SERVICE_MID, new DataTO(dto.number, dto.string + ":MidCall3", 8));
+            context.request(servicePrefix + SERVICE_MID, new DataTO(dto.number, dto.string + ":MidCall3", 8));
         });
         ep.stage(DataTO.class, (context, sto, dto) -> {
             Assert.assertEquals(new StateTO(Integer.MAX_VALUE / 2, Math.PI / 2), sto);
             sto.number1 = Integer.MAX_VALUE / 4;
             sto.number2 = Math.PI / 4;
-            context.request(SERVICE_MID, new DataTO(dto.number, dto.string + ":MidCall4", 9));
+            context.request(servicePrefix + SERVICE_MID, new DataTO(dto.number, dto.string + ":MidCall4", 9));
         });
         ep.lastStage(DataTO.class, (context, sto, dto) -> {
             Assert.assertEquals(new StateTO(Integer.MAX_VALUE / 4, Math.PI / 4), sto);
@@ -124,14 +121,14 @@ public class SetupTestMatsEndpoints {
         });
     }
 
-    public static void setupTerminator() {
-        getMatsFactory().terminator(TERMINATOR, StateTO.class, DataTO.class,
+    public static void setupTerminator(String servicePrefix, MatsFactory matsFactory) {
+        matsFactory.terminator(servicePrefix + TERMINATOR, StateTO.class, DataTO.class,
                 (context, sto, dto) -> {
                 });
     }
 
-    public static void setupSubscriptionTerminator() {
-        getMatsFactory().subscriptionTerminator(SUBSCRIPTION_TERMINATOR, StateTO.class, DataTO.class,
+    public static void setupSubscriptionTerminator(String servicePrefix, MatsFactory matsFactory) {
+        matsFactory.subscriptionTerminator(servicePrefix + SUBSCRIPTION_TERMINATOR, StateTO.class, DataTO.class,
                 (context, sto, dto) -> {
                 });
     }
@@ -188,12 +185,8 @@ public class SetupTestMatsEndpoints {
         public int number1;
         public double number2;
 
-        /**
-         * Provide a Default Constructor for the Jackson JSON-lib which needs default constructor. It is needed
-         * explicitly in this case since we also have a constructor taking arguments - this would normally not be needed
-         * for a STO class.
-         */
         public StateTO() {
+            // For Jackson JSON-lib which needs default constructor.
         }
 
         public StateTO(int number1, double number2) {

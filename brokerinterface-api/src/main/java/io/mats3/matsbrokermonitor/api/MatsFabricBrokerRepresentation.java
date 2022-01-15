@@ -1,8 +1,8 @@
 package io.mats3.matsbrokermonitor.api;
 
 import java.util.Collection;
-import java.util.Map;
 import java.util.Optional;
+import java.util.SortedMap;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 
@@ -22,8 +22,6 @@ public interface MatsFabricBrokerRepresentation {
         return _Impl.stack_interal(matsDestinations);
     }
 
-    Map<String, MatsEndpointBrokerRepresentation> getMatsEndpointBrokerRepresentations();
-
     /**
      * @return the global DLQ, if there is such a thing in the connected broker. There should really not be, as the
      *         broker should be configured to use an "individual DLQ policy" whereby each queue gets its own DLQ.
@@ -31,16 +29,38 @@ public interface MatsFabricBrokerRepresentation {
     Optional<MatsBrokerDestination> getGlobalDlq();
 
     /**
-     * Representation of a Mats Endpoint as seen from the "Mats Fabric", i.e. from the Broker.
+     * @return Map[String:EndpointGroupName, MatsEndpointGroupBrokerRepresentation]
+     */
+    SortedMap<String, MatsEndpointGroupBrokerRepresentation> getMatsEndpointGroupBrokerRepresentations();
+
+    /**
+     * @return Map[String:EndpointId, MatsEndpointBrokerRepresentation]
+     */
+    SortedMap<String, MatsEndpointBrokerRepresentation> getMatsEndpointBrokerRepresentations();
+
+    /**
+     * Representation of a Mats "EndpointGroup", as defined by the first part of the endpoint name, i.e.
+     * <code>"EndpointGroup.[SubServiceName.]methodName"</code>.
+     */
+    interface MatsEndpointGroupBrokerRepresentation {
+        String getEndpointGroup();
+
+        SortedMap<String, MatsEndpointBrokerRepresentation> getMatsEndpointBrokerRepresentations();
+    }
+
+    /**
+     * Representation of a Mats Endpoint (which contains all stages) as seen from the "Mats Fabric", i.e. as seen from
+     * the Broker.
      */
     interface MatsEndpointBrokerRepresentation {
         String getEndpointId();
 
-        Map<Integer, MatsStageBrokerRepresentation> getStages();
+        SortedMap<Integer, MatsStageBrokerRepresentation> getStages();
     }
 
     /**
-     * Representation of a Mats Stage (with possibly its DLQ) as seen from the "Mats Fabric", i.e. from the Broker.
+     * Representation of a Mats Stage, including the Endpoint's initial stage ("stage 0"), with possibly its DLQ, as
+     * seen from the "Mats Fabric", i.e. as seen from the Broker.
      */
     interface MatsStageBrokerRepresentation {
         /**

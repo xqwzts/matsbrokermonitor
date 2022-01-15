@@ -19,11 +19,12 @@ import java.util.function.Consumer;
 
 import javax.jms.ConnectionFactory;
 
+import io.mats3.matsbrokermonitor.api.DestinationType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.mats3.matsbrokermonitor.activemq.ActiveMqBrokerStatsQuerier.ActiveMqBrokerStatsEvent;
-import io.mats3.matsbrokermonitor.activemq.ActiveMqBrokerStatsQuerierImpl.DestinationStatsDto;
+import io.mats3.matsbrokermonitor.activemq.ActiveMqBrokerStatsQuerier.DestinationStatsDto;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 
 /**
@@ -110,6 +111,8 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
     private final CopyOnWriteArrayList<Consumer<DestinationUpdateEvent>> _listeners = new CopyOnWriteArrayList<>();
 
+    private volatile BrokerInfo _brokerInfo;
+
     @Override
     public void registerListener(Consumer<DestinationUpdateEvent> listener) {
         _listeners.add(listener);
@@ -133,6 +136,11 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
     @Override
     public ConcurrentNavigableMap<String, MatsBrokerDestination> getMatsDestinations() {
         return _currentDestinationsMap;
+    }
+
+    @Override
+    public Optional<BrokerInfo> getBrokerInfo() {
+        return Optional.ofNullable(_brokerInfo);
     }
 
     // ===== IMPLEMENTATION
@@ -191,7 +199,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         }
 
         @Override
-        public DestinationType isQueue() {
+        public DestinationType getDestinationType() {
             return _destinationType;
         }
 
@@ -252,6 +260,33 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
                             ? "{not present}"
                             : _headMessageAgeMillis) +
                     '}';
+        }
+    }
+
+    private static class BrokerInfoImpl implements BrokerInfo {
+        private final String _brokerType;
+        private final String _brokerName;
+        private final String _brokerJson;
+
+        public BrokerInfoImpl(String brokerType, String brokerName, String brokerJson) {
+            _brokerType = brokerType;
+            _brokerName = brokerName;
+            _brokerJson = brokerJson;
+        }
+
+        @Override
+        public String getBrokerType() {
+            return _brokerType;
+        }
+
+        @Override
+        public String getBrokerName() {
+            return _brokerName;
+        }
+
+        @Override
+        public String getBrokerJson() {
+            return _brokerJson;
         }
     }
 
@@ -408,6 +443,13 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
             // -> No new or changed, so use an empty event "update map".
             newOrUpdatedDestinations = Collections.emptyNavigableMap();
         }
+
+        // :: Create the BrokerInfo object, if we have info
+        _brokerInfo = _querier.getCurrentBrokerStatsDto()
+                .map(brokerStatsDto -> new BrokerInfoImpl(BROKER_TYPE,
+                        brokerStatsDto.brokerName,
+                        brokerStatsDto.toJson()))
+                .orElse(null);
 
         // :: Construct and send the update event to listeners.
         DestinationUpdateEventImpl update = new DestinationUpdateEventImpl(false, newOrUpdatedDestinations);

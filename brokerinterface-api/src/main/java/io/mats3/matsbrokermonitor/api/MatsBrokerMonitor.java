@@ -9,7 +9,7 @@ import java.util.function.Consumer;
 
 /**
  * Provides a way to get data from the broker which is not possible to glean from the Mats system itself, nor from
- * standard ways over the JMS API (or any other known messaging protocol).
+ * standard ways by the JMS API (or any other known messaging protocol).
  * <p />
  * These data are:
  * <ul>
@@ -40,9 +40,29 @@ public interface MatsBrokerMonitor extends Closeable {
      */
     ConcurrentNavigableMap<String, MatsBrokerDestination> getMatsDestinations();
 
+    Optional<BrokerInfo> getBrokerInfo();
+
     void registerListener(Consumer<DestinationUpdateEvent> listener);
 
     void forceUpdate();
+
+    interface BrokerInfo {
+        /**
+         * @return currently supported <code>"ActiveMQ"</code>.
+         */
+        String getBrokerType();
+
+        /**
+         * @return the name of the broker.
+         */
+        String getBrokerName();
+
+        /**
+         * @return any broker-specific information, in JSON format - the {@link #getBrokerType()} should be taken into
+         *         account.
+         */
+        String getBrokerJson();
+    }
 
     interface DestinationUpdateEvent {
         /**
@@ -85,7 +105,7 @@ public interface MatsBrokerMonitor extends Closeable {
          * @return the raw destination name (called "physical name" in ActiveMQ code lingo), which isn't "fully
          *         qualified", i.e. "mats.ServiceName.serviceMethodName" or "ActiveMQ.DLQ" - but not including any
          *         scheme prefix like "queue://" or "topic://". To get whether it is a queue or topic, use
-         *         {@link #isQueue()}.
+         *         {@link #getDestinationType()}.
          * @see #getMatsStageId()
          */
         String getDestinationName();
@@ -93,7 +113,7 @@ public interface MatsBrokerMonitor extends Closeable {
         /**
          * @return whether this is a Queue (<code>true</code>) or a Topic (<code>false</code>).
          */
-        DestinationType isQueue();
+        DestinationType getDestinationType();
 
         /**
          * @return whether this is a Dead Letter Queue (<code>true</code>) or not (<code>false</code>).
@@ -160,7 +180,4 @@ public interface MatsBrokerMonitor extends Closeable {
         OptionalLong getHeadMessageAgeMillis();
     }
 
-    enum DestinationType {
-        QUEUE, TOPIC;
-    }
 }

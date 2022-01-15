@@ -1,13 +1,8 @@
 // Customize the Gradle Wrapper generation task.
 wrapper {
-    gradleVersion = "7.3.2"
+    gradleVersion = "7.3.3"
     // Use "-all"-version of distribution, since IntelliJ works better then..
     setDistributionType(Wrapper.DistributionType.ALL)
-}
-
-allprojects {
-    group = 'io.mats3.matsbrokermonitor'
-    version = '0.0.1-SNAPSHOT'
 }
 
 // Versions for all libraries used throughout the subprojects
@@ -38,15 +33,25 @@ ext {
     hibernateVersion = '5.5.0.Final'
 }
 
+allprojects {
+    group = 'io.mats3.matsbrokermonitor'
+    version = '0.0.1-SNAPSHOT'
+}
+
 subprojects {
-    apply plugin: 'java-library'
+    apply plugin: "java-library"
+
+    java {
+        toolchain {
+            languageVersion.set(JavaLanguageVersion.of(8))
+        }
+        withJavadocJar()
+        withSourcesJar()
+    }
 
     repositories { mavenCentral() }
 
     project.buildDir = 'build-gradle'
-
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
 
     compileJava {
         options.encoding = 'UTF-8'
@@ -108,12 +113,6 @@ subprojects {
 configure(subprojects.findAll { it.name != 'mats-api-test' }) {
     apply plugin: 'signing'
     apply plugin: 'maven-publish'
-
-    java {
-        withJavadocJar()
-        withSourcesJar()
-    }
-
 
     signing {
         // "configurations.archives" didn't sign anything, while this overeagerly even signs the MD5s and SHAs..
