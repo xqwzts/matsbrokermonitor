@@ -56,17 +56,6 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
     }
 
     /**
-     * Convenience method if the MatsFactory is set up with the default "mats." MatsDestinationPrefix.
-     *
-     * @param querier
-     *            the querier doing the actual talking with ActiveMQ.
-     * @return the newly created instance.
-     */
-    public static ActiveMqMatsBrokerMonitor create(ActiveMqBrokerStatsQuerier querier) {
-        return create(querier, "mats.");
-    }
-
-    /**
      * Convenience method where the {@link ActiveMqBrokerStatsQuerierImpl} is instantiated locally based on the supplied
      * JMS {@link ConnectionFactory} and MatsDestinationPrefix.
      *

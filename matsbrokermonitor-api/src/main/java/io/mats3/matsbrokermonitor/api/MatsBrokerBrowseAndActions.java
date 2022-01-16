@@ -1,5 +1,6 @@
 package io.mats3.matsbrokermonitor.api;
 
+import java.io.Closeable;
 import java.util.List;
 import java.util.Optional;
 
@@ -8,35 +9,43 @@ import java.util.Optional;
  *
  * @author Endre Stølsvik 2022-01-15 00:08 - http://stolsvik.com/, endre@stolsvik.com
  */
-public interface MatsBrokerDestinationBrowser {
+public interface MatsBrokerBrowseAndActions extends Closeable {
+
+    void start();
+
+    void close();
 
     /**
      * <b>NOTICE!! It is imperative that the returned iterable is closed!</b>
      *
-     * @param destinationType
-     *            queue or topic
-     * @param destinationId
+     * @param queueId
      *            the name of the destination, with mats prefix.
      * @return a {@link MatsBrokerMessageIterable}, containing either all (unbounded), or a max number of messages (for
      *         ActiveMQ, it is 400) - note that it is absolutely essential that this object is closed after use! You
      *         should have a max number of messages that is read, as it can potentially be many and unbounded (so if
-     *         there's a million messages on the destination, you might get them all if you don't max out. Not on
+     *         there's a million messages on the destination, you might get them all if you don't have a max. Not on
      *         ActiveMQ, though - this broker doesn't give more than 400 even if there are more).
      */
-    MatsBrokerMessageIterable browseDestination(DestinationType destinationType, String destinationId);
+    MatsBrokerMessageIterable browseQueue(String queueId)
+            throws BrokerIOException;
 
-    List<String> deleteMessages(DestinationType destinationType, String destinationId, List<String> messageSystemIds);
+    List<String> deleteMessages(String queueId, List<String> messageSystemIds)
+            throws BrokerIOException;
 
-    int purgeDestination(DestinationType destinationType, String destinationId);
+    int deleteAllMessages(String destinationId) throws BrokerIOException;
 
-    List<String> moveMessages(DestinationType sourceDestinationType, String sourceDestinationId,
-            DestinationType targetDestinationType, String targetDestinationId, List<String> messageSystemIds);
+    List<String> moveMessages(String sourceQueueId,
+            String targetQueueId, List<String> messageSystemIds)
+            throws BrokerIOException;
 
-    int moveAllMessages(DestinationType sourceDestinationType, String sourceDestinationId,
-            DestinationType targetDestinationType, String targetDestinationId);
+    int moveAllMessages(String sourceQueueId,
+            String targetQueueId) throws BrokerIOException;
 
     interface MatsBrokerMessageIterable extends Iterable<MatsBrokerMessageRepresentation>, AutoCloseable {
-        /* no extra methods */
+        /**
+         * Close overridden to not throw.
+         */
+        void close();
     }
 
     interface MatsBrokerMessageRepresentation {
@@ -51,6 +60,8 @@ public interface MatsBrokerDestinationBrowser {
 
         String getFromStageId();
 
+        String getToStageId();
+
         boolean isPersistent();
 
         boolean isInteractive();
@@ -64,7 +75,16 @@ public interface MatsBrokerDestinationBrowser {
          * @return If the {@link #getMatsTraceBytes()} is present, this returns the "meta" information of it, needed to
          *         perform deserialization.
          */
-        Optional<String> getMeta();
+        Optional<String> getMatsTraceMeta();
+    }
+
+    /**
+     * Thrown if problems talking with the broker, e.g. for JMS, if <code>JMSException</code> is raised.
+     */
+    class BrokerIOException extends RuntimeException {
+        public BrokerIOException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
 }

@@ -1,6 +1,6 @@
 rootProject.name = 'matsbrokermonitor'
 
-include 'brokerinterface-api', 'brokerinterface-activemq',
+include 'matsbrokermonitor-api', 'matsbrokermonitor-activemq', 'matsbrokermonitor-jms',
         'matsbrokermonitor-htmlgui', 'matsbrokermonitor-app'
 
 println "** Java: ${ System.getProperty('java.version') }, Groovy: $GroovySystem.version," +

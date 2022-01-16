@@ -1,0 +1,11 @@
+// MatsBrokerInterface for ActiveMQ
+
+dependencies {
+    api project(":matsbrokermonitor-api")
+
+    implementation "javax.jms:jms-api:$jmsApiVersion"
+    implementation "org.slf4j:slf4j-api:$slf4jVersion"
+
+    // TEST
+    testImplementation "org.slf4j:log4j-over-slf4j:$slf4jVersion"
+}

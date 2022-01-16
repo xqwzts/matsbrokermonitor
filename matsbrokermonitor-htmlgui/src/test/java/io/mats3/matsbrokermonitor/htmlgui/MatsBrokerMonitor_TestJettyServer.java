@@ -17,6 +17,9 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
+import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl;
+import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AllowAllAccessControl;
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.eclipse.jetty.annotations.AnnotationConfiguration;
 import org.eclipse.jetty.server.Server;
@@ -41,6 +44,7 @@ import io.mats3.matsbrokermonitor.activemq.ActiveMqMatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.htmlgui.SetupTestMatsEndpoints.DataTO;
 import io.mats3.matsbrokermonitor.htmlgui.SetupTestMatsEndpoints.StateTO;
+import io.mats3.matsbrokermonitor.jms.JmsMatsBrokerBrowseAndActions;
 import io.mats3.serial.MatsSerializer;
 import io.mats3.serial.json.MatsSerializerJson;
 import io.mats3.test.MatsTestHelp;
@@ -56,7 +60,7 @@ public class MatsBrokerMonitor_TestJettyServer {
 
     private static String SERVICE_1 = "MatsTestBrokerMonitor.FirstSubService";
     private static String SERVICE_2 = "MatsTestBrokerMonitor.SecondSubService";
-    private static String SERVICE_3 = "AnotherService.SubService";
+    private static String SERVICE_3 = "Another Group With Spaces.SubService";
 
     @WebListener
     public static class SCL_Endre implements ServletContextListener {
@@ -108,8 +112,12 @@ public class MatsBrokerMonitor_TestJettyServer {
             // Put it in ServletContext, for shutdown
             sc.setAttribute("matsBrokerMonitor1", matsBrokerMonitor1);
 
+            // :: Create the MatsBrokerBrowserAndActions #1
+            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions1 = JmsMatsBrokerBrowseAndActions.create(connFactory);
+
             // :: Create the MatsBrokerMonitorHtmlGui #1
-            MatsBrokerMonitorHtmlGuiImpl matsBrokerMonitorHtmlGui1 = MatsBrokerMonitorHtmlGuiImpl.create(matsBrokerMonitor1);
+            MatsBrokerMonitorHtmlGuiImpl matsBrokerMonitorHtmlGui1 = MatsBrokerMonitorHtmlGuiImpl.create(
+                    matsBrokerMonitor1, matsBrokerBrowseAndActions1);
 
             // TODO: Enable multiple MQs.
             // Either: an identifier of sorts, so that the MatsBrokerMonitor knows if it is talked to.
@@ -193,7 +201,7 @@ public class MatsBrokerMonitor_TestJettyServer {
     /**
      * MatsBrokerMonitorServlet
      */
-    @WebServlet("/matsbrokermonitor")
+    @WebServlet("/matsbrokermonitor/*")
     public static class MatsBrokerMonitorServlet extends HttpServlet {
         @Override
         protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
@@ -259,7 +267,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             }
             out.println("<h1>MatsBrokerMonitor GUI 1</h1>");
             Map<String, String[]> parameterMap = req.getParameterMap();
-            interface1.createOverview(out, parameterMap);
+            interface1.actAndRender(out, parameterMap, new AllowAllAccessControl());
             if (includeBootstrap3) {
                 out.write("</div>\n");
             }

@@ -376,7 +376,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 _receiveBrokerStatsReplyMessages_Connection = _connectionFactory.createConnection();
                 _receiveBrokerStatsReplyMessages_Connection.start();
                 Session session = _receiveBrokerStatsReplyMessages_Connection.createSession(false,
-                        Session.AUTO_ACKNOWLEDGE);
+                        Session.DUPS_OK_ACKNOWLEDGE);
                 Topic replyTopic = session.createTopic(QUERY_REPLY_BROKER_TOPIC);
                 MessageConsumer consumer = session.createConsumer(replyTopic);
 
@@ -420,7 +420,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 _receiveDestinationsStatsReplyMessages_Connection = _connectionFactory.createConnection();
                 _receiveDestinationsStatsReplyMessages_Connection.start();
                 Session session = _receiveDestinationsStatsReplyMessages_Connection.createSession(false,
-                        Session.AUTO_ACKNOWLEDGE);
+                        Session.DUPS_OK_ACKNOWLEDGE);
                 Topic replyTopic = session.createTopic(QUERY_REPLY_DESTINATION_TOPIC);
                 MessageConsumer consumer = session.createConsumer(replyTopic);
 

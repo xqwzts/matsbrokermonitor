@@ -1,5 +1,6 @@
 We want three things:
 1. A full list of queues and topics on the broker, with their queue sizes.
+   1. Preferably the age of the "head message", i.e. the first message on the queue.
 2. Ability to introspect the messages on those queues/topics.
 3. Move a message from a DLQ back to the original Queue.
 

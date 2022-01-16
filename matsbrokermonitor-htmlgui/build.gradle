@@ -1,8 +1,9 @@
 // HTML GUI
 
 dependencies {
-    api project(":brokerinterface-activemq")
-    api project(":brokerinterface-api")
+    api project(":matsbrokermonitor-api")
+    api project(":matsbrokermonitor-activemq")
+    api project(":matsbrokermonitor-jms")
 
     // MATS STUFF:
     // We need an implementation of the MatsSerializer, the MatsSerializerJson

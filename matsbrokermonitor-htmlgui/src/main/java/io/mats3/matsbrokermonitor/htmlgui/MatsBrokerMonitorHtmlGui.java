@@ -19,7 +19,51 @@ public interface MatsBrokerMonitorHtmlGui {
     void getJavaScript(Appendable out) throws IOException;
 
 
+    void actAndRender(Appendable out, Map<String, String[]> requestParameters, AccessControl ac) throws IOException;
 
-    void createOverview(Appendable out, Map<String, String[]> requestParameters) throws IOException;
+    interface AccessControl {
+        default boolean overview() {
+            return false;
+        }
 
+        default boolean browse(String destinationId) {
+            return false;
+        }
+
+        default boolean deleteMessages(String fromQueueId) {
+            return false;
+        }
+
+        default boolean moveMessages(String sourceQueueId, String targetQueueId) {
+            return false;
+        }
+    }
+
+    class AllowAllAccessControl implements AccessControl{
+        @Override
+        public boolean overview() {
+            return true;
+        }
+
+        @Override
+        public boolean browse(String destinationId) {
+            return true;
+        }
+
+        @Override
+        public boolean deleteMessages(String fromQueueId) {
+            return true;
+        }
+
+        @Override
+        public boolean moveMessages(String sourceQueueId, String targetQueueId) {
+            return true;
+        }
+    }
+
+    class AccessDeniedException extends RuntimeException {
+        public AccessDeniedException(String message) {
+            super(message);
+        }
+    }
 }

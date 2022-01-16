@@ -8,9 +8,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
+import io.mats3.matsbrokermonitor.api.DestinationType;
+import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
+import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.BrokerIOException;
+import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageIterable;
+import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerInfo;
-import io.mats3.matsbrokermonitor.api.DestinationType;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation.MatsEndpointBrokerRepresentation;
@@ -25,14 +29,18 @@ import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation.MatsStageBr
  * @author Endre Stølsvik 2021-12-17 10:22 - http://stolsvik.com/, endre@stolsvik.com
  */
 public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
-    public static MatsBrokerMonitorHtmlGuiImpl create(MatsBrokerMonitor matsBrokerMonitor) {
-        return new MatsBrokerMonitorHtmlGuiImpl(matsBrokerMonitor);
+    private final MatsBrokerMonitor _matsBrokerMonitor;
+    private final MatsBrokerBrowseAndActions _matsBrokerBrowseAndActions;
+
+    public static MatsBrokerMonitorHtmlGuiImpl create(MatsBrokerMonitor matsBrokerMonitor,
+            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions) {
+        return new MatsBrokerMonitorHtmlGuiImpl(matsBrokerMonitor, matsBrokerBrowseAndActions);
     }
 
-    private MatsBrokerMonitor _matsBrokerMonitor;
-
-    MatsBrokerMonitorHtmlGuiImpl(MatsBrokerMonitor matsBrokerMonitor) {
+    MatsBrokerMonitorHtmlGuiImpl(MatsBrokerMonitor matsBrokerMonitor,
+            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions) {
         _matsBrokerMonitor = matsBrokerMonitor;
+        _matsBrokerBrowseAndActions = matsBrokerBrowseAndActions;
     }
 
     /**
@@ -239,7 +247,58 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         out.append("");
     }
 
-    public void createOverview(Appendable out, Map<String, String[]> requestParameters) throws IOException {
+    public void actAndRender(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
+            throws IOException {
+        if (requestParameters.containsKey("browse")) {
+            String[] browses = requestParameters.get("browse");
+            if (browses.length > 1) {
+                throw new IllegalArgumentException(">1 browse args");
+            }
+            String id = browses[0];
+            if (!(id.startsWith("queue:") || id.startsWith("topic:"))) {
+                throw new IllegalArgumentException("the browse arg should start with queue: or topic:");
+            }
+            boolean browseAllowed = ac.browse(id);
+            if (!browseAllowed) {
+                throw new AccessDeniedException("Not allowed to browse destination!");
+            }
+            // ----- Passed Access Control for browse of specific destination, render it.
+            browse(out, id, ac);
+            return;
+        }
+
+        // E-> No special argument, assume overview
+        boolean overview = ac.overview();
+        if (!overview) {
+            throw new AccessDeniedException("Not allowed to see broker overview!");
+        }
+        // ----- Passed Access Control for overview, render it.
+        overview(out, requestParameters, ac);
+    }
+
+    protected void browse(Appendable out, String id, AccessControl ac)
+            throws IOException {
+        out.append("<a href=\"?\">Back to broker overview</a><br />\n");
+        out.append("<div class=\"mats_report mats_broker\">\n");
+        boolean queue = id.startsWith("queue:");
+        if (!queue) {
+            throw new IllegalArgumentException("Cannot browse anything other than queues!");
+        }
+        String queueId = id.substring("queue:".length());
+        try (MatsBrokerMessageIterable iterable = _matsBrokerBrowseAndActions.browseQueue(queueId)) {
+            for (MatsBrokerMessageRepresentation matsMsg : iterable) {
+                out.append("Message: " + matsMsg.getMessageType() + " - " + matsMsg.getMessageSystemId() + " - "
+                        + matsMsg.getTraceId() + " - " + matsMsg.getFromStageId() + "<br />\n");
+            }
+        }
+        catch (BrokerIOException e) {
+            throw new IOException("Can't talk with broker.", e);
+        }
+        out.append("</div>");
+    }
+
+    protected void overview(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
+            throws IOException {
         out.append("<div class=\"mats_report mats_broker\">\n");
         out.append("  <div class=\"mats_heading\">");
         Optional<BrokerInfo> brokerInfoO = _matsBrokerMonitor.getBrokerInfo();
@@ -252,8 +311,22 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             out.append("<h2>Unknown broker</h2>");
         }
         out.append("  </div>\n");
+
         Map<String, MatsBrokerDestination> matsDestinations = _matsBrokerMonitor.getMatsDestinations();
         MatsFabricBrokerRepresentation stack = MatsFabricBrokerRepresentation.stack(matsDestinations.values());
+
+        // :: ToC
+        out.append("<b>EndpointGroups ToC</b><br />\n");
+        for (MatsEndpointGroupBrokerRepresentation service : stack.getMatsEndpointGroupBrokerRepresentations()
+                .values()) {
+            String endpointGroupId = service.getEndpointGroup().trim().isEmpty()
+                    ? "{empty string}"
+                    : service.getEndpointGroup();
+            out.append("&nbsp;&nbsp;<b><a href=\"#").append(endpointGroupId).append("\">")
+                    .append(endpointGroupId)
+                    .append("</a></b><br />\n");
+        }
+        out.append("<br />\n");
 
         // :: Global DLQ
         if (stack.getGlobalDlq().isPresent()) {
@@ -276,12 +349,12 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         for (MatsEndpointGroupBrokerRepresentation service : stack.getMatsEndpointGroupBrokerRepresentations()
                 .values()) {
             // :: EndpointGroup
-            out.append("<div class=\"mats_endpoint_group\">\n");
-            out.append("EndpointGroup <h2>")
-                    .append(service.getEndpointGroup().trim().isEmpty()
-                            ? "{empty string}"
-                            : service.getEndpointGroup())
-                    .append("</h2><br />\n");
+            String endpointGroupId = service.getEndpointGroup().trim().isEmpty()
+                    ? "{empty string}"
+                    : service.getEndpointGroup();
+            out.append("<div class=\"mats_endpoint_group\" id=\"").append(endpointGroupId).append("\">\n");
+            out.append("<a href=\"#").append(endpointGroupId).append("\">");
+            out.append("<h2>").append(endpointGroupId).append("</h2></a><br />\n");
 
             // :: Foreach Endpoint
             for (MatsEndpointBrokerRepresentation endpoint : service.getMatsEndpointBrokerRepresentations().values()) {
@@ -328,8 +401,8 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         String style = destination.isDlq()
                 ? "dlq"
                 : destination.getNumberOfQueuedMessages() == 0 ? "incoming_zero" : "incoming";
-        out.append("<a class=\"").append(style).append("\" href=\"?")
-                .append(destination.getDestinationType() == DestinationType.QUEUE ? "queue=" : "topic=")
+        out.append("<a class=\"").append(style).append("\" href=\"?browse=")
+                .append(destination.getDestinationType() == DestinationType.QUEUE ? "queue:" : "topic:")
                 .append(destination.getDestinationName())
                 .append("\">")
                 .append(destination.isDlq() ? "DLQ:" : "")
