@@ -18,7 +18,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
-import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AllowAllAccessControl;
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.eclipse.jetty.annotations.AnnotationConfiguration;
@@ -267,7 +266,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             }
             out.println("<h1>MatsBrokerMonitor GUI 1</h1>");
             Map<String, String[]> parameterMap = req.getParameterMap();
-            interface1.actAndRender(out, parameterMap, new AllowAllAccessControl());
+            interface1.main(out, parameterMap, new AllowAllAccessControl());
             if (includeBootstrap3) {
                 out.write("</div>\n");
             }

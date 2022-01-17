@@ -24,6 +24,7 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
  * @author Endre Stølsvik 2022-01-15 23:04 - http://stolsvik.com/, endre@stolsvik.com
  */
 public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions, Statics {
+    private static final Logger log = LoggerFactory.getLogger(JmsMatsBrokerBrowseAndActions.class);
 
     private final ConnectionFactory _connectionFactory;
     private final String _matsTraceKey;
@@ -54,18 +55,55 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
     @Override
     public MatsBrokerMessageIterable browseQueue(String queueId)
             throws BrokerIOException {
+        return browse_internal(queueId, null);
+    }
+
+    @Override
+    public Optional<MatsBrokerMessageRepresentation> examineMessage(String queueId, String messageSystemId)
+            throws BrokerIOException {
+        if (messageSystemId == null) {
+            throw new NullPointerException("messageSystemId");
+        }
+        try (MatsBrokerMessageIterableImpl iterable = browse_internal(queueId,
+                "JMSMessageID = '" + messageSystemId + "'")) {
+            Iterator<MatsBrokerMessageRepresentation> iter = iterable.iterator();
+            if (!iter.hasNext()) {
+                return Optional.empty();
+            }
+            return Optional.of(iter.next());
+        }
+    }
+
+    private MatsBrokerMessageIterableImpl browse_internal(String queueId, String jmsMessageSelector) {
+        if (queueId == null) {
+            throw new NullPointerException("queueId");
+        }
+        Connection connection = null;
         try {
-            Connection connection = _connectionFactory.createConnection();
+            connection = _connectionFactory.createConnection();
             connection.start();
             Session session = connection.createSession(false, Session.DUPS_OK_ACKNOWLEDGE);
             Queue queue = session.createQueue(queueId);
-            QueueBrowser browser = session.createBrowser(queue);
+            QueueBrowser browser = session.createBrowser(queue, jmsMessageSelector);
             @SuppressWarnings("unchecked")
             Enumeration<Message> messageEnumeration = (Enumeration<Message>) browser.getEnumeration();
             return new MatsBrokerMessageIterableImpl(connection, _matsTraceKey, messageEnumeration);
         }
         catch (JMSException e) {
-            throw new BrokerIOException("Problems talking with broker.", e);
+            JMSException suppressed = null;
+            if (connection != null) {
+                try {
+                    connection.close();
+                }
+                catch (JMSException ex) {
+                    suppressed = ex;
+                }
+            }
+            BrokerIOException brokerIOException = new BrokerIOException("Problems talking with broker.", e);
+            if (suppressed != null) {
+                brokerIOException.addSuppressed(suppressed);
+            }
+            throw brokerIOException;
         }
     }
 
@@ -102,38 +140,42 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
 
                 @Override
                 public MatsBrokerMessageRepresentation next() {
-                    Message message = _messageEnumeration.nextElement();
-                    try {
-                        String messageSystemId = message.getJMSMessageID();
-                        String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
-                        String messageType = message.getStringProperty(JMS_MSG_PROP_MESSAGE_TYPE);
-                        String fromStageId = message.getStringProperty(JMS_MSG_PROP_FROM);
-                        // Relevant for Global DLQ, where the original id is now effectively lost
-                        String toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
-                        boolean persistent = message.getJMSDeliveryMode() == DeliveryMode.PERSISTENT;
-                        boolean interactive = message.getJMSPriority() > 4;
-
-                        // Handle MatsTrace
-                        byte[] matsTraceBytes = null;
-                        String matsTraceMeta = null;
-                        if (message instanceof MapMessage) {
-                            MapMessage mm = (MapMessage) message;
-                            matsTraceBytes = mm.getBytes(_matsTraceKey);
-                            matsTraceMeta = mm.getString(_matsTraceKey + ":meta");
-                        }
-                        return new MatsBrokerMessageRepresentationImpl(messageSystemId, traceId, messageType,
-                                fromStageId, toStageId, persistent, interactive, matsTraceBytes, matsTraceMeta);
-                    }
-                    catch (JMSException e) {
-                        throw new BrokerIOException("Couldn't fetch data from JMS Message", e);
-                    }
+                    return jmsMessageToMatsRepresentation(_messageEnumeration.nextElement(), _matsTraceKey);
                 }
             };
         }
     }
 
-    private static class MatsBrokerMessageRepresentationImpl implements MatsBrokerMessageRepresentation {
+    private static MatsBrokerMessageRepresentation jmsMessageToMatsRepresentation(Message message, String matsTraceKey)
+            throws BrokerIOException {
+        try {
+            String messageSystemId = message.getJMSMessageID();
+            String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
+            String messageType = message.getStringProperty(JMS_MSG_PROP_MESSAGE_TYPE);
+            String fromStageId = message.getStringProperty(JMS_MSG_PROP_FROM);
+            // Relevant for Global DLQ, where the original id is now effectively lost
+            String toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
+            boolean persistent = message.getJMSDeliveryMode() == DeliveryMode.PERSISTENT;
+            boolean interactive = message.getJMSPriority() > 4;
 
+            // Handle MatsTrace
+            byte[] matsTraceBytes = null;
+            String matsTraceMeta = null;
+            if (message instanceof MapMessage) {
+                MapMessage mm = (MapMessage) message;
+                matsTraceBytes = mm.getBytes(matsTraceKey);
+                matsTraceMeta = mm.getString(matsTraceKey + ":meta");
+            }
+            return new MatsBrokerMessageRepresentationImpl(messageSystemId, traceId, messageType,
+                    fromStageId, toStageId, persistent, interactive, matsTraceBytes, matsTraceMeta);
+        }
+        catch (JMSException e) {
+            throw new BrokerIOException("Couldn't fetch data from JMS Message", e);
+        }
+
+    }
+
+    private static class MatsBrokerMessageRepresentationImpl implements MatsBrokerMessageRepresentation {
         private final String _messageSystemId;
         private final String _traceId;
         private final String _messageType;

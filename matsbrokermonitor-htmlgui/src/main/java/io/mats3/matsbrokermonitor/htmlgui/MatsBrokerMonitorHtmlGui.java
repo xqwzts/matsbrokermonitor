@@ -18,8 +18,18 @@ public interface MatsBrokerMonitorHtmlGui {
      */
     void getJavaScript(Appendable out) throws IOException;
 
+    /**
+     * The "main", embeddable HTML GUI. This might call to {@link #json(Appendable, Map, AccessControl)} and
+     * {@link #html(Appendable, Map, AccessControl)}.
+     */
+    void main(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
+            throws IOException, AccessDeniedException;
 
-    void actAndRender(Appendable out, Map<String, String[]> requestParameters, AccessControl ac) throws IOException;
+    void json(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
+            throws IOException, AccessDeniedException;
+
+    void html(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
+            throws IOException, AccessDeniedException;
 
     interface AccessControl {
         default boolean overview() {
@@ -39,7 +49,7 @@ public interface MatsBrokerMonitorHtmlGui {
         }
     }
 
-    class AllowAllAccessControl implements AccessControl{
+    class AllowAllAccessControl implements AccessControl {
         @Override
         public boolean overview() {
             return true;

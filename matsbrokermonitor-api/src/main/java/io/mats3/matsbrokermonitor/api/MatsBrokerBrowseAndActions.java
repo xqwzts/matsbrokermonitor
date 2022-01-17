@@ -16,7 +16,8 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
     void close();
 
     /**
-     * <b>NOTICE!! It is imperative that the returned iterable is closed!</b>
+     * <b>NOTICE!! It is imperative that the returned iterable is closed!</b>. Loop through it ASAP (remember a max
+     * number), and then close it in a finally-block - prefer <i>try-with-resources</i>.
      *
      * @param queueId
      *            the name of the destination, with mats prefix.
@@ -26,20 +27,29 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      *         there's a million messages on the destination, you might get them all if you don't have a max. Not on
      *         ActiveMQ, though - this broker doesn't give more than 400 even if there are more).
      */
-    MatsBrokerMessageIterable browseQueue(String queueId)
+    MatsBrokerMessageIterable browseQueue(String queueId) throws BrokerIOException;
+
+    /**
+     * Fetches the specified message for introspection, but does not consume it, i.e. "browses" a single message. The
+     * requested message might not be present, in which case {@link Optional#empty()} is returned.
+     *
+     * @param queueId
+     *            where the message lives
+     * @param messageSystemId
+     *            the broker's id for this message, for JMS it is the message.getJMSMessageID().
+     * @return the specified message, if present.
+     */
+    Optional<MatsBrokerMessageRepresentation> examineMessage(String queueId, String messageSystemId)
             throws BrokerIOException;
 
-    List<String> deleteMessages(String queueId, List<String> messageSystemIds)
-            throws BrokerIOException;
+    List<String> deleteMessages(String queueId, List<String> messageSystemIds) throws BrokerIOException;
 
     int deleteAllMessages(String destinationId) throws BrokerIOException;
 
-    List<String> moveMessages(String sourceQueueId,
-            String targetQueueId, List<String> messageSystemIds)
+    List<String> moveMessages(String sourceQueueId, String targetQueueId, List<String> messageSystemIds)
             throws BrokerIOException;
 
-    int moveAllMessages(String sourceQueueId,
-            String targetQueueId) throws BrokerIOException;
+    int moveAllMessages(String sourceQueueId, String targetQueueId) throws BrokerIOException;
 
     interface MatsBrokerMessageIterable extends Iterable<MatsBrokerMessageRepresentation>, AutoCloseable {
         /**

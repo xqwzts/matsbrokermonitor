@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
+import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils.IO;
 import io.mats3.matsbrokermonitor.api.DestinationType;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.BrokerIOException;
@@ -247,23 +248,27 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         out.append("");
     }
 
-    public void actAndRender(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
+    public void main(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException {
         if (requestParameters.containsKey("browse")) {
-            String[] browses = requestParameters.get("browse");
-            if (browses.length > 1) {
-                throw new IllegalArgumentException(">1 browse args");
-            }
-            String id = browses[0];
-            if (!(id.startsWith("queue:") || id.startsWith("topic:"))) {
-                throw new IllegalArgumentException("the browse arg should start with queue: or topic:");
-            }
-            boolean browseAllowed = ac.browse(id);
-            if (!browseAllowed) {
-                throw new AccessDeniedException("Not allowed to browse destination!");
-            }
+            String destinationId = getDestinationId(requestParameters, ac);
             // ----- Passed Access Control for browse of specific destination, render it.
-            browse(out, id, ac);
+            browse(out, destinationId, ac);
+            return;
+        }
+
+        else if (requestParameters.containsKey("examineMessage")) {
+            String destinationId = getDestinationId(requestParameters, ac);
+
+            String[] messageSystemIds = requestParameters.get("messageSystemId");
+            if (messageSystemIds == null) {
+                throw new IllegalArgumentException("Missing messageSystemIds");
+            }
+            if (messageSystemIds.length > 1) {
+                throw new IllegalArgumentException(">1 messageSystemId args");
+            }
+            String messageSystemId = messageSystemIds[0];
+            examineMessage(out, destinationId, messageSystemId);
             return;
         }
 
@@ -276,24 +281,77 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         overview(out, requestParameters, ac);
     }
 
-    protected void browse(Appendable out, String id, AccessControl ac)
+    private String getDestinationId(Map<String, String[]> requestParameters, AccessControl ac) {
+        String[] destinationIds = requestParameters.get("destinationId");
+        if (destinationIds == null) {
+            throw new IllegalArgumentException("Missing destinationId");
+        }
+        if (destinationIds.length > 1) {
+            throw new IllegalArgumentException(">1 browse args");
+        }
+        String destinationId = destinationIds[0];
+        if (!(destinationId.startsWith("queue:") || destinationId.startsWith("topic:"))) {
+            throw new IllegalArgumentException("the browse arg should start with queue: or topic:");
+        }
+        boolean browseAllowed = ac.browse(destinationId);
+        if (!browseAllowed) {
+            throw new AccessDeniedException("Not allowed to browse destination!");
+        }
+        return destinationId;
+    }
+
+    @Override
+    public void json(Appendable out, Map<String, String[]> requestParameters,
+            AccessControl ac) throws IOException, AccessDeniedException {
+
+    }
+
+    @Override
+    public void html(Appendable out, Map<String, String[]> requestParameters,
+            AccessControl ac) throws IOException, AccessDeniedException {
+
+    }
+
+    protected void browse(Appendable out, String destinationId, AccessControl ac)
             throws IOException {
         out.append("<a href=\"?\">Back to broker overview</a><br />\n");
         out.append("<div class=\"mats_report mats_broker\">\n");
-        boolean queue = id.startsWith("queue:");
+        boolean queue = destinationId.startsWith("queue:");
         if (!queue) {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
-        String queueId = id.substring("queue:".length());
+        String queueId = destinationId.substring("queue:".length());
         try (MatsBrokerMessageIterable iterable = _matsBrokerBrowseAndActions.browseQueue(queueId)) {
             for (MatsBrokerMessageRepresentation matsMsg : iterable) {
+                out.append("<a href=\"?examineMessage&destinationId=").append(destinationId)
+                        .append("&messageSystemId=").append(matsMsg.getMessageSystemId()).append("\">");
                 out.append("Message: " + matsMsg.getMessageType() + " - " + matsMsg.getMessageSystemId() + " - "
-                        + matsMsg.getTraceId() + " - " + matsMsg.getFromStageId() + "<br />\n");
+                        + matsMsg.getTraceId() + " - " + matsMsg.getFromStageId() + "</a><br />\n");
             }
         }
         catch (BrokerIOException e) {
             throw new IOException("Can't talk with broker.", e);
         }
+        out.append("</div>");
+    }
+
+    protected void examineMessage(Appendable out, String destinationId, String messageSystemId) throws IOException {
+        out.append("<a href=\"?\">Back to broker overview</a><br />\n");
+        out.append("<div class=\"mats_report mats_broker\">\n");
+        boolean queue = destinationId.startsWith("queue:");
+        if (!queue) {
+            throw new IllegalArgumentException("Cannot browse anything other than queues!");
+        }
+        String queueId = destinationId.substring("queue:".length());
+        Optional<MatsBrokerMessageRepresentation> matsBrokerMessageRepresentationO = _matsBrokerBrowseAndActions.examineMessage(queueId, messageSystemId);
+        if (!matsBrokerMessageRepresentationO.isPresent()) {
+            out.append("No such message! Queue:["+queueId+"], MessageSystemId:["+messageSystemId+"]<br />\n");
+            out.append("</div>");
+            return;
+        }
+        MatsBrokerMessageRepresentation matsMsg = matsBrokerMessageRepresentationO.get();
+        out.append("Mats Message! Queue:["+queueId+"], MessageSystemId:["+messageSystemId+"]<br />\n");
+        out.append("TraceId: "+matsMsg.getTraceId());
         out.append("</div>");
     }
 
@@ -401,7 +459,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         String style = destination.isDlq()
                 ? "dlq"
                 : destination.getNumberOfQueuedMessages() == 0 ? "incoming_zero" : "incoming";
-        out.append("<a class=\"").append(style).append("\" href=\"?browse=")
+        out.append("<a class=\"").append(style).append("\" href=\"?browse&destinationId=")
                 .append(destination.getDestinationType() == DestinationType.QUEUE ? "queue:" : "topic:")
                 .append(destination.getDestinationName())
                 .append("\">")
