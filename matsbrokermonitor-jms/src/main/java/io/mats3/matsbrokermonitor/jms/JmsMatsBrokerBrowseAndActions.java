@@ -157,6 +157,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             String toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
             boolean persistent = message.getJMSDeliveryMode() == DeliveryMode.PERSISTENT;
             boolean interactive = message.getJMSPriority() > 4;
+            long timestamp = message.getJMSTimestamp();
 
             // Handle MatsTrace
             byte[] matsTraceBytes = null;
@@ -166,7 +167,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                 matsTraceBytes = mm.getBytes(matsTraceKey);
                 matsTraceMeta = mm.getString(matsTraceKey + ":meta");
             }
-            return new MatsBrokerMessageRepresentationImpl(messageSystemId, traceId, messageType,
+            return new MatsBrokerMessageRepresentationImpl(messageSystemId, timestamp, traceId, messageType,
                     fromStageId, toStageId, persistent, interactive, matsTraceBytes, matsTraceMeta);
         }
         catch (JMSException e) {
@@ -177,6 +178,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
 
     private static class MatsBrokerMessageRepresentationImpl implements MatsBrokerMessageRepresentation {
         private final String _messageSystemId;
+        private final long _timestamp;
         private final String _traceId;
         private final String _messageType;
         private final String _fromStageId;
@@ -186,10 +188,11 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         private final byte[] _matsTraceBytes;
         private final String _matsTraceMeta;
 
-        public MatsBrokerMessageRepresentationImpl(String messageSystemId, String traceId, String messageType,
-                String fromStageId, String toStageId, boolean persistent, boolean interactive, byte[] matsTraceBytes,
-                String matsTraceMeta) {
+        public MatsBrokerMessageRepresentationImpl(String messageSystemId, long timestamp, String traceId,
+                String messageType, String fromStageId, String toStageId, boolean persistent, boolean interactive,
+                byte[] matsTraceBytes, String matsTraceMeta) {
             _messageSystemId = messageSystemId;
+            _timestamp = timestamp;
             _traceId = traceId;
             _messageType = messageType;
             _fromStageId = fromStageId;
@@ -203,6 +206,11 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         @Override
         public String getMessageSystemId() {
             return _messageSystemId;
+        }
+
+        @Override
+        public long getTimestamp() {
+            return _timestamp;
         }
 
         @Override

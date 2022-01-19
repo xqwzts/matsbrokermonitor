@@ -4,11 +4,15 @@ import java.io.IOException;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.Collection;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
-import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils.IO;
 import io.mats3.matsbrokermonitor.api.DestinationType;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.BrokerIOException;
@@ -320,14 +324,93 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         if (!queue) {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
+
         String queueId = destinationId.substring("queue:".length());
+
+        Collection<MatsBrokerDestination> values = _matsBrokerMonitor.getMatsDestinations().values();
+        MatsBrokerDestination matsBrokerDestination = null;
+        for (MatsBrokerDestination dest : values) {
+            if (dest.getDestinationType() == DestinationType.QUEUE
+                    && queueId.equals(dest.getDestinationName())) {
+                matsBrokerDestination = dest;
+            }
+        }
+        if (matsBrokerDestination == null) {
+            throw new IllegalArgumentException("Unknown destination!");
+        }
+
+        out.append("Broker Queue '").append(queueId).append("'");
+        // ?: Is this the Global DLQ?
+        if (matsBrokerDestination.isGlobalDlq()) {
+            // -> Yes, global DLQ
+            out.append(" is the Global DLQ, fully qualified name: [")
+                    .append(matsBrokerDestination.getFqDestinationName())
+                    .append("]<br />\n");
+        }
+        else {
+            // -> No, not the Global DLQ
+            // ?: Is this a MatsStage Queue or DLQ?
+            if (matsBrokerDestination.getMatsStageId().isPresent()) {
+                // -> Mats stage queue.
+                out.append(" is the ");
+                out.append(matsBrokerDestination.isDlq() ? "DLQ" : "incoming Queue");
+                out.append(" for Mats Stage [")
+                        .append(matsBrokerDestination.getMatsStageId().get());
+            }
+            else {
+                // -> Non-Mats Queue. Not really supported, but just to handle it.
+                out.append(" is a ");
+                out.append(matsBrokerDestination.isDlq() ? "DLQ" : "Queue");
+            }
+            out.append("<br />\n");
+        }
+        out.append("It has ").append(Long.toString(matsBrokerDestination.getNumberOfQueuedMessages())).append(" messages");
+        if (matsBrokerDestination.getNumberOfInflightMessages().isPresent()) {
+            out.append(" of which ")
+                    .append(Long.toString(matsBrokerDestination.getNumberOfInflightMessages().getAsLong()))
+                    .append(" are in-flight.");
+        }
+        out.append("<br />\n");
+
         try (MatsBrokerMessageIterable iterable = _matsBrokerBrowseAndActions.browseQueue(queueId)) {
+            out.append("<table>");
             for (MatsBrokerMessageRepresentation matsMsg : iterable) {
+                out.append("<tr>");
+
+                out.append("<td>");
                 out.append("<a href=\"?examineMessage&destinationId=").append(destinationId)
                         .append("&messageSystemId=").append(matsMsg.getMessageSystemId()).append("\">");
-                out.append("Message: " + matsMsg.getMessageType() + " - " + matsMsg.getMessageSystemId() + " - "
-                        + matsMsg.getTraceId() + " - " + matsMsg.getFromStageId() + "</a><br />\n");
+                out.append(matsMsg.getMessageType());
+                out.append("</td>");
+
+                out.append("<td>");
+                Instant instant = Instant.ofEpochMilli(matsMsg.getTimestamp());
+                out.append(LocalDateTime.ofInstant(instant, ZoneId.systemDefault()).toString());
+                out.append("</td>");
+
+//                out.append("<td>");
+//                out.append(matsMsg.getMessageSystemId());
+//                out.append("</td>");
+//
+                out.append("<td>");
+                out.append(matsMsg.getTraceId());
+                out.append("</td>");
+
+                out.append("<td>");
+                out.append(matsMsg.getFromStageId());
+                out.append("</td>");
+
+                out.append("<td>");
+                out.append(Boolean.toString(matsMsg.isPersistent()));
+                out.append("</td>");
+
+                out.append("<td>");
+                out.append(Boolean.toString(matsMsg.isInteractive()));
+                out.append("</td>");
+
+                out.append("</tr>");
             }
+            out.append("</table>");
         }
         catch (BrokerIOException e) {
             throw new IOException("Can't talk with broker.", e);
@@ -343,15 +426,16 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
         String queueId = destinationId.substring("queue:".length());
-        Optional<MatsBrokerMessageRepresentation> matsBrokerMessageRepresentationO = _matsBrokerBrowseAndActions.examineMessage(queueId, messageSystemId);
+        Optional<MatsBrokerMessageRepresentation> matsBrokerMessageRepresentationO = _matsBrokerBrowseAndActions
+                .examineMessage(queueId, messageSystemId);
         if (!matsBrokerMessageRepresentationO.isPresent()) {
-            out.append("No such message! Queue:["+queueId+"], MessageSystemId:["+messageSystemId+"]<br />\n");
+            out.append("No such message! Queue:[" + queueId + "], MessageSystemId:[" + messageSystemId + "]<br />\n");
             out.append("</div>");
             return;
         }
         MatsBrokerMessageRepresentation matsMsg = matsBrokerMessageRepresentationO.get();
-        out.append("Mats Message! Queue:["+queueId+"], MessageSystemId:["+messageSystemId+"]<br />\n");
-        out.append("TraceId: "+matsMsg.getTraceId());
+        out.append("Mats Message! Queue:[" + queueId + "], MessageSystemId:[" + messageSystemId + "]<br />\n");
+        out.append("TraceId: " + matsMsg.getTraceId());
         out.append("</div>");
     }
 

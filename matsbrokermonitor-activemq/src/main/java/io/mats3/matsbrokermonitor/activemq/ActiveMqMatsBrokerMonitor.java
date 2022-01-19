@@ -214,9 +214,6 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
         @Override
         public OptionalLong getNumberOfInflightMessages() {
-            if (_numberOfInFlightMessages == 0) {
-                return OptionalLong.empty();
-            }
             return OptionalLong.of(_numberOfInFlightMessages);
         }
 

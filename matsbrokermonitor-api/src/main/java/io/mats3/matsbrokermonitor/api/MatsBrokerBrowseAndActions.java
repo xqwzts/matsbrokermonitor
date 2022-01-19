@@ -64,6 +64,8 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
          */
         String getMessageSystemId();
 
+        long getTimestamp();
+
         String getTraceId();
 
         String getMessageType();
