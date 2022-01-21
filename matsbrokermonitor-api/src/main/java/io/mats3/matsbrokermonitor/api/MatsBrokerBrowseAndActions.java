@@ -72,6 +72,10 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
 
         String getFromStageId();
 
+        String getInitializingApp();
+
+        String getInitiatorId();
+
         String getToStageId();
 
         boolean isPersistent();

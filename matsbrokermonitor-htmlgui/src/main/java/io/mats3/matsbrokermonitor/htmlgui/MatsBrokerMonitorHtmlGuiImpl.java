@@ -7,7 +7,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.Collection;
 import java.util.Locale;
 import java.util.Map;
@@ -185,6 +184,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
                 + "  box-shadow: rgba(13, 112, 234, 0.9) 0 3px 8px;\n"
                 + "}");
 
+        // :: ... button Incoming_zero
         out.append(".mats_report .incoming_zero {\n"
                 + "  background-image: linear-gradient(#00D775, #00BD68);\n"
                 + "}\n"
@@ -194,6 +194,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
                 + "  box-shadow: rgba(13, 112, 234, 0.9) 0 3px 8px;\n"
                 + "}");
 
+        // :: ... button Incoming
         out.append(".mats_report .incoming {\n"
                 + "  background-image: linear-gradient(#0dccea, #0d70ea);\n"
                 + "}\n"
@@ -203,6 +204,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
                 + "  box-shadow: rgba(13, 112, 234, 0.9) 0 3px 8px;\n"
                 + "}");
 
+        // :: ... button DLQ
         out.append(".mats_report .dlq {\n"
                 + "  background-image: linear-gradient(#FF7E31, #E62C03);\n"
                 + "}\n"
@@ -243,6 +245,72 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
                 + "  margin: 0.2em 0 0.2em 0.5em;\n"
                 + "  padding: 0.2em 0.2em 0.2em 0.2em;\n"
                 + "}\n");
+
+        // :: TABLE: Queue browse messages
+        out.append(".mats_browse_messages {\n"
+                + "    width: 100%;\n"
+                + "    border-collapse: collapse;\n"
+                + "    font-size: 0.9em;\n"
+                + "    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);\n"
+                + "}");
+        out.append(".mats_browse_messages thead th {\n"
+                + "    position: sticky;\n"
+                + "    top: 0;\n"
+                + "    background-color: #009879;\n"
+                + "    color: #ffffff;\n"
+                + "}\n");
+        out.append(".mats_browse_messages th, .mats_browse_messages td {\n"
+                + "    padding: 0.5em 0.5em 0.5em 0.5em;\n"
+                + "}\n");
+        out.append(".mats_browse_messages .bool {\n"
+                + "    text-align: center;\n"
+                + "}\n");
+        out.append(".mats_browse_messages tbody tr {\n"
+                + "    border-bottom: thin solid #dddddd;\n"
+                + "}\n"
+                + ".mats_browse_messages tbody tr:nth-of-type(even) {\n"
+                + "    background-color: #f3f3f3;\n"
+                + "}\n"
+                + ".mats_browse_messages tbody tr:hover {\n"
+                + "    background-color: #ffff99;\n"
+                + "}\n"
+                + ".mats_browse_messages tbody tr:last-of-type {\n"
+                + "    border-bottom: thick solid #009879;\n"
+                + "}\n");
+
+        // :: TABLE: Message: Properties
+        out.append(".mats_message_props {\n"
+                + "    width: 100%;\n"
+                + "    border-collapse: collapse;\n"
+                + "    font-size: 0.9em;\n"
+                + "    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);\n"
+                + "}");
+        out.append(".mats_message_props thead th {\n"
+                + "    position: sticky;\n"
+                + "    top: 0;\n"
+                + "    background-color: #009879;\n"
+                + "    color: #ffffff;\n"
+                + "}\n");
+        out.append(".mats_message_props th, .mats_message_props td {\n"
+                + "    padding: 0.5em 0.5em 0.5em 0.5em;\n"
+                + "}\n");
+        out.append(".mats_message_props .bool {\n"
+                + "    text-align: center;\n"
+                + "}\n");
+        out.append(".mats_message_props tbody tr {\n"
+                + "    border-bottom: thin solid #dddddd;\n"
+                + "}\n"
+                + ".mats_message_props tbody tr:nth-of-type(even) {\n"
+                + "    background-color: #f3f3f3;\n"
+                + "}\n"
+                + ".mats_message_props tbody tr:hover {\n"
+                + "    background-color: #ffff99;\n"
+                + "}\n"
+                + ".mats_message_props tbody tr:last-of-type {\n"
+                + "    border-bottom: thick solid #009879;\n"
+                + "}\n");
+
+
     }
 
     /**
@@ -318,12 +386,12 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
 
     protected void browse(Appendable out, String destinationId, AccessControl ac)
             throws IOException {
-        out.append("<a href=\"?\">Back to broker overview</a><br />\n");
-        out.append("<div class=\"mats_report mats_broker\">\n");
         boolean queue = destinationId.startsWith("queue:");
         if (!queue) {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
+        out.append("<div class=\"mats_report mats_broker\">\n");
+        out.append("<a href=\"?\">Back to Broker overview</a><br />\n");
 
         String queueId = destinationId.substring("queue:".length());
 
@@ -364,52 +432,76 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             }
             out.append("<br />\n");
         }
-        out.append("It has ").append(Long.toString(matsBrokerDestination.getNumberOfQueuedMessages())).append(" messages");
+        out.append("It has ").append(Long.toString(matsBrokerDestination.getNumberOfQueuedMessages())).append(
+                " messages");
         if (matsBrokerDestination.getNumberOfInflightMessages().isPresent()) {
             out.append(" of which ")
                     .append(Long.toString(matsBrokerDestination.getNumberOfInflightMessages().getAsLong()))
                     .append(" are in-flight.");
         }
         out.append("<br />\n");
+        out.append("<br />\n");
 
+        out.append("<div class=\"table-container\">");
         try (MatsBrokerMessageIterable iterable = _matsBrokerBrowseAndActions.browseQueue(queueId)) {
-            out.append("<table>");
+            out.append("<table class=\"mats_browse_messages\">");
+            out.append("<thead>");
+            out.append("<th>Sent</th>");
+            out.append("<th>TraceId</th>");
+            out.append("<th>Init App</th>");
+            out.append("<th>InitatorId</th>");
+            out.append("<th>Type</th>");
+            out.append("<th>From Id</th>");
+            out.append("<th>Persistent</th>");
+            out.append("<th>Interactive</th>");
+            out.append("</thead>");
+            out.append("<tbody>");
             for (MatsBrokerMessageRepresentation matsMsg : iterable) {
                 out.append("<tr>");
 
                 out.append("<td>");
                 out.append("<a href=\"?examineMessage&destinationId=").append(destinationId)
                         .append("&messageSystemId=").append(matsMsg.getMessageSystemId()).append("\">");
-                out.append(matsMsg.getMessageType());
-                out.append("</td>");
-
-                out.append("<td>");
                 Instant instant = Instant.ofEpochMilli(matsMsg.getTimestamp());
                 out.append(LocalDateTime.ofInstant(instant, ZoneId.systemDefault()).toString());
+                out.append("</a>");
                 out.append("</td>");
 
-//                out.append("<td>");
-//                out.append(matsMsg.getMessageSystemId());
-//                out.append("</td>");
-//
+                // Found MessageSystemId to be pretty irrelevant in this overview.
+
                 out.append("<td>");
                 out.append(matsMsg.getTraceId());
+                out.append("</td>");
+
+                out.append("<td>");
+                out.append(matsMsg.getInitializingApp() != null ? matsMsg.getInitializingApp() : "{missing init app}");
+                out.append("</td>");
+
+                out.append("<td>");
+                out.append(matsMsg.getInitiatorId() != null ? matsMsg.getInitiatorId() : "{missing init id}");
+                out.append("</td>");
+
+                out.append("<td>");
+                out.append(matsMsg.getMessageType());
+                out.append(" from");
                 out.append("</td>");
 
                 out.append("<td>");
                 out.append(matsMsg.getFromStageId());
                 out.append("</td>");
 
-                out.append("<td>");
+                out.append("<td class=\"bool\">");
                 out.append(Boolean.toString(matsMsg.isPersistent()));
                 out.append("</td>");
 
-                out.append("<td>");
+                out.append("<td class=\"bool\">");
                 out.append(Boolean.toString(matsMsg.isInteractive()));
                 out.append("</td>");
 
                 out.append("</tr>");
             }
+            out.append("</div>");
+            out.append("</tbody>");
             out.append("</table>");
         }
         catch (BrokerIOException e) {
@@ -419,12 +511,15 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
     }
 
     protected void examineMessage(Appendable out, String destinationId, String messageSystemId) throws IOException {
-        out.append("<a href=\"?\">Back to broker overview</a><br />\n");
-        out.append("<div class=\"mats_report mats_broker\">\n");
         boolean queue = destinationId.startsWith("queue:");
         if (!queue) {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
+        out.append("<div class=\"mats_report mats_broker\">\n");
+        out.append("<a href=\"?browse&destinationId=").append(destinationId)
+                .append("\">Back to Queue</a> - ");
+        out.append("<a href=\"?\">Back to broker overview</a><br />\n");
+
         String queueId = destinationId.substring("queue:".length());
         Optional<MatsBrokerMessageRepresentation> matsBrokerMessageRepresentationO = _matsBrokerBrowseAndActions
                 .examineMessage(queueId, messageSystemId);
@@ -434,7 +529,60 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             return;
         }
         MatsBrokerMessageRepresentation matsMsg = matsBrokerMessageRepresentationO.get();
-        out.append("Mats Message! Queue:[" + queueId + "], MessageSystemId:[" + messageSystemId + "]<br />\n");
+        out.append("Queue:[" + queueId + "], MessageSystemId:[" + messageSystemId + "]<br />\n");
+        out.append("<table class=\"mats_message_props\">");
+        out.append("<thead>");
+        out.append("<tr>");
+        out.append("<th>PropertyName</th>");
+        out.append("<th>PropertyValue</th>");
+        out.append("</tr>");
+        out.append("</thead>");
+
+        out.append("<tbody>");
+
+        out.append("<tr>");
+        out.append("<td>Message Timestamp</td>");
+        out.append("<td>...</td>");
+        out.append("</tr>");
+
+        out.append("<tr>");
+        out.append("<td>TraceId</td>");
+        out.append("<td>...</td>");
+        out.append("</tr>");
+
+        out.append("<tr>");
+        out.append("<td>Initiator Time</td>");
+        out.append("<td>...</td>");
+        out.append("</tr>");
+
+        out.append("<tr>");
+        out.append("<td>Initiator App</td>");
+        out.append("<td>...</td>");
+        out.append("</tr>");
+
+        out.append("<tr>");
+        out.append("<td>Initiator Id</td>");
+        out.append("<td>...</td>");
+        out.append("</tr>");
+
+        out.append("<tr>");
+        out.append("<td>Type</td>");
+        out.append("<td>...</td>");
+        out.append("</tr>");
+
+        out.append("<tr>");
+        out.append("<td>From Id</td>");
+        out.append("<td>...</td>");
+        out.append("</tr>");
+
+        out.append("<tr>");
+        out.append("<td>Size</td>");
+        out.append("<td>...</td>");
+        out.append("</tr>");
+
+        out.append("</tbody>");
+
+        out.append("</table>");
         out.append("TraceId: " + matsMsg.getTraceId());
         out.append("</div>");
     }
