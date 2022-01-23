@@ -116,7 +116,7 @@ public class MatsBrokerMonitor_TestJettyServer {
 
             // :: Create the MatsBrokerMonitorHtmlGui #1
             MatsBrokerMonitorHtmlGuiImpl matsBrokerMonitorHtmlGui1 = MatsBrokerMonitorHtmlGuiImpl.create(
-                    matsBrokerMonitor1, matsBrokerBrowseAndActions1);
+                    matsBrokerMonitor1, matsBrokerBrowseAndActions1, matsSerializer);
 
             // TODO: Enable multiple MQs.
             // Either: an identifier of sorts, so that the MatsBrokerMonitor knows if it is talked to.
@@ -255,7 +255,6 @@ public class MatsBrokerMonitor_TestJettyServer {
             out.println("    <script>");
             interface1.getJavaScript(out); // Include just once, use the first.
             out.println("    </script>");
-            out.println("<h1>Initiate Mats flow</h1>");
             out.println(" <a href=\"sendRequest\">Send request</a> - to initialize Initiator"
                     + " and get some traffic.<br /><br />");
 
@@ -264,7 +263,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             if (includeBootstrap3) {
                 out.write("<div style=\"font-size: 114.29%\">\n");
             }
-            out.println("<h1>MatsBrokerMonitor GUI 1</h1>");
+            out.println("<h1>MatsBrokerMonitor HTML embedded GUI</h1>");
             Map<String, String[]> parameterMap = req.getParameterMap();
             interface1.main(out, parameterMap, new AllowAllAccessControl());
             if (includeBootstrap3) {

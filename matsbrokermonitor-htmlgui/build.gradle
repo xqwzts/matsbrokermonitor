@@ -4,18 +4,18 @@ dependencies {
     api project(":matsbrokermonitor-api")
     api project(":matsbrokermonitor-activemq")
     api project(":matsbrokermonitor-jms")
+    // MATS STUFF:
+    // MatsSerializer - even though you might supply null.
+    implementation "io.mats3:mats-serial:$matsVersion"
+    implementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+
+    // :: TESTING
 
     // MATS STUFF:
     // We need an implementation of the MatsSerializer, the MatsSerializerJson
     testImplementation "io.mats3:mats-serial-json:$matsVersion"
     // Testing tools for Mats
     testImplementation "io.mats3:mats-test-junit:$matsVersion"
-    // Mats Spring
-    testImplementation "io.mats3:mats-spring:$matsVersion"
-    // Mats Spring JMS
-    testImplementation "io.mats3:mats-spring-jms:$matsVersion"
-    // Mats Spring Test
-    testImplementation "io.mats3:mats-spring-test:$matsVersion"
     // We want the standard logging, which will be auto-installed by being on the classpath.
     testImplementation "io.mats3:mats-intercept-logging:$matsVersion"
 
