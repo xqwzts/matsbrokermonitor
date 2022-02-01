@@ -1,22 +1,33 @@
 package io.mats3.matsbrokermonitor.htmlgui;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.lang.reflect.TypeVariable;
+import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.Arrays;
+import java.util.ArrayDeque;
 import java.util.Collection;
+import java.util.Deque;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.mats3.matsbrokermonitor.api.DestinationType;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.BrokerIOException;
@@ -33,6 +44,8 @@ import io.mats3.serial.MatsSerializer;
 import io.mats3.serial.MatsSerializer.DeserializedMatsTrace;
 import io.mats3.serial.MatsTrace;
 import io.mats3.serial.MatsTrace.Call;
+import io.mats3.serial.MatsTrace.Call.CallType;
+import io.mats3.serial.MatsTrace.KeepMatsTrace;
 import io.mats3.serial.MatsTrace.StackState;
 
 /**
@@ -43,6 +56,8 @@ import io.mats3.serial.MatsTrace.StackState;
  * @author Endre Stølsvik 2021-12-17 10:22 - http://stolsvik.com/, endre@stolsvik.com
  */
 public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
+    private final Logger log = LoggerFactory.getLogger(MatsBrokerMonitorHtmlGuiImpl.class);
+
     private final MatsBrokerMonitor _matsBrokerMonitor;
     private final MatsBrokerBrowseAndActions _matsBrokerBrowseAndActions;
     private final MatsSerializer<?> _matsSerializer;
@@ -70,286 +85,31 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
      * Note: The return from this method is static, and should only be included once per HTML page.
      */
     public void getStyleSheet(Appendable out) throws IOException {
-        // Regular fonts: Using the "Native font stack" of Bootstrap 5
-        String font_regular = ""
-                // Cross-platform generic font family (default user interface font)
-                // + "system-ui,"
-                // Safari for macOS and iOS (San Francisco)
-                + " -apple-system,"
-                // Chrome < 56 for macOS (San Francisco)
-                + " BlinkMacSystemFont,"
-                // Windows
-                + " \"Segoe UI\","
-                // Android
-                + " Roboto,"
-                // Basic web fallback
-                + " \"Helvetica Neue\", Arial,"
-                // Linux
-                + " \"Noto Sans\","
-                + " \"Liberation Sans\","
-                // Sans serif fallback
-                + " sans-serif,"
-                // Emoji fonts
-                + " \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"";
-
-        // Monospaced fonts: Using the "Native font stack" of Bootstrap 5
-        String font_mono = "SFMono-Regular,Menlo,Monaco,Consolas,\"Liberation Mono\",\"Courier New\",monospace;";
-
-        out.append(".mats_report {\n"
-                + "  font-family: " + font_regular + ";\n"
-                + "  font-weight: 400;\n"
-                + "  font-size: 80%;\n"
-                + "  line-height: 1.35;\n"
-                + "  color: #212529;\n"
-                + "}\n");
-
-        // :: Fonts and headings
-        out.append(".mats_report h1, .mats_report h2, .mats_report h3, .mats_report h4 {\n"
-                // Have to re-set font here, otherwise Bootstrap 3 takes over.
-                + "  font-family: " + font_regular + ";\n"
-                + "  display: inline-block;\n"
-                + "  line-height: 1.2;\n"
-                + "  margin: 0.15em 0 0.3em 0;\n"
-                + "}\n");
-        out.append(".mats_report h1 {\n"
-                + "  font-size: 1.8em;\n"
-                + "  font-weight: 400;\n"
-                + "}\n");
-        out.append(".mats_report h2 {\n"
-                + "  font-size: 1.5em;\n"
-                + "  font-weight: 400;\n"
-                + "}\n");
-        out.append(".mats_report h3 {\n"
-                + "  font-size: 1.4em;\n"
-                + "  font-weight: 400;\n"
-                + "}\n");
-        out.append(".mats_report h4 {\n"
-                + "  font-size: 1.3em;\n"
-                + "  font-weight: 400;\n"
-                + "}\n");
-        out.append(".mats_heading {\n"
-                + "  display: block;\n"
-                + "  margin: 0em 0em 0.5em 0em;\n"
-                + "}\n");
-
-        // .. integers in timings (i.e. ms >= 500)
-        // NOTE! The point of this class is NOT denote "high timings", but to denote that there are no
-        // decimals, to visually make it easier to compare a number '1 235' with '1.235'.
-        out.append(".mats_integer {\n"
-                + "  color: #b02a37;\n"
-                + "}\n");
-
-        // :: TEXT: EndpointId
-        out.append(".mats_endpoint_id {\n"
-                + "}\n");
-
-        // :: TEXT: Age
-        out.append(".mats_age {\n"
-                + "  display: inline;\n"
-                + "  font-size: 75%;\n"
-                + "  font-style: italic;\n"
-                + "  margin: 0 0 0 0.2em;\n"
-                + "}\n");
-
-        // TEXT: Ids
-        out.append(".mats_epid, .mats_queue, .mats_topic {\n"
-                + "  display: inline-block;\n"
-                + "  font-family: " + font_mono + ";\n"
-                + "  font-size: 1em;\n"
-                + "  margin: 0 0 0 0.5em;\n"
-                + "  padding: 2px 4px 1px 4px;\n"
-                + "  border-radius: 3px;\n"
-                + "}\n");
-
-        // TEXT: EndpointIds
-        out.append(".mats_epid {\n"
-                + "  margin: 0 0 0 1.5em;\n"
-                + "  font-size: 1.1em;\n"
-                + "  background-color: rgba(0, 0, 255, 0.04);\n"
-                + "}\n");
-
-        // TEXT: Queue
-        out.append(".mats_queue {\n"
-                + "  font-size: 0.9em;\n"
-                + "  font-style: italic;\n"
-                + "  background-color: rgba(0, 255, 0, 0.15);\n"
-                + "}\n");
-        // TEXT: Topic
-        out.append(".mats_topic {\n"
-                + "  font-size: 0.9em;\n"
-                + "  font-style: italic;\n"
-                + "  background-color: rgba(0, 255, 255, 0.2);\n"
-                + "}\n");
-
-        // :: Destinations-button-links: Incoming and DLQ
-        out.append(".mats_report .incoming_zero,.incoming,.dlq {\n"
-                + "  text-decoration: none;\n"
-                + "  background-color: initial;\n"
-                + "  background-image: linear-gradient(#00D775, #00BD68);\n"
-                + "  box-shadow: rgba(0, 0, 0, .3) 0 5px 15px;\n"
-                + "  border-radius: 6px;\n"
-                + "  box-shadow: rgba(0, 0, 0, 0.1) 0 2px 4px;\n"
-                + "  color: #FFFFFF;\n"
-                + "  display: inline-block;\n"
-                + "  margin: 0 0 0 0.4em;\n" // spacing between "S1" and this box
-                + "  padding: 0px 10px;\n" // Extra width to sides of queue count
-                + "  text-align: center;\n"
-                + "  border: 0;\n"
-                + "  transition: box-shadow 0.4s;\n"
-                + "}\n"
-                + "\n"
-                + ".mats_report .incoming_zero:hover {\n"
-                + "  text-decoration: underline;\n"
-                + "  box-shadow: rgba(13, 112, 234, 0.9) 0 3px 8px;\n"
-                + "}");
-
-        // :: ... button Incoming_zero
-        out.append(".mats_report .incoming_zero {\n"
-                + "  background-image: linear-gradient(#00D775, #00BD68);\n"
-                + "}\n"
-                + "\n"
-                + ".mats_report .incoming_zero:hover {\n"
-                + "  text-decoration: underline;\n"
-                + "  box-shadow: rgba(13, 112, 234, 0.9) 0 3px 8px;\n"
-                + "}");
-
-        // :: ... button Incoming
-        out.append(".mats_report .incoming {\n"
-                + "  background-image: linear-gradient(#0dccea, #0d70ea);\n"
-                + "}\n"
-                + "\n"
-                + ".mats_report .incoming:hover {\n"
-                + "  text-decoration: underline;\n"
-                + "  box-shadow: rgba(13, 112, 234, 0.9) 0 3px 8px;\n"
-                + "}");
-
-        // :: ... button DLQ
-        out.append(".mats_report .dlq {\n"
-                + "  background-image: linear-gradient(#FF7E31, #E62C03);\n"
-                + "}\n"
-                + "\n"
-                + ".mats_report .dlq:hover {\n"
-                + "  text-decoration: underline;\n"
-                + "  box-shadow: rgba(253, 76, 0, 0.9) 0 3px 8px;\n"
-                + "}");
-
-        // :: The different parts of the report
-        out.append(".mats_info {\n"
-                + "  margin: 0em 0em 0em 0.5em;\n"
-                + "}\n");
-
-        // Boxes:
-        out.append(".mats_broker, .mats_endpoint_group {\n"
-                + "  border-radius: 3px;\n"
-                + "  box-shadow: 2px 2px 2px 0px rgba(0,0,0,0.37);\n"
-                + "  border: thin solid #a0a0a0;\n"
-                + "  margin: 0.5em 0.5em 0.7em 0.5em;\n"
-                + "  padding: 0.1em 0.5em 0.5em 0.5em;\n"
-                + "}\n");
-        out.append(".mats_broker {\n"
-                + "  background: #f0f0f0;\n"
-                + "}\n");
-        out.append(".mats_endpoint_group {\n"
-                + "  background: #e8f0e8;\n"
-                + "  margin: 0.5em 0.5em 1em 0.5em;\n"
-                + "}\n");
-
-        // :: Stage small-box
-        out.append(".mats_stage {\n"
-                + "  background: #f0f0f0;\n"
-                + "  display: inline-block;\n"
-                + "  border-radius: 3px;\n"
-                + "  box-shadow: 2px 2px 2px 0px rgba(0,0,0,0.37);\n"
-                + "  border: thin solid #a0a0a0;\n"
-                + "  margin: 0.2em 0 0.2em 0.5em;\n"
-                + "  padding: 0.2em 0.2em 0.2em 0.2em;\n"
-                + "}\n");
-
-        // :: TABLE: Queue browse messages
-        out.append(".mats_browse_messages {\n"
-                + "    width: 100%;\n"
-                + "    border-collapse: collapse;\n"
-                + "    font-size: 0.9em;\n"
-                + "    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);\n"
-                + "}");
-        out.append(".mats_browse_messages thead th {\n"
-                + "    position: sticky;\n"
-                + "    top: 0;\n"
-                + "    background-color: #009879;\n"
-                + "    color: #ffffff;\n"
-                + "}\n");
-        out.append(".mats_browse_messages th, .mats_browse_messages td {\n"
-                + "    padding: 0.5em 0.5em 0.5em 0.5em;\n"
-                + "}\n");
-        out.append(".mats_browse_messages .bool {\n"
-                + "    text-align: center;\n"
-                + "}\n");
-        out.append(".mats_browse_messages tbody tr {\n"
-                + "    border-bottom: thin solid #dddddd;\n"
-                + "}\n"
-                + ".mats_browse_messages tbody tr:nth-of-type(even) {\n"
-                + "    background-color: #f3f3f3;\n"
-                + "}\n"
-                + ".mats_browse_messages tbody tr:hover {\n"
-                + "    background-color: #ffff99;\n"
-                + "}\n"
-                + ".mats_browse_messages tbody tr:last-of-type {\n"
-                + "    border-bottom: thick solid #009879;\n"
-                + "}\n");
-
-        // :: TABLE: Message: Properties
-
-        out.append(".mats_flow_and_message {\n"
-                + "    border-collapse: collapse;\n"
-                + "    font-size: 0.9em;\n"
-                + "    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);\n"
-                + "}");
-        out.append(".mats_flow_and_message td {\n"
-                + "    vertical-align: top;"
-                + "    padding: 1em;\n"
-                + "}\n");
-        out.append(".mats_flow_and_message tbody tr {\n"
-                + "    border-bottom: thin solid #dddddd;\n"
-                + "}\n");
-
-        out.append(".mats_message_props {\n"
-                // + " width: 100%;\n"
-                + "    border-collapse: collapse;\n"
-                + "    font-size: 0.9em;\n"
-                + "    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);\n"
-                + "}");
-        out.append(".mats_message_props thead th {\n"
-                + "    position: sticky;\n"
-                + "    top: 0;\n"
-                + "    background-color: #009879;\n"
-                + "    color: #ffffff;\n"
-                + "}\n");
-        out.append(".mats_message_props th, .mats_message_props td {\n"
-                + "    padding: 0.5em 0.5em 0.5em 0.5em;\n"
-                + "}\n");
-        out.append(".mats_message_props .bool {\n"
-                + "    text-align: center;\n"
-                + "}\n");
-        out.append(".mats_message_props tbody tr {\n"
-                + "    border-bottom: thin solid #dddddd;\n"
-                + "}\n"
-                + ".mats_message_props tbody tr:nth-of-type(even) {\n"
-                + "    background-color: #f3f3f3;\n"
-                + "}\n"
-                + ".mats_message_props tbody tr:hover {\n"
-                + "    background-color: #ffff99;\n"
-                + "}\n"
-                + ".mats_message_props tbody tr:last-of-type {\n"
-                + "    border-bottom: thick solid #009879;\n"
-                + "}\n");
-
+        includeFile(out, "matsbrokermonitor.css");
     }
 
     /**
      * Note: The return from this method is static, and should only be included once per HTML page.
      */
     public void getJavaScript(Appendable out) throws IOException {
-        out.append("");
+        includeFile(out, "matsbrokermonitor.js");
+    }
+
+    private static void includeFile(Appendable out, String file) throws IOException {
+        String filename = MatsBrokerMonitorHtmlGuiImpl.class.getPackage().getName().replace('.', '/') + '/' + file;
+        InputStream is = MatsBrokerMonitorHtmlGuiImpl.class.getClassLoader().getResourceAsStream(filename);
+        if (is == null) {
+            throw new IllegalStateException("Missing '" + file + "' from ClassLoader.");
+        }
+        InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8);
+        BufferedReader br = new BufferedReader(isr);
+        while (true) {
+            String line = br.readLine();
+            if (line == null) {
+                break;
+            }
+            out.append(line).append('\n');
+        }
     }
 
     public void main(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
@@ -357,7 +117,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         if (requestParameters.containsKey("browse")) {
             String destinationId = getDestinationId(requestParameters, ac);
             // ----- Passed Access Control for browse of specific destination, render it.
-            browse(out, destinationId, ac);
+            browseQueue(out, destinationId, ac);
             return;
         }
 
@@ -416,13 +176,13 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
 
     }
 
-    protected void browse(Appendable out, String destinationId, AccessControl ac)
+    protected void browseQueue(Appendable out, String destinationId, AccessControl ac)
             throws IOException {
         boolean queue = destinationId.startsWith("queue:");
         if (!queue) {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
-        out.append("<div class=\"mats_report mats_broker\">\n");
+        out.append("<div class=\"matsbm_report matsbm_broker\">\n");
         out.append("<a href=\"?\">Back to Broker overview</a><br />\n");
 
         String queueId = destinationId.substring("queue:".length());
@@ -476,7 +236,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
 
         out.append("<div class=\"table-container\">");
         try (MatsBrokerMessageIterable iterable = _matsBrokerBrowseAndActions.browseQueue(queueId)) {
-            out.append("<table class=\"mats_browse_messages\">");
+            out.append("<table class=\"matsbm_browse_messages\">");
             out.append("<thead>");
             out.append("<th>Sent</th>");
             out.append("<th>TraceId</th>");
@@ -486,6 +246,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             out.append("<th>From Id</th>");
             out.append("<th>Persistent</th>");
             out.append("<th>Interactive</th>");
+            out.append("<th>Expires</th>");
             out.append("</thead>");
             out.append("<tbody>");
             for (MatsBrokerMessageRepresentation matsMsg : iterable) {
@@ -522,12 +283,18 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
                 out.append(matsMsg.getFromStageId());
                 out.append("</td>");
 
-                out.append("<td class=\"bool\">");
-                out.append(Boolean.toString(matsMsg.isPersistent()));
+                out.append("<td>");
+                out.append(matsMsg.isPersistent() ? "Persistent" : "Non-Persistent");
                 out.append("</td>");
 
-                out.append("<td class=\"bool\">");
-                out.append(Boolean.toString(matsMsg.isInteractive()));
+                out.append("<td>");
+                out.append(matsMsg.isInteractive() ? "Interactive" : "Non-Interactive");
+                out.append("</td>");
+
+                out.append("<td>");
+                out.append(matsMsg.getExpirationTimestamp() == 0
+                        ? "Never expires"
+                        : formatTimestamp(matsMsg.getExpirationTimestamp()));
                 out.append("</td>");
 
                 out.append("</tr>\n");
@@ -547,7 +314,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         if (!queue) {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
-        out.append("<div class=\"mats_report mats_broker\">\n");
+        out.append("<div class=\"matsbm_report matsbm_broker\">\n");
         out.append("<a href=\"?browse&destinationId=").append(destinationId)
                 .append("\">Back to Queue</a> - ");
         out.append("<a href=\"?\">Back to broker overview</a><br />\n");
@@ -556,7 +323,9 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         Optional<MatsBrokerMessageRepresentation> matsBrokerMessageRepresentationO = _matsBrokerBrowseAndActions
                 .examineMessage(queueId, messageSystemId);
         if (!matsBrokerMessageRepresentationO.isPresent()) {
-            out.append("No such message! Queue:[" + queueId + "], MessageSystemId:[" + messageSystemId + "]<br />\n");
+            out.append("<h1>No such message!</h1><br/>\n");
+            out.append("MessageSystemId: [" + messageSystemId + "].<br/>\n");
+            out.append("Queue:[" + queueId + "]<br/>\n");
             out.append("</div>");
             return;
         }
@@ -576,12 +345,321 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
 
         out.append("Queue:[" + queueId + "], MessageSystemId:[" + messageSystemId + "]<br />\n");
 
-        out.append("<table class=\"mats_flow_and_message\"><tr>"); // start Flow/Message table
+        outputFlowAndMessageProperties(out, matsMsg, matsTrace, matsTraceDecompressedLength);
+
+        if (matsMsg.getMatsTraceBytes().isPresent() && (matsTrace == null)) {
+            out.append("<br/><h2>NOTICE! There is a serialized MatsTrace byte array in the message, but I am"
+                    + " constructed without a MatsSerializer, so I can't decipher it!</h2><br />\n");
+        }
+
+        // :: CALL TRACE!
+
+        if (matsTrace != null) {
+
+            List<? extends Call<?>> callFlow = matsTrace.getCallFlow();
+            List<? extends StackState<?>> stateFlow = matsTrace.getStateFlow();
+
+            // TODO: ONLY DO IF KeepMatsTrace.FULL
+
+            /*
+             * Determine if the initial REQUEST or SEND was performed with initial state (dto, initialState) or normal
+             * (dto). This is a bit convoluted, as the state flow data structure really has no direct correlation to the
+             * data structure of the call flow (!). However, from the call flow, we can deduce how the state flow must
+             * have occurred - both with and without initalState. Then we compare it against the actual stateFlow we
+             * have, and see which one that match!
+             */
+
+            // :: REQUESTS:
+            // The initial call, which is a REQUEST, "leaves" a state at level 0 for the terminator.
+
+            // From StateFlow with normal "request(dto)":
+            // 0:1:2:2:1:1:2:2:1:1:1:2:2:1:2:2:
+
+            // From StateFlow with "request(dto, initialState)":
+            // # Notice the added extra "1" in front after the "0", for the initialState to requested endpoint.
+            // 0:1:1:2:2:1:1:2:2:1:1:1:2:2:1:2:2:
+
+            // :: SENDS:
+            // The initial call, which is a SEND, does NOT leave a state since there is no replyTo terminator.
+            // Notice how the first element is therefore missing, and all the rest are "-1" in height compared to the
+            // identical initial-call-is-REQUEST flows.
+
+            // From StateFlow with "send(dto)":
+            // 0:1:1:0:0:1:1:0:0:0:1:1:0:1:1:
+
+            // From StateFlow with "send(dto, initialState)"
+            // # Notice the added extra "0" in front, for the initialState to the sent-to endpoint.
+            // 0:0:1:1:0:0:1:1:0:0:0:1:1:0:1:1:
+
+            StringBuilder actualStateHeightsFromStateFlow = new StringBuilder();
+            stateFlow.forEach(stackState -> actualStateHeightsFromStateFlow.append(stackState.getHeight()).append(':'));
+
+            StringBuilder stateHeightsFromCallFlow_normal = new StringBuilder();
+            StringBuilder stateHeightsFromCallFlow_initialState = new StringBuilder();
+            boolean firstIsSend = callFlow.get(0).getCallType() == CallType.SEND;
+            for (int i = 0; i < callFlow.size(); i++) {
+                // ?: Assuming initialState: Are we BEFORE the initial call which is a SEND?
+                if ((i == 0) && firstIsSend) {
+                    // -> Yes, before initial call which was SEND.
+                    // A SEND send does NOT add state itself, since there is no replyTo / no terminator to receive it.
+                    // Since we assume initialState, it added initialState at level 0 for targeted endpoint.
+                    // This latter we add here, since it isn't represented in the call flow.
+                    stateHeightsFromCallFlow_initialState.append("0:");
+                }
+                Call<?> call = callFlow.get(i);
+                if (call.getCallType() == CallType.REQUEST) {
+                    stateHeightsFromCallFlow_normal.append(call.getReplyStackHeight() - 1).append(':');
+                    stateHeightsFromCallFlow_initialState.append(call.getReplyStackHeight() - 1).append(':');
+                }
+                if ((call.getCallType() == CallType.NEXT) || (call.getCallType() == CallType.GOTO)) {
+                    stateHeightsFromCallFlow_normal.append(call.getReplyStackHeight()).append(':');
+                    stateHeightsFromCallFlow_initialState.append(call.getReplyStackHeight()).append(':');
+                }
+                // ?: Assuming initialState: Are we AFTER the initial call which is a REQUEST?
+                if ((i == 0) && (!firstIsSend)) {
+                    // -> Yes, after initial call which was REQUEST.
+                    // A REQUEST adds a state at level 0 for the message to the replyTo / terminator.
+                    // Since we assume initialState, it also added initialState at level 1 for targeted endpoint.
+                    // This latter we add here, since it isn't represented in the call flow.
+                    stateHeightsFromCallFlow_initialState.append("1:");
+                }
+            }
+
+            out.append("" + actualStateHeightsFromStateFlow).append(" -- actual<br/>\n");
+            out.append("" + stateHeightsFromCallFlow_normal).append(" -- fromCallFlow assuming normal<br/>\n");
+            out.append("" + stateHeightsFromCallFlow_initialState).append(
+                    " -- fromCallFlow assuming initialState<br/>\n");
+            int initialStateStatus; // 1:normal, 2:initialState, -1:neither (can't deduce, can't resolve states)
+            if (actualStateHeightsFromStateFlow.toString().equals(stateHeightsFromCallFlow_normal.toString())) {
+                initialStateStatus = 1;
+            }
+            else if (actualStateHeightsFromStateFlow.toString().equals(stateHeightsFromCallFlow_initialState
+                    .toString())) {
+                initialStateStatus = 2;
+            }
+            else {
+                initialStateStatus = -1;
+            }
+
+            out.append("InitialStateStatus: " + initialStateStatus + "<br/>\n");
+
+            IdentityHashMap<Call<?>, StackState<?>> callToState = new IdentityHashMap<>();
+            if (initialStateStatus > 0) {
+                Deque<StackState> stack = new ArrayDeque<>();
+                Iterator<? extends StackState<?>> stateFlowIt = stateFlow.iterator();
+                // ?: Was the initation call a REQUEST?
+                if (!firstIsSend) {
+                    // -> Initiation call is REQUEST, so push a state from flow to stack
+                    stack.push(stateFlowIt.next());
+                }
+
+                // ?: Was this an initiation call with initialState?
+                if (initialStateStatus == 2) {
+                    // -> Yes, it had initialState, so pick off the initialState
+                    callToState.put(callFlow.get(0), stateFlowIt.next());
+                }
+
+                // Begin from the next call (after we've handled the possible initialState above)
+                for (int i = 1; i < callFlow.size(); i++) {
+                    Call<?> call = callFlow.get(i);
+                    if (call.getCallType() == CallType.REQUEST) {
+                        // -> REQUEST, so we push a state from the stateflow.
+                        stack.push(stateFlowIt.next());
+                    }
+                    if ((call.getCallType() == CallType.REPLY)) {
+                        // -> REPLY, so we pop a state from the stack
+                        callToState.put(call, stack.pop());
+                    }
+                    if ((call.getCallType() == CallType.NEXT) || (call.getCallType() == CallType.GOTO)) {
+                        // -> NEXT (or GOTO, which semantically is equal), so we take directly from stateflow
+                        callToState.put(call, stateFlowIt.next());
+                    }
+                }
+            }
+
+            MatsTrace<String> stringMatsTrace = getStringMatsTrace(matsTrace);
+            currentCallMatsTrace(out, stringMatsTrace);
+
+            out.append("<h2>MatsTrace</h2><br/>\n");
+            out.append("<b>Remember that the MatsTrace, and the rows in this table, refers to the <i>calls, i.e. the"
+                    + " messages from one stage to the next in a flow</i>, not the processing on the stages"
+                    + " themselves.</b><br/>\n");
+            out.append("Thus, it is the REQUEST, REPLY and NEXT parts in the table that are the real info carriers -"
+                    + " the \"processed on\" lines in the table are extracted from the previous stage in the flow,"
+                    + " just to aid your intuition.<br />\n");
+
+            out.append("<table class=\"matsbm_call_flow\">");
+            out.append("<thead>");
+            out.append("<tr>");
+            out.append("<th>Call#</th>");
+            out.append("<th>time</th>");
+            out.append("<th>diff</th>");
+            out.append("<th>Call/Processing</th>");
+            out.append("<th>Application</th>");
+            out.append("<th>Host</th>");
+            out.append("<th>DebugInfo</th>");
+            out.append("</tr>");
+            out.append("</thead>");
+
+            // :: Flow
+            out.append("<tbody>");
+
+            // :: MatsTrace's Initiation
+            out.append("<tr>");
+            out.append("<td>#0</td>");
+            out.append("<td>0 ms</td>");
+            out.append("<td></td>");
+            out.append("<td>");
+            out.append("INIT<br />");
+            out.append(matsTrace.getInitiatorId());
+            out.append("</td><td>");
+            out.append(matsTrace.getInitializingAppName())
+                    .append("; v.").append(matsTrace.getInitializingAppVersion());
+            out.append("</td><td>");
+            out.append(matsTrace.getInitializingHost());
+            out.append("</td><td>");
+            out.append(debugInfoToHtml(matsTrace.getDebugInfo()));
+            out.append("</td>");
+            out.append("</tr>\n");
+
+            // :: IF we're in MINIMAL mode, output empty rows to represent the missing calls.
+            int currentCallNumber = -1;
+            if (matsTrace.getKeepTrace() == KeepMatsTrace.MINIMAL) {
+                currentCallNumber = matsTrace.getCallNumber();
+                for (int i = 0; i < currentCallNumber - 1; i++) {
+                    out.append("<tr><td colspan=100></td></tr>");
+                }
+            }
+
+            // :: MatsTrace's Calls
+            long initializedTimestamp = matsTrace.getInitializedTimestamp();
+            // NOTE: If we are KeepMatsTrace.MINIMAL, then there is only 1 entry here
+            String prevIndent = "";
+            long previousCalledTimestamp = matsTrace.getInitializedTimestamp();
+            for (int i = 0; i < callFlow.size(); i++) {
+                Call<?> currentCall = callFlow.get(i);
+                // Can we get a nextCall?
+                Call<?> prevCall = (i == 0)
+                        ? null
+                        : callFlow.get(i - 1);
+                out.append("<tr>");
+                out.append("<td>#");
+                out.append(Integer.toString(currentCallNumber > 0 ? currentCallNumber : i + 1));
+                out.append("</td>");
+                long currentCallTimestamp = currentCall.getCalledTimestamp();
+                out.append("<td>").append(Long.toString(currentCallTimestamp - initializedTimestamp))
+                        .append("&nbsp;ms</td>");
+                long diffBetweenLast = currentCallTimestamp - previousCalledTimestamp;
+                previousCalledTimestamp = currentCallTimestamp;
+                out.append("<td>").append(Long.toString(diffBetweenLast)).append("&nbsp;ms</td>"); // Proc
+                int replyStackHeight = currentCall.getReplyStackHeight();
+                StringBuilder indentBuf = new StringBuilder("&nbsp;&nbsp;");
+                for (int x = 0; x < replyStackHeight; x++) {
+                    // indentBuf.append("\u00A6&nbsp;&nbsp;");
+                    indentBuf.append("\u00A6&nbsp;&nbsp;&nbsp;&nbsp;");
+                    if (x != (replyStackHeight - 1)) {
+                        indentBuf.append("&nbsp;&nbsp;");
+                    }
+                }
+                String indent = indentBuf.toString();
+                out.append("<td>").append(prevIndent + "&nbsp;<i>(processed&nbsp;on&nbsp;");
+                prevIndent = indent;
+                if (prevCall != null) {
+                    out.append(prevCall.getTo().getId());
+                }
+                else {
+                    out.append("Initiation");
+                }
+                out.append(")</i><br />\n");
+                String indentAndCallType;
+                switch (currentCall.getCallType()) {
+                    case REQUEST:
+                        indentAndCallType = indent + "\u2198 this is a REQUEST";
+                        break;
+                    case REPLY:
+                        indentAndCallType = indent + "&nbsp;&nbsp;\u2199 this is a REPLY";
+                        break;
+                    case NEXT:
+                    case GOTO:
+                        indentAndCallType = indent + "&nbsp;<b>\u2193</b>&nbsp; this is a " + currentCall.getCallType();
+                        break;
+                    default:
+                        indentAndCallType = indent + "this is a " + currentCall.getCallType();
+                }
+                out.append(indentAndCallType).append(" call");
+                StackState<?> stackState = callToState.get(currentCall);
+                if (stackState != null) {
+                    out.append(i == 0 ? " w/ initial state" : " w/ state");
+                }
+                out.append(" - <a href=\"?\">show</a>");
+                out.append("<br/>");
+                out.append(indent);
+                if (replyStackHeight > 0) {
+                    out.append("&nbsp;");
+                }
+
+                out.append("<i>to:</i>&nbsp;").append(currentCall.getTo().getId());
+                out.append("</td>");
+
+                out.append("<td>");
+                out.append(currentCall.getCallingAppName())
+                        .append("; v.").append(currentCall.getCallingAppVersion());
+                out.append("</td><td>");
+                out.append(currentCall.getCallingHost());
+                out.append("</td><td>");
+                out.append(debugInfoToHtml(currentCall.getDebugInfo()));
+                out.append("</td>");
+
+                out.append("</tr>");
+            }
+            out.append("</table>");
+
+            out.append(""
+                    + "<button class=\"trigger\">Click here to trigger the modal!</button>\n"
+                    + "    <div class=\"modal\">\n"
+                    + "        <div class=\"modal-content\">\n"
+                    + "            <span class=\"close-button\">&times;</span>\n"
+                    + "            <h1>Hello, I am a modal!</h1>\n"
+                    + "        </div>\n"
+                    + "    </div>");
+
+            if (stringMatsTrace == null) {
+                out.append("<h2>NOTICE: couldn't resolve MatsTrace to MatsTrace&lt;String&gt;!</h2>");
+                out.append("Here's matsTrace.toString() of the MatsTrace present:");
+                out.append("<pre>");
+                out.append(matsTrace.toString().replace('<', '{').replace('>', '}'));
+                out.append("</pre>");
+            }
+
+            // TEMP:
+            out.append("<br /><br /><br /><br />");
+            out.append("Temporary! MatsTrace.toString()");
+            out.append("<pre>");
+            out.append(matsTrace.toString());
+            out.append("</pre>");
+        }
+        else {
+            out.append("<h2>NOTICE: Couldn't get a MatsTrace from the message.</h2>");
+            if (_matsSerializer == null) {
+                out.append("(We weren't constructed with a MatsSerializer).");
+            }
+        }
+
+        out.append("Here's matsMessage.toString(), which should include the raw info from the broker:<br/>\n");
+        out.append(matsMsg.toString());
+
+        out.append("</div>");
+    }
+
+    private void outputFlowAndMessageProperties(Appendable out, MatsBrokerMessageRepresentation matsMsg,
+            MatsTrace<?> matsTrace,
+            int matsTraceDecompressedLength) throws IOException {
+        out.append("<table class=\"matsbm_flow_and_message\"><tr>"); // start Flow/Message table
         out.append("<td>\n"); // start Flow information cell
         out.append("<h2>Flow information</h2>\n");
 
         // :: FLOW PROPERTIES
-        out.append("<table class=\"mats_message_props\">");
+        out.append("<table class=\"matsbm_message_props\">");
         out.append("<thead>");
         out.append("<tr>");
         out.append("<th>Property</th>");
@@ -698,7 +776,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         // :: MESSAGE PROPERTIES
         out.append("<td>\n"); // start Message information cell
         out.append("<h2>Message information (\"Current call\")</h2>");
-        out.append("<table class=\"mats_message_props\">");
+        out.append("<table class=\"matsbm_message_props\">");
         out.append("<thead>");
         out.append("<tr>");
         out.append("<th>Property</th>");
@@ -788,30 +866,52 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             out.append("</tr>\n");
         }
 
+        out.append("<tr>");
+        out.append("<td>Expires</td>");
+        out.append("<td>").append(matsMsg.getExpirationTimestamp() == 0
+                ? "Never expires"
+                : formatTimestamp(matsMsg.getExpirationTimestamp()))
+                .append("</td>");
+        out.append("</tr>");
+
         out.append("</tbody>");
         out.append("</table>");
 
         out.append("</td>\n"); // end Message information cell
         out.append("</tr></table>"); // end Flow/Message table
-
-        if (matsMsg.getMatsTraceBytes().isPresent() && (matsTrace == null)) {
-            out.append("<br/><h2>NOTICE! There is a serialized MatsTrace byte array in the message, but I am"
-                    + " constructed without a MatsSerializer, so I can't decipher it!</h2><br />\n");
-        }
-
-        if (matsTrace != null) {
-
-            currentCallMatsTrace(out, matsTrace);
-
-            out.append("<pre>");
-            out.append(matsTrace.toString().replace('<', '{').replace('>', '}'));
-            out.append("</pre>");
-        }
-
-        out.append("</div>");
     }
 
-    protected void currentCallMatsTrace(Appendable out, MatsTrace<?> matsTrace) throws IOException {
+    private String debugInfoToHtml(String debugInfo) {
+        if ((debugInfo == null) || (debugInfo.trim().isEmpty())) {
+            debugInfo = "{none present}";
+        }
+        debugInfo = debugInfo.replace(";", "<br>\n").replace('<', '{').replace('>', '}');
+        return "<code>" + debugInfo + "</code>";
+    }
+
+    protected void currentCallMatsTrace(Appendable out, MatsTrace<String> stringMatsTrace)
+            throws IOException {
+        if (stringMatsTrace != null) {
+            Call<String> currentCall = stringMatsTrace.getCurrentCall();
+            String data = currentCall.getData();
+            String jsonData = new ObjectMapper().readTree(data).toPrettyString();
+            out.append("Incoming message:<br />");
+            out.append("<pre>").append(jsonData).append("</pre>");
+
+            Optional<StackState<String>> currentStateO = stringMatsTrace.getCurrentState();
+            if (!currentStateO.isPresent()) {
+                out.append("No incoming state.<br />");
+            }
+            else {
+                String state = currentStateO.get().getState();
+                String jsonState = new ObjectMapper().readTree(state).toPrettyString();
+                out.append("Incoming state:<br />");
+                out.append("<pre>").append(jsonState).append("</pre>");
+            }
+        }
+    }
+
+    private MatsTrace<String> getStringMatsTrace(MatsTrace<?> matsTrace) throws IOException {
         Type[] interfaces = matsTrace.getClass().getGenericInterfaces();
         ParameterizedType matsTraceType = null;
         for (Type anInterface : interfaces) {
@@ -822,54 +922,28 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
                 }
             }
         }
+        // ?: Did we find the MatsTrace type?
         if (null == matsTraceType) {
-            out.append("<h2>Warning! - didn't find the MatsTrace interface of the MatsTrace implementation!</h2>");
-            out.append("<pre>");
-            out.append(matsTrace.toString().replace('<', '{').replace('>', '}'));
-            out.append("</pre>");
-            return;
+            // -> No, so no can do.
+            return null;
         }
 
         Type[] actualTypeArguments = matsTraceType.getActualTypeArguments();
-
         boolean innerSerializeIsString = actualTypeArguments[0].getTypeName().equals(String.class.getName());
-
+        // ?: Do we have inner serialization as String?
         if (!innerSerializeIsString) {
-            out.append("<h2>Warning! - the inner type serialization (STOs and DTOs) isn't String! Cannot introspect.</h2>");
-            out.append("<pre>");
-            out.append(matsTrace.toString().replace('<', '{').replace('>', '}'));
-            out.append("</pre>");
-            return;
+            return null;
         }
-
-        // ----- The inner type serialization (STOs and DTOs) is String. Assuming JSON.
-
-        out.append("The \"inner type serialization\" (for STOs and DTOs) of MatsTrace is String, assuming JSON.<br />");
-
+        // E-> Yes, the inner serialization is String - hopefully JSON!
         @SuppressWarnings("unchecked")
         MatsTrace<String> stringMatsTrace = (MatsTrace<String>) matsTrace;
-
-        Optional<StackState<String>> currentStateO = stringMatsTrace.getCurrentState();
-        if (!currentStateO.isPresent()) {
-            out.append("No current state.<br />");
-            return;
-        }
-        String state = currentStateO.get().getState();
-        String jsonState = new ObjectMapper().readTree(state).toPrettyString();
-        out.append("Current state:<br />");
-        out.append("<pre>").append(jsonState).append("</pre>");
-
-        Call<String> currentCall = stringMatsTrace.getCurrentCall();
-        String data = currentCall.getData();
-        String jsonData = new ObjectMapper().readTree(state).toPrettyString();
-        out.append("Incoming message:<br />");
-        out.append("<pre>").append(jsonData).append("</pre>");
+        return stringMatsTrace;
     }
 
     protected void overview(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException {
-        out.append("<div class=\"mats_report mats_broker\">\n");
-        out.append("  <div class=\"mats_heading\">");
+        out.append("<div class=\"matsbm_report matsbm_broker\">\n");
+        out.append("  <div class=\"matsbm_heading\">");
         Optional<BrokerInfo> brokerInfoO = _matsBrokerMonitor.getBrokerInfo();
         if (brokerInfoO.isPresent()) {
             BrokerInfo brokerInfo = brokerInfoO.get();
@@ -899,13 +973,13 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
 
         // :: Global DLQ
         if (stack.getGlobalDlq().isPresent()) {
-            out.append("<div class=\"mats_endpoint_group\">\n");
+            out.append("<div class=\"matsbm_endpoint_group\">\n");
             out.append("<h2>Global DLQ</h2><br />");
             MatsBrokerDestination globalDlq = stack.getGlobalDlq().get();
-            out.append("<div class=\"mats_epid\">")
+            out.append("<div class=\"matsbm_epid\">")
                     .append(globalDlq.getDestinationName())
                     .append("</div>");
-            out.append("<div class=\"mats_stage\">")
+            out.append("<div class=\"matsbm_stage\">")
                     .append(globalDlq.getFqDestinationName());
 
             queueCount(out, globalDlq);
@@ -921,7 +995,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             String endpointGroupId = service.getEndpointGroup().trim().isEmpty()
                     ? "{empty string}"
                     : service.getEndpointGroup();
-            out.append("<div class=\"mats_endpoint_group\" id=\"").append(endpointGroupId).append("\">\n");
+            out.append("<div class=\"matsbm_endpoint_group\" id=\"").append(endpointGroupId).append("\">\n");
             out.append("<a href=\"#").append(endpointGroupId).append("\">");
             out.append("<h2>").append(endpointGroupId).append("</h2></a><br />\n");
 
@@ -937,15 +1011,15 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
                         .orElseGet(() -> first.getDlqDestination()
                                 .orElseThrow(() -> new AssertionError("Missing both Incoming and DLQ destinations!")));
                 String endpointType = firstIncomingOrDlq.getDestinationType() == DestinationType.QUEUE
-                        ? "<div class=\"mats_queue\">Queue</div>"
-                        : "<div class=\"mats_topic\">Topic</div>";
+                        ? "<div class=\"matsbm_queue\">Queue</div>"
+                        : "<div class=\"matsbm_topic\">Topic</div>";
 
-                out.append("<div class=\"mats_epid\">").append(endpointId).append("</div>");
+                out.append("<div class=\"matsbm_epid\">").append(endpointId).append("</div>");
                 out.append(" ").append(endpointType);
 
                 // :: Foreach Stage
                 for (MatsStageBrokerRepresentation stage : stages.values()) {
-                    out.append("<div class=\"mats_stage\">");
+                    out.append("<div class=\"matsbm_stage\">");
                     out.append(stage.getStageIndex() == 0 ? "Initial" : "S" + stage.getStageIndex());
                     Optional<MatsBrokerDestination> incomingDest = stage.getIncomingDestination();
                     if (incomingDest.isPresent()) {
@@ -957,7 +1031,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
                     if (dlqDest.isPresent()) {
                         queueCount(out, dlqDest.get());
                     }
-                    out.append("</div>"); // /mats_stage
+                    out.append("</div>"); // /matsbm_stage
                 }
                 out.append("<br />\n");
             }
@@ -979,7 +1053,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
                 .append("</a>");
         long age = destination.getHeadMessageAgeMillis().orElse(0);
         if (age > 0) {
-            out.append("<div class=\"mats_age\">(").append(millisSpanToHuman(age)).append(")</div>");
+            out.append("<div class=\"matsbm_age\">(").append(millisSpanToHuman(age)).append(")</div>");
         }
     }
 

@@ -41,8 +41,7 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
 
         String brokerId;
         String brokerName;
-        // To-be feature created by me:
-        Optional<Instant> brokerTime;
+        Instant brokerTime;
 
         /**
          * The number of messages that currently reside in the queue.
@@ -132,7 +131,7 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
             return "  \"statsReceivedTimeMillis\"=" + statsReceived + "\n" +
                     "  \"brokerId\"=\"" + brokerId + '"' + "\n" +
                     "  \"brokerName\"=\"" + brokerName + '"' + "\n" +
-                    "  \"brokerTime\"=" + (brokerTime.map(instant -> "\"" + instant + "\"").orElse("null")) + "\n" +
+                    "  \"brokerTime\"=" + brokerTime + '"' + "\n" +
                     "  \"size\"=" + size + "\n" +
                     "  \"enqueueCount\"=" + enqueueCount + "\n" +
                     "  \"dequeueCount\"=" + dequeueCount + "\n" +

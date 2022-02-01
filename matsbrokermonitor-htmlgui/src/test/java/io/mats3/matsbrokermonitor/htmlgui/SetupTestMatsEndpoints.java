@@ -13,7 +13,7 @@ import io.mats3.MatsFactory;
  */
 public class SetupTestMatsEndpoints {
 
-    public static int BASE_CONCURRENCY = 2;
+    public static int BASE_CONCURRENCY = 5;
 
     static void setupMatsTestEndpoints(String servicePrefix, MatsFactory matsFactory) {
         setupMainMultiStagedService(servicePrefix, matsFactory);
@@ -71,7 +71,7 @@ public class SetupTestMatsEndpoints {
         MatsEndpoint<DataTO, StateTO> ep = matsFactory.staged(servicePrefix + SERVICE_MAIN, DataTO.class,
                 StateTO.class);
         ep.stage(DataTO.class, (context, sto, dto) -> {
-            Assert.assertEquals(new StateTO(0, 0), sto);
+            // We don't assert initial state, as that might be set or not, based on whether initialState is sent along.
             sto.number1 = Integer.MAX_VALUE;
             sto.number2 = Math.E;
             context.request(servicePrefix + SERVICE_MID, new DataTO(dto.number, dto.string + ":MidCall1", 3));
@@ -92,9 +92,6 @@ public class SetupTestMatsEndpoints {
             Assert.assertEquals(new StateTO(Integer.MIN_VALUE, Math.E * 2), sto);
             sto.number1 = Integer.MIN_VALUE / 2;
             sto.number2 = Math.E / 2;
-            if (Math.random() < 0.1) {
-                throw new MatsRefuseMessageException("Random DLQ!");
-            }
             context.request(servicePrefix + SERVICE_LEAF, new DataTO(dto.number, dto.string + ":LeafCall1", 4));
         });
         ep.stage(DataTO.class, (context, sto, dto) -> {
@@ -117,6 +114,12 @@ public class SetupTestMatsEndpoints {
         });
         ep.lastStage(DataTO.class, (context, sto, dto) -> {
             Assert.assertEquals(new StateTO(Integer.MAX_VALUE / 4, Math.PI / 4), sto);
+
+            // RANDOM THROW!
+            if (Math.random() < 0.01) {
+                throw new MatsRefuseMessageException("Random DLQ!");
+            }
+
             return new DataTO(dto.number * 5, dto.string + ":FromMasterService");
         });
     }

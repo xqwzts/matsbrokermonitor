@@ -363,7 +363,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
             long numberOfInflightMessages = stats.inflightCount;
 
-            long lastUpdateBrokerMillis = stats.brokerTime.map(Instant::toEpochMilli).orElse(0L);
+            long lastUpdateBrokerMillis = stats.brokerTime.toEpochMilli();
 
             // If present: Calculate age: If lastUpdateBrokerMillis present, use this, otherwise lastUpdateMillis
             long headMessageAgeMillis = stats.headMessageBrokerInTime.map(instant -> (lastUpdateBrokerMillis != 0

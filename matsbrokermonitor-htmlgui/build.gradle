@@ -1,5 +1,6 @@
 // HTML GUI
 
+
 dependencies {
     api project(":matsbrokermonitor-api")
     api project(":matsbrokermonitor-activemq")
@@ -8,6 +9,8 @@ dependencies {
     // MatsSerializer - even though you might supply null.
     implementation "io.mats3:mats-serial:$matsVersion"
     implementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+    // Logging.
+    implementation "org.slf4j:slf4j-api:$slf4jVersion"
 
     // :: TESTING
 
@@ -18,6 +21,8 @@ dependencies {
     testImplementation "io.mats3:mats-test-junit:$matsVersion"
     // We want the standard logging, which will be auto-installed by being on the classpath.
     testImplementation "io.mats3:mats-intercept-logging:$matsVersion"
+    // We want the localinspect tool
+    testImplementation "io.mats3:mats-localinspect:$matsVersion"
 
     // Base Jetty Server
     testImplementation "org.eclipse.jetty:jetty-server:$jettyVersion"

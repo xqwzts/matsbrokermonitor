@@ -558,7 +558,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
         dto.brokerId = (String) mm.getObject("brokerId");
         dto.brokerName = (String) mm.getObject("brokerName");
-        dto.brokerTime = getTimestampFromMapMessage(mm, "brokerTime");
+        dto.brokerTime = Instant.ofEpochMilli(mm.getJMSTimestamp());
 
         dto.size = (long) mm.getObject("size");
         dto.enqueueCount = (long) mm.getObject("enqueueCount");

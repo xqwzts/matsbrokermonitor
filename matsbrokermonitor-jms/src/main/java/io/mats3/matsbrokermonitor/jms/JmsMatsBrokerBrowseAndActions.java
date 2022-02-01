@@ -150,6 +150,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             throws BrokerIOException {
         try {
             String messageSystemId = message.getJMSMessageID();
+            long timestamp = message.getJMSTimestamp();
             String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
             String messageType = message.getStringProperty(JMS_MSG_PROP_MESSAGE_TYPE);
             String fromStageId = message.getStringProperty(JMS_MSG_PROP_FROM);
@@ -158,8 +159,8 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             // Relevant for Global DLQ, where the original id is now effectively lost
             String toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
             boolean persistent = message.getJMSDeliveryMode() == DeliveryMode.PERSISTENT;
-            boolean interactive = message.getJMSPriority() > 4;
-            long timestamp = message.getJMSTimestamp();
+            boolean interactive = message.getJMSPriority() > 4; // Mats-JMS uses 9 for "interactive"
+            long expirationTimestamp = message.getJMSExpiration();
 
             // Handle MatsTrace
             byte[] matsTraceBytes = null;
@@ -169,9 +170,9 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                 matsTraceBytes = mm.getBytes(matsTraceKey);
                 matsTraceMeta = mm.getString(matsTraceKey + ":meta");
             }
-            return new MatsBrokerMessageRepresentationImpl(messageSystemId, timestamp, traceId, messageType,
-                    fromStageId, initializingApp, initatorId, toStageId, persistent, interactive, matsTraceBytes,
-                    matsTraceMeta);
+            return new JmsMatsBrokerMessageRepresentationImpl(message, messageSystemId, timestamp, traceId, messageType,
+                    fromStageId, initializingApp, initatorId, toStageId, persistent, interactive, expirationTimestamp,
+                    matsTraceBytes, matsTraceMeta);
         }
         catch (JMSException e) {
             throw new BrokerIOException("Couldn't fetch data from JMS Message", e);
@@ -179,7 +180,9 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
 
     }
 
-    private static class MatsBrokerMessageRepresentationImpl implements MatsBrokerMessageRepresentation {
+    private static class JmsMatsBrokerMessageRepresentationImpl implements MatsBrokerMessageRepresentation {
+        private final Message _jmsMessage;
+
         private final String _messageSystemId;
         private final long _timestamp;
         private final String _traceId;
@@ -190,12 +193,16 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         private final String _toStageId;
         private final boolean _persistent;
         private final boolean _interactive;
-        private final byte[] _matsTraceBytes;
-        private final String _matsTraceMeta;
+        private final long _expirationTimestamp;
+        private final byte[] _matsTraceBytes; // nullable
+        private final String _matsTraceMeta; // nullable
 
-        public MatsBrokerMessageRepresentationImpl(String messageSystemId, long timestamp, String traceId,
-                String messageType, String fromStageId, String initializingApp, String initiatorId, String toStageId,
-                boolean persistent, boolean interactive, byte[] matsTraceBytes, String matsTraceMeta) {
+        public JmsMatsBrokerMessageRepresentationImpl(Message jmsMessage, String messageSystemId, long timestamp,
+                String traceId, String messageType, String fromStageId, String initializingApp, String initiatorId,
+                String toStageId, boolean persistent, boolean interactive, long expirationTimestamp,
+                byte[] matsTraceBytes, String matsTraceMeta) {
+            _jmsMessage = jmsMessage;
+
             _messageSystemId = messageSystemId;
             _timestamp = timestamp;
             _traceId = traceId;
@@ -206,6 +213,9 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             _toStageId = toStageId;
             _persistent = persistent;
             _interactive = interactive;
+            _expirationTimestamp = expirationTimestamp;
+
+            // These are nullable
             _matsTraceBytes = matsTraceBytes;
             _matsTraceMeta = matsTraceMeta;
         }
@@ -261,6 +271,11 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         }
 
         @Override
+        public long getExpirationTimestamp() {
+            return _expirationTimestamp;
+        }
+
+        @Override
         public Optional<byte[]> getMatsTraceBytes() {
             return Optional.ofNullable(_matsTraceBytes);
         }
@@ -268,6 +283,11 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         @Override
         public Optional<String> getMatsTraceMeta() {
             return Optional.ofNullable(_matsTraceMeta);
+        }
+
+        @Override
+        public String toString() {
+            return this.getClass().getSimpleName() + "{JMS Message: " + _jmsMessage + "}";
         }
     }
 

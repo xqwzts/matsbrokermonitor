@@ -5,7 +5,12 @@ import java.io.PrintWriter;
 import java.net.URL;
 import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import javax.jms.ConnectionFactory;
 import javax.servlet.ServletContext;
@@ -17,9 +22,15 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
-import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AllowAllAccessControl;
 import org.apache.activemq.ActiveMQConnectionFactory;
+import org.apache.activemq.ActiveMQPrefetchPolicy;
+import org.apache.activemq.RedeliveryPolicy;
+import org.apache.activemq.broker.BrokerPlugin;
+import org.apache.activemq.broker.BrokerService;
+import org.apache.activemq.broker.region.policy.IndividualDeadLetterStrategy;
+import org.apache.activemq.broker.region.policy.PolicyEntry;
+import org.apache.activemq.broker.region.policy.PolicyMap;
+import org.apache.activemq.plugin.StatisticsBroker;
 import org.eclipse.jetty.annotations.AnnotationConfiguration;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.StatisticsHandler;
@@ -39,14 +50,22 @@ import io.mats3.MatsInitiator.KeepTrace;
 import io.mats3.api.intercept.MatsInterceptableMatsFactory;
 import io.mats3.impl.jms.JmsMatsFactory;
 import io.mats3.impl.jms.JmsMatsJmsSessionHandler_Pooling;
+import io.mats3.impl.jms.JmsMatsJmsSessionHandler_Pooling.PoolingKeyInitiator;
+import io.mats3.impl.jms.JmsMatsJmsSessionHandler_Pooling.PoolingKeyStageProcessor;
+import io.mats3.localinspect.LocalHtmlInspectForMatsFactory;
+import io.mats3.localinspect.LocalStatsMatsInterceptor;
 import io.mats3.matsbrokermonitor.activemq.ActiveMqMatsBrokerMonitor;
+import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
+import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AllowAllAccessControl;
 import io.mats3.matsbrokermonitor.htmlgui.SetupTestMatsEndpoints.DataTO;
 import io.mats3.matsbrokermonitor.htmlgui.SetupTestMatsEndpoints.StateTO;
 import io.mats3.matsbrokermonitor.jms.JmsMatsBrokerBrowseAndActions;
 import io.mats3.serial.MatsSerializer;
 import io.mats3.serial.json.MatsSerializerJson;
 import io.mats3.test.MatsTestHelp;
+import io.mats3.util.MatsFuturizer;
+import io.mats3.util.MatsFuturizer.Reply;
 
 /**
  * @author Endre Stølsvik 2021-12-31 01:50 - http://stolsvik.com/, endre@stolsvik.com
@@ -80,12 +99,14 @@ public class MatsBrokerMonitor_TestJettyServer {
             // Create the MatsFactory
             _matsFactory = JmsMatsFactory.createMatsFactory_JmsOnlyTransactions(
                     MatsBrokerMonitor_TestJettyServer.class.getSimpleName(), "*testing*",
-                    JmsMatsJmsSessionHandler_Pooling.create(connFactory),
+                    JmsMatsJmsSessionHandler_Pooling.create(connFactory, PoolingKeyInitiator.INITIATOR,
+                            PoolingKeyStageProcessor.STAGE),
                     matsSerializer);
             // Configure the MatsFactory for testing (remember, we're running two instances in same JVM)
             // .. Concurrency of only 2
             FactoryConfig factoryConfig = _matsFactory.getFactoryConfig();
-            factoryConfig.setConcurrency(2);
+            _matsFactory.holdEndpointsUntilFactoryIsStarted();
+            factoryConfig.setConcurrency(SetupTestMatsEndpoints.BASE_CONCURRENCY);
             // .. Use port number of current server as postfix for name of MatsFactory, and of nodename
             Integer portNumber = (Integer) sc.getAttribute(CONTEXT_ATTRIBUTE_PORTNUMBER);
             factoryConfig.setName(getClass().getSimpleName() + "_" + portNumber);
@@ -94,10 +115,23 @@ public class MatsBrokerMonitor_TestJettyServer {
             // Put it in ServletContext, for servlet to get
             sc.setAttribute(JmsMatsFactory.class.getName(), _matsFactory);
 
+            // Install the local stats keeper interceptor
+            LocalStatsMatsInterceptor.install(_matsFactory);
+
+            // Make Futurizer:
+            MatsFuturizer matsFuturizer = MatsFuturizer.createMatsFuturizer(_matsFactory);
+            sc.setAttribute(MatsFuturizer.class.getName(), matsFuturizer);
+
             // Setup test endpoints
             SetupTestMatsEndpoints.setupMatsTestEndpoints(SERVICE_1, _matsFactory);
             SetupTestMatsEndpoints.setupMatsTestEndpoints(SERVICE_2, _matsFactory);
             SetupTestMatsEndpoints.setupMatsTestEndpoints(SERVICE_3, _matsFactory);
+
+            _matsFactory.start();
+
+            // :: Create the "local inspect"
+            LocalHtmlInspectForMatsFactory inspect = LocalHtmlInspectForMatsFactory.create(_matsFactory);
+            sc.setAttribute(LocalHtmlInspectForMatsFactory.class.getName(), inspect);
 
             // :: Create the MatsBrokerMonitor #1
             MatsBrokerMonitor matsBrokerMonitor1 = ActiveMqMatsBrokerMonitor.create(connFactory, "endre:");
@@ -170,30 +204,89 @@ public class MatsBrokerMonitor_TestJettyServer {
     }
 
     /**
-     * Send Mats request.
+     * Send Mats request - notice the "count" URL parameter.
      */
     @WebServlet("/sendRequest")
     public static class SendRequestServlet extends HttpServlet {
         @Override
         protected void doGet(HttpServletRequest req, HttpServletResponse res) throws IOException {
             res.setContentType("text/plain; charset=utf-8");
-            log.info("Sending request ..");
-            res.getWriter().println("Sending request ..");
-            MatsFactory matsFactory = (MatsFactory) req.getServletContext().getAttribute(JmsMatsFactory.class
-                    .getName());
+            ServletContext servletContext = req.getServletContext();
+            MatsFuturizer matsFuturizer = (MatsFuturizer) servletContext.getAttribute(MatsFuturizer.class.getName());
+            MatsFactory matsFactory = (MatsFactory) servletContext.getAttribute(JmsMatsFactory.class.getName());
 
+            PrintWriter out = res.getWriter();
+
+            sendAFuturize(out, matsFuturizer, false);
+            sendAFuturize(out, matsFuturizer, true);
+
+            int count = 1;
+            String countS = req.getParameter("count");
+            if (countS != null) {
+                count = Integer.parseInt(countS);
+            }
+            int countF = count;
+
+            log.info("Sending [" + count + "] requests ..");
+            out.println("Sending [" + count + "] requests ..");
+
+            long nanosStart_sendMessages = System.nanoTime();
             StateTO sto = new StateTO(420, 420.024);
             DataTO dto = new DataTO(42, "TheAnswer");
             matsFactory.getDefaultInitiator().initiateUnchecked(
                     (msg) -> {
-                        msg.traceId(MatsTestHelp.traceId())
-                                .keepTrace(KeepTrace.FULL)
-                                .from("/sendRequestInitiated")
-                                .to(SERVICE_1 + SetupTestMatsEndpoints.SERVICE_MAIN)
-                                .replyTo(SetupTestMatsEndpoints.TERMINATOR, sto)
-                                .request(dto);
+                        for (int i = 0; i < countF; i++) {
+                            int finalI = i;
+                            msg.traceId(MatsTestHelp.traceId() + "_#" + finalI)
+                                    .keepTrace(KeepTrace.FULL)
+                                    .from("/sendRequestInitiated")
+                                    .to(SERVICE_1 + SetupTestMatsEndpoints.SERVICE_MAIN)
+                                    .nonPersistent()
+                                    //.replyTo(SetupTestMatsEndpoints.TERMINATOR, sto)
+                                    .send(dto, new StateTO(1, 2));
+                        }
                     });
-            res.getWriter().println(".. Request sent.");
+            double msTaken_sendMessages = (System.nanoTime() - nanosStart_sendMessages) / 1_000_000d;
+            out.println(".. [" + count + "] requests sent, took [" + msTaken_sendMessages + "] ms.");
+            out.println();
+
+            // :: Chill till this has really gotten going.
+            try {
+                Thread.sleep(500);
+            }
+            catch (InterruptedException e) {
+                throw new IOException("Huh?", e);
+            }
+
+            sendAFuturize(out, matsFuturizer, true);
+            sendAFuturize(out, matsFuturizer, false);
+        }
+
+        private void sendAFuturize(PrintWriter out, MatsFuturizer matsFuturizer, boolean interactive)
+                throws IOException {
+            // :: Do an interactive run, which should "jump the line" throughout the system:
+            out.println("Doing a MatsFuturizer." + (interactive ? "interactive" : "NON-interactive") + ".");
+            long nanosStart_futurize = System.nanoTime();
+            CompletableFuture<Reply<DataTO>> futurized;
+            futurized = matsFuturizer.futurize("TraceId_" + Math.random(),
+                    "/sendRequest_futurized", SERVICE_1 + SetupTestMatsEndpoints.SERVICE_MAIN, 2, TimeUnit.MINUTES,
+                    DataTO.class, new DataTO(5, "fem"), msg -> {
+                        if (interactive) {
+                            msg.interactive();
+                        }
+                    });
+            double msTaken_futurize = (System.nanoTime() - nanosStart_futurize) / 1_000_000d;
+            out.println(".. matsFuturizer." + (interactive ? "interactive" : "NON-interactive")
+                    + " took [" + msTaken_futurize + "] ms.");
+            try {
+                Reply<DataTO> dataTOReply = futurized.get(50, TimeUnit.SECONDS);
+            }
+            catch (InterruptedException | ExecutionException | TimeoutException e) {
+                throw new IOException("WTF?", e);
+            }
+            double msTaken_futurizedReturn = (System.nanoTime() - nanosStart_futurize) / 1_000_000d;
+            out.println(".. futurized.get() took [" + msTaken_futurizedReturn + "] ms.");
+            out.println();
         }
     }
 
@@ -205,8 +298,12 @@ public class MatsBrokerMonitor_TestJettyServer {
         @Override
         protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
             resp.setContentType("text/html; charset=utf-8");
-            MatsBrokerMonitorHtmlGui interface1 = (MatsBrokerMonitorHtmlGui) req.getServletContext()
+            MatsBrokerMonitorHtmlGui brokerMonitorHtmlGui = (MatsBrokerMonitorHtmlGui) req.getServletContext()
                     .getAttribute("matsBrokerMonitorHtmlGui1");
+
+            // :: Localinspect
+            LocalHtmlInspectForMatsFactory localInspect = (LocalHtmlInspectForMatsFactory) req.getServletContext()
+                    .getAttribute(LocalHtmlInspectForMatsFactory.class.getName());
 
             boolean includeBootstrap3 = req.getParameter("includeBootstrap3") != null;
             boolean includeBootstrap4 = req.getParameter("includeBootstrap4") != null;
@@ -250,10 +347,12 @@ public class MatsBrokerMonitor_TestJettyServer {
             // much "accidental difference" due to the Bootstrap's setting of margin=0.
             out.println("  <body style=\"margin: 0;\">");
             out.println("    <style>");
-            interface1.getStyleSheet(out); // Include just once, use the first.
+            brokerMonitorHtmlGui.getStyleSheet(out); // Include just once, use the first.
+            localInspect.getStyleSheet(out); // Include just once, use the first.
             out.println("    </style>");
             out.println("    <script>");
-            interface1.getJavaScript(out); // Include just once, use the first.
+            brokerMonitorHtmlGui.getJavaScript(out); // Include just once, use the first.
+            localInspect.getJavaScript(out);
             out.println("    </script>");
             out.println(" <a href=\"sendRequest\">Send request</a> - to initialize Initiator"
                     + " and get some traffic.<br /><br />");
@@ -265,10 +364,14 @@ public class MatsBrokerMonitor_TestJettyServer {
             }
             out.println("<h1>MatsBrokerMonitor HTML embedded GUI</h1>");
             Map<String, String[]> parameterMap = req.getParameterMap();
-            interface1.main(out, parameterMap, new AllowAllAccessControl());
+            brokerMonitorHtmlGui.main(out, parameterMap, new AllowAllAccessControl());
             if (includeBootstrap3) {
                 out.write("</div>\n");
             }
+
+            // Localinspect
+            out.write("<h1>LocalHtmlInspectForMatsFactory</h1>\n");
+            localInspect.createFactoryReport(out, true, true, true);
 
             out.println("  </body>");
             out.println("</html>");
@@ -353,11 +456,34 @@ public class MatsBrokerMonitor_TestJettyServer {
         // Turn off LogBack's absurd SCI
         System.setProperty(CoreConstants.DISABLE_SERVLET_CONTAINER_INITIALIZER_KEY, "true");
 
-        // Create common AMQ
-        // MatsTestBroker matsTestBroker = MatsTestBroker.createUniqueInVmActiveMq();
-        // ConnectionFactory jmsConnectionFactory = matsTestBroker.getConnectionFactory();
+        // :: Get ConnectionFactory
+        ActiveMQConnectionFactory jmsConnectionFactory;
+        if (false) {
+            BrokerService inVmActiveMqBroker = createInVmActiveMqBroker();
 
-        ActiveMQConnectionFactory jmsConnectionFactory = new ActiveMQConnectionFactory();
+            jmsConnectionFactory = new ActiveMQConnectionFactory("vm://" + inVmActiveMqBroker.getBrokerName()
+                    + "?create=false");
+        }
+        else {
+            // Using deafaults
+            jmsConnectionFactory = new ActiveMQConnectionFactory();
+        }
+
+        /*
+         * Set redelivery policies for testing.
+         */
+        RedeliveryPolicy redeliveryPolicy = jmsConnectionFactory.getRedeliveryPolicy();
+        redeliveryPolicy.setMaximumRedeliveries(1);
+        redeliveryPolicy.setInitialRedeliveryDelay(100);
+        redeliveryPolicy.setUseExponentialBackOff(false);
+        /*
+         * The queue prefetch is default 1000, which is very much when used as Mats with its transactional logic of
+         * "consume a message, produce a message, commit". Lowering this considerably to instead focus on good
+         * distribution, and if one consumer by any chance gets hung, it won't allocate so many of the messages
+         * "into a void".
+         */
+        ActiveMQPrefetchPolicy prefetchPolicy = jmsConnectionFactory.getPrefetchPolicy();
+        prefetchPolicy.setQueuePrefetch(25);
 
         Server server = createServer(jmsConnectionFactory, 8080);
         try {
@@ -369,4 +495,66 @@ public class MatsBrokerMonitor_TestJettyServer {
         }
         log.info("MAIN EXITING!!");
     }
+
+    protected static BrokerService createInVmActiveMqBroker() {
+        String ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        StringBuilder brokername = new StringBuilder(10);
+        brokername.append("MatsTestActiveMQ_");
+        for (int i = 0; i < 10; i++)
+            brokername.append(ALPHABET.charAt(ThreadLocalRandom.current().nextInt(ALPHABET.length())));
+
+        log.info("Setting up in-vm ActiveMQ BrokerService '" + brokername + "'.");
+        BrokerService brokerService = new BrokerService();
+        brokerService.setBrokerName(brokername.toString());
+        // :: Disable a bit of stuff for testing:
+        // No need for JMX registry; We won't control nor monitor it over JMX in tests
+        brokerService.setUseJmx(false);
+        // No need for persistence; No need for persistence across reboots, and don't want KahaDB dirs and files.
+        brokerService.setPersistent(false);
+        // No need for Advisory Messages; We won't be needing those events in tests.
+        brokerService.setAdvisorySupport(false);
+        // No need for shutdown hook; We'll shut it down ourselves in the tests.
+        brokerService.setUseShutdownHook(false);
+
+        // :: Add features that we would want in prod
+        // Add the statistics broker, just since that is what we want people to do in production.
+        brokerService.setPlugins(new BrokerPlugin[] { StatisticsBroker::new });
+
+        // :: Set Individual DLQ - which you most definitely should do in production.
+        // Hear, hear: http://activemq.2283324.n4.nabble.com/PolicyMap-api-is-really-bad-td4284307.html
+        // Create the individual DLQ policy, targeting all queues.
+        IndividualDeadLetterStrategy individualDeadLetterStrategy = new IndividualDeadLetterStrategy();
+        individualDeadLetterStrategy.setQueuePrefix("DLQ.");
+        // Throw expired messages out the window
+        individualDeadLetterStrategy.setProcessExpired(false);
+        // Also DLQ non-persistent messages
+        individualDeadLetterStrategy.setProcessNonPersistent(true);
+
+        PolicyEntry policyEntry = new PolicyEntry();
+        policyEntry.setQueue(">"); // all queues
+        policyEntry.setDeadLetterStrategy(individualDeadLetterStrategy);
+
+        // Optimized dispatch.. ?? "Don’t use a separate thread for dispatching from a Queue."
+        // .. didn't really see any result, so leave at default.
+        // policyEntry.setOptimizedDispatch(true);
+        // We do use prioritization, and this should ensure that priority information is persisted
+        // Store JavaDoc: "A hint to the store to try recover messages according to priority"
+        policyEntry.setPrioritizedMessages(true);
+
+        // .. Create the PolicyMap containing this DLQ policy.
+        PolicyMap policyMap = new PolicyMap();
+        policyMap.put(policyEntry.getDestination(), policyEntry);
+        // .. set this individual DLQ policy on the broker.
+        brokerService.setDestinationPolicy(policyMap);
+
+        // Start the broker.
+        try {
+            brokerService.start();
+        }
+        catch (Exception e) {
+            throw new AssertionError("Could not start ActiveMQ BrokerService '" + brokername + "'.", e);
+        }
+        return brokerService;
+    }
+
 }

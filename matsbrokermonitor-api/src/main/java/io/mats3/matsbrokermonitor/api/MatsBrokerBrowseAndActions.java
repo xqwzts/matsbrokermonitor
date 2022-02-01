@@ -83,6 +83,11 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
         boolean isInteractive();
 
         /**
+         * @return the timestamp (millis-from-epoch) when the message will expire, or <code>0</code> if never.
+         */
+        long getExpirationTimestamp();
+
+        /**
          * @return the serialized-to-bytes MatsTrace, if present.
          */
         Optional<byte[]> getMatsTraceBytes();
