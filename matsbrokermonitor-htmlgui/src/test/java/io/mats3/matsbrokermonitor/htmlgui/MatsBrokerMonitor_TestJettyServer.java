@@ -310,6 +310,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             boolean includeBootstrap5 = req.getParameter("includeBootstrap5") != null;
 
             PrintWriter out = resp.getWriter();
+            out.println("<!DOCTYPE html>");
             out.println("<html>");
             out.println("  <head>");
             if (includeBootstrap3) {

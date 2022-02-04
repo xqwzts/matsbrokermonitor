@@ -38,11 +38,13 @@
     margin: 0em 0em 0.5em 0em;
 }
 
+/* ============ */
+/* PAGE: Broker */
+/* ============ */
+
+
 .matsbm_integer {
     color: #b02a37;
-}
-
-.matsbm_endpoint_id {
 }
 
 .matsbm_age {
@@ -83,7 +85,7 @@
     text-decoration: none;
     background-color: initial;
     background-image: linear-gradient(#00D775, #00BD68);
-    box-shadow: rgba(0, 0, 0, .3) 0 5px 15px;
+  /*  box-shadow: rgba(0, 0, 0, .3) 0 5px 15px; */
     border-radius: 6px;
     box-shadow: rgba(0, 0, 0, 0.1) 0 2px 4px;
     color: #FFFFFF;
@@ -131,6 +133,8 @@
     margin: 0em 0em 0em 0.5em;
 }
 
+/* boxes */
+
 .matsbm_broker, .matsbm_endpoint_group {
     border-radius: 3px;
     box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
@@ -158,122 +162,204 @@
     padding: 0.2em 0.2em 0.2em 0.2em;
 }
 
-.matsbm_browse_messages {
+/* ===================== */
+/* PAGE: Browse queue */
+/* ===================== */
+
+/* TABLE: Browse queue */
+
+.matsbm_table_browse_queue {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.9em;
+    /*font-size: 0.9em;*/
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
 }
 
-.matsbm_browse_messages thead th {
+.matsbm_table_browse_queue thead th {
     position: sticky;
     top: 0;
     background-color: #009879;
     color: #ffffff;
 }
 
-.matsbm_browse_messages th, .matsbm_browse_messages td {
+.matsbm_table_browse_queue th, .matsbm_table_browse_queue td {
     padding: 0.5em 0.5em 0.5em 0.5em;
 }
 
-.matsbm_browse_messages tbody tr {
+.matsbm_table_browse_queue tbody tr {
     border-bottom: thin solid #dddddd;
 }
 
-.matsbm_browse_messages tbody tr:nth-of-type(even) {
+.matsbm_table_browse_queue tbody tr:nth-of-type(even) {
     background-color: #f3f3f3;
 }
 
-.matsbm_browse_messages tbody tr:hover {
+.matsbm_table_browse_queue tbody tr:hover {
     background-color: #ffff99;
 }
 
-.matsbm_browse_messages tbody tr:last-of-type {
+.matsbm_table_browse_queue tbody tr:last-of-type {
     border-bottom: thick solid #009879;
 }
 
-.matsbm_flow_and_message {
+/* ===================== */
+/* PAGE: Examine Message */
+/* ===================== */
+
+/* TABLE: Two columns: Flow and Message properties */
+
+.matsbm_table_flow_and_message {
     border-collapse: collapse;
-    font-size: 0.9em;
+    /*font-size: 0.9em;*/
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
 }
 
-.matsbm_flow_and_message td {
+.matsbm_table_flow_and_message td {
     vertical-align: top;
     padding: 1em;
 }
 
-.matsbm_flow_and_message tbody tr {
+.matsbm_table_flow_and_message tbody tr {
     border-bottom: thin solid #dddddd;
 }
 
-.matsbm_message_props {
+/* TABLE: Flow and Message properties */
+
+.matsbm_table_message_props {
     border-collapse: collapse;
-    font-size: 0.9em;
+    /*font-size: 0.9em;*/
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
 }
 
-.matsbm_message_props thead th {
+.matsbm_table_message_props thead th {
     position: sticky;
     top: 0;
     background-color: #009879;
     color: #ffffff;
 }
 
-.matsbm_message_props th, .matsbm_message_props td {
+.matsbm_table_message_props th, .matsbm_table_message_props td {
     padding: 0.5em 0.5em 0.5em 0.5em;
 }
 
-.matsbm_message_props tbody tr {
+.matsbm_table_message_props tbody tr {
     border-bottom: thin solid #dddddd;
 }
 
-.matsbm_message_props tbody tr:nth-of-type(even) {
+.matsbm_table_message_props tbody tr:nth-of-type(even) {
     background-color: #f3f3f3;
 }
 
-.matsbm_message_props tbody tr:hover {
+.matsbm_table_message_props tbody tr:hover {
     background-color: #ffff99;
 }
 
-.matsbm_message_props tbody tr:last-of-type {
+.matsbm_table_message_props tbody tr:last-of-type {
     border-bottom: thick solid #009879;
 }
 
-.matsbm_call_flow {
+/* TABLE: Mats Call Flow */
+
+.matsbm_table_call_flow {
     border-collapse: collapse;
-    font-size: 0.9em;
+    /*font-size: 0.9em;*/
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
 }
 
-.matsbm_call_flow thead th {
+.matsbm_table_call_flow thead th {
     position: sticky;
     top: 0;
     background-color: #009879;
     color: #ffffff;
 }
 
-.matsbm_call_flow th, .matsbm_call_flow td {
+.matsbm_table_call_flow th, .matsbm_table_call_flow td {
     padding: 0.5em 0.5em 0.5em 0.5em;
 }
 
-.matsbm_call_flow tbody tr {
+.matsbm_table_call_flow tbody tr {
     border-bottom: thin solid #dddddd;
 }
 
-.matsbm_call_flow tbody tr:nth-of-type(even) {
+.matsbm_table_call_flow tbody tr:nth-of-type(even) {
     background-color: #f3f3f3;
 }
 
-.matsbm_call_flow tbody tr:hover {
+.matsbm_table_call_flow tbody tr:hover {
     background-color: #ffff99;
 }
 
-.matsbm_call_flow tbody tr:last-of-type {
+.matsbm_table_call_flow tbody tr:last-of-type {
     border-bottom: thick solid #009879;
 }
 
 /* Modal attempts */
+
+.matsbm_box_call_and_state_modal {
+    border-radius: 3px;
+    box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
+    border: thin solid #a0a0a0;
+    /*margin: 0.2em 0.2em 0.2em 0.5em;*/
+    padding: 0.5em 1em 0.7em 0.5em;
+    background-color: white;
+
+    /* modal */
+    visibility: hidden;
+    position: fixed;
+    top: 200px;
+    left: 700px;
+    /*top: 50%;*/
+    /*left: 70%;*/
+    /*transform: translate(-50%, -50%);*/
+}
+
+.matsbm_box_call_and_state_modal_visible {
+    visibility: visible;
+}
+/* the JSON box for DTO and STO */
+.matsbm_box_call_or_state {
+    background: #f0f0f0;
+    display: inline-block;
+    border-radius: 3px;
+    box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
+    border: thin solid #a0a0a0;
+    margin: 0.2em 0 0.2em 0.5em;
+    padding: 0.2em 0.2em 0.2em 0.2em;
+    max-width: 1000px;
+    /* max-height: 50px; */
+}
+
+/* the actual JSON, with scrollbars */
+.matsbm_box_call_or_state_div {
+    background: white;
+    overflow: auto;
+    max-height: 500px;
+    white-space: pre;
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;;
+    font-size: 0.9em;
+}
+
+.matsmb_callmodalunderlay {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    transform: scaleX(1.1) scaleY(1.1);
+    transition: visibility 0s linear 0.25s, opacity 0.25s 0s, transform 0.25s;
+}
+
+.matsmb_callmodalunderlay_visible {
+    opacity: 1;
+    visibility: visible;
+    transform: scaleX(1.0) scaleY(1.0);
+    transition: visibility 0s linear 0s, opacity 0.25s 0s, transform 0.25s;
+}
+
+/* ==================== */
 
 .modal {
     position: fixed;
