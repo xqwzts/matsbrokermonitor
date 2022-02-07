@@ -38,6 +38,17 @@
     margin: 0em 0em 0.5em 0em;
 }
 
+/* common boxes */
+
+.matsbm_broker, .matsbm_endpoint_group, .matsbm_browse_queue, .matsbm_examine_message {
+    border-radius: 3px;
+    box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
+    border: thin solid #a0a0a0;
+    margin: 0.5em 0.5em 0.7em 0.5em;
+    padding: 0.1em 0.5em 0.5em 0.5em;
+}
+
+
 /* ============ */
 /* PAGE: Broker */
 /* ============ */
@@ -135,14 +146,6 @@
 
 /* boxes */
 
-.matsbm_broker, .matsbm_endpoint_group {
-    border-radius: 3px;
-    box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
-    border: thin solid #a0a0a0;
-    margin: 0.5em 0.5em 0.7em 0.5em;
-    padding: 0.1em 0.5em 0.5em 0.5em;
-}
-
 .matsbm_broker {
     background: #f0f0f0;
 }
@@ -165,6 +168,12 @@
 /* ===================== */
 /* PAGE: Browse queue */
 /* ===================== */
+
+/* boxes */
+
+.matsbm_browse_queue {
+    background: #f0f0f0;
+}
 
 /* TABLE: Browse queue */
 
@@ -205,6 +214,12 @@
 /* ===================== */
 /* PAGE: Examine Message */
 /* ===================== */
+
+/* boxes */
+
+.matsbm_examine_message {
+    background: #f0f0f0;
+}
 
 /* TABLE: Two columns: Flow and Message properties */
 
@@ -258,42 +273,51 @@
     border-bottom: thick solid #009879;
 }
 
-/* TABLE: Mats Call Flow */
+/* TABLE: MatsTrace */
 
-.matsbm_table_call_flow {
+.matsbm_table_matstrace {
     border-collapse: collapse;
     /*font-size: 0.9em;*/
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
 }
 
-.matsbm_table_call_flow thead th {
+.matsbm_table_matstrace thead th {
     position: sticky;
     top: 0;
     background-color: #009879;
     color: #ffffff;
 }
 
-.matsbm_table_call_flow th, .matsbm_table_call_flow td {
+.matsbm_table_matstrace th, .matsbm_table_matstrace td {
     padding: 0.5em 0.5em 0.5em 0.5em;
 }
 
-.matsbm_table_call_flow tbody tr {
+.matsbm_table_matstrace tbody tr {
     border-bottom: thin solid #dddddd;
 }
 
-.matsbm_table_call_flow tbody tr:nth-of-type(even) {
+.matsbm_table_matstrace tbody tr:nth-of-type(even) {
     background-color: #f3f3f3;
 }
 
-.matsbm_table_call_flow tbody tr:hover {
+.matsbm_table_matstrace tbody tr:hover {
     background-color: #ffff99;
 }
 
-.matsbm_table_call_flow tbody tr:last-of-type {
+.matsbm_table_matstrace tbody tr:last-of-type {
     border-bottom: thick solid #009879;
 }
 
-/* Modal attempts */
+.matsbm_from_info {
+    vertical-align: top;
+    font-style: italic;
+}
+
+/* Call modal */
+
+.matsmb_callrow_active {
+    background-color: #00D775 !important;
+}
 
 .matsbm_box_call_and_state_modal {
     border-radius: 3px;
@@ -308,6 +332,7 @@
     position: fixed;
     top: 200px;
     left: 700px;
+    /*transition: visibility 0s linear 0.25s, opacity 0.25s 0s, transform 0.25s;*/
     /*top: 50%;*/
     /*left: 70%;*/
     /*transform: translate(-50%, -50%);*/
@@ -315,6 +340,7 @@
 
 .matsbm_box_call_and_state_modal_visible {
     visibility: visible;
+    /*transition: visibility 0s linear 0s, opacity 0.25s 0s, transform 0.25s;*/
 }
 /* the JSON box for DTO and STO */
 .matsbm_box_call_or_state {
