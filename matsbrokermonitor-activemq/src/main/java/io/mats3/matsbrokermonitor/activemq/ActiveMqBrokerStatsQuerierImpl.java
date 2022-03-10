@@ -367,7 +367,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     }
 
     private void set_includeFirstMessageTimestamp(Message msg) throws JMSException {
-        msg.setBooleanProperty(QUERY_REQUEST_DESTINATION_INCLUDE_HEAD_MESSAGE_BROKER_IN_TIME, true);
+        msg.setBooleanProperty(QUERY_REQUEST_DESTINATION_INCLUDE_FIRST_MESSAGE_TIMESTAMP, true);
     }
 
     private void receiveBrokerStatsReplyMessages() {
@@ -543,7 +543,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         mapMessageToCommonStatsDto(mm, dto);
 
         dto.destinationName = (String) mm.getObject("destinationName");
-        dto.headMessageBrokerInTime = getTimestampFromMapMessage(mm, "headMessageBrokerInTime");
+        dto.headMessageBrokerInTime = getTimestampFromMapMessage(mm, "firstMessageTimestamp");
 
         return dto;
     }

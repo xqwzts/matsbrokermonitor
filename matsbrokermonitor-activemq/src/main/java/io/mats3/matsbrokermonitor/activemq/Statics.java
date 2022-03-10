@@ -33,9 +33,8 @@ public interface Statics {
      * queue, you'll get answers for queues, and sent on topic gives answers for topics).
      */
     String QUERY_REQUEST_DESTINATION_PREFIX = "ActiveMQ.Statistics.Destination";
-    String QUERY_REQUEST_DENOTE_END_LIST = QUERY_REQUEST_DESTINATION_PREFIX + ".List.End.With.Null";
-    String QUERY_REQUEST_DESTINATION_INCLUDE_HEAD_MESSAGE_BROKER_IN_TIME = QUERY_REQUEST_DESTINATION_PREFIX
-            + ".Include.Head.Message.BrokerInTime";
+    String QUERY_REQUEST_DENOTE_END_LIST = "ActiveMQ.Statistics.Destination.List.End.With.Null";
+    String QUERY_REQUEST_DESTINATION_INCLUDE_FIRST_MESSAGE_TIMESTAMP = "ActiveMQ.Statistics.Destination.Include.First.Message.Timestamp";
 
     String QUERY_REPLY_BROKER_TOPIC = "matsbrokermonitor.MatsBrokerMonitor.ActiveMQ.Broker";
     String QUERY_REPLY_DESTINATION_TOPIC = "matsbrokermonitor.MatsBrokerMonitor.ActiveMQ.Destinations";
