@@ -4,8 +4,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
@@ -23,10 +21,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.mats3.matsbrokermonitor.api.DestinationType;
@@ -356,8 +354,6 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             examimeMessage_currentCallMatsTrace(out, stringMatsTraceO.get());
         }
 
-
-
         // :: MATS TRACE!
 
         if (matsTrace == null) {
@@ -392,7 +388,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         out.append("</div>");
     }
 
-    private void examineMessage_FlowAndMessageProperties(Appendable out, MatsBrokerMessageRepresentation matsMsg,
+    private void examineMessage_FlowAndMessageProperties(Appendable out, MatsBrokerMessageRepresentation brokerMsg,
             MatsTrace<?> matsTrace,
             int matsTraceDecompressedLength) throws IOException {
         out.append("<table class='matsbm_table_flow_and_message'><tr>"); // start Flow/Message table
@@ -411,7 +407,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
 
         out.append("<tr>");
         out.append("<td>TraceId</td>");
-        out.append("<td>").append(matsMsg.getTraceId()).append("</td>");
+        out.append("<td>").append(brokerMsg.getTraceId()).append("</td>");
         out.append("</tr>\n");
 
         String initializingApp = "{no info present}";
@@ -422,9 +418,9 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         }
         // ?: Do we have InitializingApp from MsgSys?
         // TODO: Remove this "if" in 2023.
-        else if (matsMsg.getInitializingApp() != null) {
-            initializingApp = matsMsg.getInitializingApp();
-            initiatorId = matsMsg.getInitiatorId();
+        else if (brokerMsg.getInitializingApp() != null) {
+            initializingApp = brokerMsg.getInitializingApp();
+            initiatorId = brokerMsg.getInitiatorId();
         }
 
         out.append("<tr>");
@@ -442,8 +438,12 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
 
         if (matsTrace != null) {
             out.append("<tr>");
-            out.append("<td>Mats Flow Initialized Timestamp</td>");
-            out.append("<td>").append(formatTimestamp(matsTrace.getInitializedTimestamp())).append("</td>");
+            out.append("<td>Init debug info</td>");
+            String debugInfo = matsTrace.getDebugInfo();
+            if ((debugInfo == null) || (debugInfo.isEmpty())) {
+                debugInfo = "{none present}";
+            }
+            out.append("<td>").append(debugInfoToHtml(debugInfo)).append("</td>");
             out.append("</tr>\n");
         }
 
@@ -456,21 +456,17 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
 
         if (matsTrace != null) {
             out.append("<tr>");
-            out.append("<td>Parent Mats Message Id</td>");
-            out.append("<td>").append(matsTrace.getParentMatsMessageId() != null
-                    ? matsTrace.getParentMatsMessageId()
-                    : "<i>-no parent-</i>").append("</td>");
+            out.append("<td>Mats Flow Initialized Timestamp</td>");
+            out.append("<td>").append(formatTimestamp(matsTrace.getInitializedTimestamp())).append("</td>");
             out.append("</tr>\n");
         }
 
         if (matsTrace != null) {
             out.append("<tr>");
-            out.append("<td>Init debug info</td>");
-            String debugInfo = matsTrace.getDebugInfo();
-            if ((debugInfo == null) || (debugInfo.isEmpty())) {
-                debugInfo = "{none present}";
-            }
-            out.append("<td>").append(debugInfo.replace(";", "<br>\n")).append("</td>");
+            out.append("<td>Parent Mats Message Id</td>");
+            out.append("<td>").append(matsTrace.getParentMatsMessageId() != null
+                    ? matsTrace.getParentMatsMessageId()
+                    : "<i>-no parent-</i>").append("</td>");
             out.append("</tr>\n");
         }
 
@@ -485,12 +481,12 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
 
         out.append("<tr>");
         out.append("<td>&nbsp;&nbsp;Persistent</td>");
-        out.append("<td>").append(matsMsg.isPersistent() ? "Persistent" : "Non-Persistent").append("</td>");
+        out.append("<td>").append(brokerMsg.isPersistent() ? "Persistent" : "Non-Persistent").append("</td>");
         out.append("</tr>\n");
 
         out.append("<tr>");
         out.append("<td>&nbsp;&nbsp;Interactive</td>");
-        out.append("<td>").append(matsMsg.isInteractive() ? "Interactive" : "Non-Interactive").append("</td>");
+        out.append("<td>").append(brokerMsg.isInteractive() ? "Interactive" : "Non-Interactive").append("</td>");
         out.append("</tr>\n");
 
         if (matsTrace != null) {
@@ -526,6 +522,11 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         out.append("</thead>");
         out.append("<tbody>");
 
+        out.append("<tr>");
+        out.append("<td>Type</td>");
+        out.append("<td>").append(brokerMsg.getMessageType()).append("</td>");
+        out.append("</tr>\n");
+
         if (matsTrace != null) {
             out.append("<tr>");
             out.append("<td>From App @ Host</td>");
@@ -538,29 +539,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
 
         out.append("<tr>");
         out.append("<td>From</td>");
-        out.append("<td>").append(matsMsg.getFromStageId()).append("</td>");
-        out.append("</tr>\n");
-
-        out.append("<tr>");
-        out.append("<td>Type</td>");
-        out.append("<td>").append(matsMsg.getMessageType()).append("</td>");
-        out.append("</tr>\n");
-
-        out.append("<tr>");
-        out.append("<td>To (this)</td>");
-        out.append("<td>").append(matsMsg.getToStageId()).append("</td>");
-        out.append("</tr>\n");
-
-        if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>Mats Message Timestamp</td>");
-            out.append("<td>").append(formatTimestamp(matsTrace.getCurrentCall().getCalledTimestamp())).append("</td>");
-            out.append("</tr>\n");
-        }
-
-        out.append("<tr>");
-        out.append("<td>MsgSys Message Timestamp</td>");
-        out.append("<td>").append(formatTimestamp(matsMsg.getTimestamp())).append("</td>");
+        out.append("<td>").append(brokerMsg.getFromStageId()).append("</td>");
         out.append("</tr>\n");
 
         if (matsTrace != null) {
@@ -570,7 +549,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             if ((debugInfo == null) || (debugInfo.trim().isEmpty())) {
                 debugInfo = "{none present}";
             }
-            debugInfo = debugInfo.replace(";", "<br>\n").replace('<', '{').replace('>', '}');
+            debugInfo = debugInfoToHtml(debugInfo);
             out.append("<td>").append(debugInfo.replace(";", "<br>\n")).append("</td>");
             out.append("</tr>\n");
         }
@@ -582,9 +561,16 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             out.append("</tr>\n");
         }
 
+        if (matsTrace != null) {
+            out.append("<tr>");
+            out.append("<td>Mats Message Timestamp</td>");
+            out.append("<td>").append(formatTimestamp(matsTrace.getCurrentCall().getCalledTimestamp())).append("</td>");
+            out.append("</tr>\n");
+        }
+
         out.append("<tr>");
-        out.append("<td>MsgSys Message Id</td>");
-        out.append("<td>").append(matsMsg.getMessageSystemId()).append("</td>");
+        out.append("<td>To (this)</td>");
+        out.append("<td>").append(brokerMsg.getToStageId()).append("</td>");
         out.append("</tr>\n");
 
         if (matsTrace != null) {
@@ -599,19 +585,29 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         if (matsTrace != null) {
             out.append("<tr>");
             out.append("<td>MatsTrace Size</td>");
-            String size = matsMsg.getMatsTraceBytes().get().length == matsTraceDecompressedLength
+            String size = brokerMsg.getMatsTraceBytes().get().length == matsTraceDecompressedLength
                     ? matsTraceDecompressedLength + " bytes uncompressed"
-                    : matsMsg.getMatsTraceBytes().get().length + " bytes compressed, "
+                    : brokerMsg.getMatsTraceBytes().get().length + " bytes compressed, "
                             + matsTraceDecompressedLength + " bytes decompressed";
             out.append("<td>").append(size).append("</td>");
             out.append("</tr>\n");
         }
 
         out.append("<tr>");
-        out.append("<td>Expires</td>");
-        out.append("<td>").append(matsMsg.getExpirationTimestamp() == 0
+        out.append("<td>MsgSys Message Timestamp</td>");
+        out.append("<td>").append(formatTimestamp(brokerMsg.getTimestamp())).append("</td>");
+        out.append("</tr>\n");
+
+        out.append("<tr>");
+        out.append("<td>MsgSys Message Id</td>");
+        out.append("<td>").append(brokerMsg.getMessageSystemId()).append("</td>");
+        out.append("</tr>\n");
+
+        out.append("<tr>");
+        out.append("<td>MsgSys Expires</td>");
+        out.append("<td>").append(brokerMsg.getExpirationTimestamp() == 0
                 ? "Never expires"
-                : formatTimestamp(matsMsg.getExpirationTimestamp()))
+                : formatTimestamp(brokerMsg.getExpirationTimestamp()))
                 .append("</td>");
         out.append("</tr>");
 
@@ -789,16 +785,9 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         out.append("<td>#0</td>");
         out.append("<td>0 ms</td>");
         out.append("<td></td>");
-        out.append("<td>");
+        out.append("<td colspan=4>");
         out.append("INIT<br />");
         out.append(matsTrace.getInitiatorId());
-        out.append("</td><td>");
-        out.append(matsTrace.getInitializingAppName())
-                .append("; v.").append(matsTrace.getInitializingAppVersion());
-        out.append("</td><td>");
-        out.append(matsTrace.getInitializingHost());
-        out.append("</td><td>");
-        out.append(debugInfoToHtml(matsTrace.getDebugInfo()));
         out.append("</td>");
         out.append("</tr>\n");
 
@@ -812,6 +801,12 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
 
         // :: MatsTrace's Calls
 
+        int highestStackHeight = 0;
+        for (int i = 0; i < callFlow.size(); i++) {
+            Call<?> currentCall = callFlow.get(i);
+            highestStackHeight = Math.max(highestStackHeight, currentCall.getReplyStackHeight());
+        }
+
         long initializedTimestamp = matsTrace.getInitializedTimestamp();
         // NOTE: If we are KeepMatsTrace.MINIMAL, then there is only 1 entry here
         String prevIndent = "";
@@ -820,11 +815,66 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             Call<?> currentCall = callFlow.get(i);
             // If there is only one call, then it is either first, or MINIMAL and last.
             int currentCallNumber = callFlow.size() == 1 ? matsTrace.getCallNumber() : i + 1;
-            // Can we get a nextCall?
+            // Can we get a prevCall?
             Call<?> prevCall = (i == 0)
                     ? null
                     : callFlow.get(i - 1);
-            out.append("<tr id='matsbm_callrow_"+currentCallNumber+"'>");
+
+            StringBuilder indentBuf = new StringBuilder("&nbsp;&nbsp;");
+            int replyStackHeight = currentCall.getReplyStackHeight();
+            for (int x = 0; x < replyStackHeight; x++) {
+                // indentBuf.append("\u00A6&nbsp;&nbsp;");
+                indentBuf.append("\u00A6&nbsp;&nbsp;&nbsp;&nbsp;");
+                if (x != (replyStackHeight - 1)) {
+                    indentBuf.append("&nbsp;&nbsp;");
+                }
+            }
+
+            // "Processing" row
+            out.append("<tr>");
+            out.append("<td></td>");
+            out.append("<td></td>");
+            out.append("<td></td>");
+            String indent = indentBuf.toString();
+            out.append("<td>")
+                    .append(prevIndent + "&nbsp;<i>Processed&nbsp;on&nbsp;</i>");
+            prevIndent = indent;
+            if (prevCall != null) {
+                out.append(prevCall.getTo().getId());
+            }
+            else {
+                out.append("Initiation");
+            }
+            out.append("<br />\n");
+            out.append("</td>");
+            out.append("<td>@");
+            if (prevCall != null) {
+                out.append(currentCall.getCallingAppName())
+                        .append("; v.").append(currentCall.getCallingAppVersion());
+            }
+            else {
+                out.append(matsTrace.getInitializingAppName())
+                        .append("; v.").append(matsTrace.getInitializingAppVersion());
+            }
+            out.append("</td><td>@");
+            if (prevCall != null) {
+                out.append(currentCall.getCallingHost());
+            }
+            else {
+                out.append(matsTrace.getInitializingHost());
+            }
+            out.append("</td><td class='matsbm_from_info'>");
+            if (prevCall != null) {
+                out.append(debugInfoToHtml(currentCall.getDebugInfo()));
+            }
+            else {
+                out.append(debugInfoToHtml(matsTrace.getDebugInfo()));
+            }
+            out.append("</td>");
+            out.append("</tr>");
+
+            // "Call row"
+            out.append("<tr id='matsbm_callrow_" + currentCallNumber + "'>");
             out.append("<td>#");
             out.append(Integer.toString(currentCallNumber));
             out.append("</td>");
@@ -834,26 +884,8 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             long diffBetweenLast = currentCallTimestamp - previousCalledTimestamp;
             previousCalledTimestamp = currentCallTimestamp;
             out.append("<td>").append(Long.toString(diffBetweenLast)).append("&nbsp;ms</td>"); // Proc
-            int replyStackHeight = currentCall.getReplyStackHeight();
-            StringBuilder indentBuf = new StringBuilder("&nbsp;&nbsp;");
-            for (int x = 0; x < replyStackHeight; x++) {
-                // indentBuf.append("\u00A6&nbsp;&nbsp;");
-                indentBuf.append("\u00A6&nbsp;&nbsp;&nbsp;&nbsp;");
-                if (x != (replyStackHeight - 1)) {
-                    indentBuf.append("&nbsp;&nbsp;");
-                }
-            }
-            String indent = indentBuf.toString();
-            out.append("<td onclick='matsbm_callmodal(event)' data-callno="+currentCallNumber+">")
-                    .append(prevIndent + "&nbsp;<i>Call&nbsp;from&nbsp;");
-            prevIndent = indent;
-            if (prevCall != null) {
-                out.append(prevCall.getTo().getId());
-            }
-            else {
-                out.append("Initiation");
-            }
-            out.append("</i><br />\n");
+
+            out.append("<td onclick='matsbm_callmodal(event)' data-callno='" + currentCallNumber + "' colspan='4'>");
             String indentAndCallType;
             switch (currentCall.getCallType()) {
                 case REQUEST:
@@ -884,30 +916,22 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             out.append("<i>to:</i>&nbsp;").append(currentCall.getTo().getId());
             out.append("</td>");
 
-            out.append("<td class='matsbm_from_info'>@");
-            out.append(currentCall.getCallingAppName())
-                    .append("; v.").append(currentCall.getCallingAppVersion());
-            out.append("</td><td class='matsbm_from_info'>@");
-            out.append(currentCall.getCallingHost());
-            out.append("</td><td class='matsbm_from_info'>");
-            out.append(debugInfoToHtml(currentCall.getDebugInfo()));
-            out.append("</td>");
-
             out.append("</tr>");
         }
         out.append("</table>");
 
         // :: MODALS: Calls and optionally also state
 
-
-        out.append("<div id='matsmb_callmodalunderlay' class='matsmb_callmodalunderlay' onclick='matsmb_clearcallmodal(event)'>");
+        out.append(
+                "<div id='matsmb_callmodalunderlay' class='matsmb_callmodalunderlay' onclick='matsmb_clearcallmodal(event)'>");
 
         String previousTo = "Initiation";
         for (int i = 0; i < callFlow.size(); i++) {
             Call<?> currentCall = callFlow.get(i);
             // If there is only one call, then it is either first, or MINIMAL and last.
             int currentCallNumber = callFlow.size() == 1 ? matsTrace.getCallNumber() : i + 1;
-            out.append("<div class='matsbm_box_call_and_state_modal' id='matsbm_callmodal_"+currentCallNumber+"'>\n");
+            out.append("<div class='matsbm_box_call_and_state_modal' id='matsbm_callmodal_" + currentCallNumber
+                    + "'>\n");
             out.append("This is a message from <b>").append(previousTo)
                     .append("</b><br/>on application <b>").append(currentCall.getCallingAppName())
                     .append("; v.").append(currentCall.getCallingAppVersion())
@@ -939,16 +963,6 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         }
         out.append("</div>");
 
-        out.append(""
-                + "<button class='trigger'>Click here to trigger the modal!</button>\n"
-                + "    <div class='modal'>\n"
-                + "        <div class='modal-content'>\n"
-                + "            <span class='close-button'>&times;</span>\n"
-                + "            <h1>Hello, I am a modal!</h1>\n"
-                + "        </div>\n"
-                + "    </div>");
-
-
         // TEMP:
         out.append("<br /><br /><br /><br />");
         out.append("Temporary! MatsTrace.toString()");
@@ -967,7 +981,8 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
                 out.append("<div class='matsbm_box_call_or_state_div'>").append(jsonData).append("</div>");
             }
             catch (JsonProcessingException e) {
-                out.append("Couldn't parse incoming String as json (thus no pretty printing), so here it is unparsed.<br/>");
+                out.append(
+                        "Couldn't parse incoming String as json (thus no pretty printing), so here it is unparsed.<br/>");
                 out.append(stringData);
             }
         }
@@ -981,7 +996,8 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         if ((debugInfo == null) || (debugInfo.trim().isEmpty())) {
             debugInfo = "{none present}";
         }
-        debugInfo = debugInfo.replace(";", "<br>\n").replace("<", "&lt;").replace(">", "&gt;");
+        debugInfo = debugInfo.replace("<", "&lt;").replace(">", "&gt;")
+                .replace(";", "<br>\n");
         return "<code>" + debugInfo + "</code>";
     }
 
@@ -1008,32 +1024,12 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
     }
 
     private Optional<MatsTrace<String>> getStringMatsTrace(MatsTrace<?> matsTrace) throws IOException {
-        Type[] interfaces = matsTrace.getClass().getGenericInterfaces();
-        ParameterizedType matsTraceType = null;
-        for (Type anInterface : interfaces) {
-            if (anInterface instanceof ParameterizedType) {
-                ParameterizedType ap = (ParameterizedType) anInterface;
-                if (ap.getRawType().getTypeName().equals(MatsTrace.class.getName())) {
-                    matsTraceType = ap;
-                }
-            }
+        Object data = matsTrace.getCurrentCall().getData();
+        if (data instanceof String) {
+            MatsTrace<String> casted = (MatsTrace<String>) matsTrace;
+            return Optional.of(casted);
         }
-        // ?: Did we find the MatsTrace type?
-        if (null == matsTraceType) {
-            // -> No, so no can do.
-            return Optional.empty();
-        }
-
-        Type[] actualTypeArguments = matsTraceType.getActualTypeArguments();
-        boolean innerSerializeIsString = actualTypeArguments[0].getTypeName().equals(String.class.getName());
-        // ?: Do we have inner serialization as String?
-        if (!innerSerializeIsString) {
-            return Optional.empty();
-        }
-        // E-> Yes, the inner serialization is String - hopefully JSON!
-        @SuppressWarnings("unchecked")
-        MatsTrace<String> stringMatsTrace = (MatsTrace<String>) matsTrace;
-        return Optional.of(stringMatsTrace);
+        return Optional.empty();
     }
 
     protected void overview(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)

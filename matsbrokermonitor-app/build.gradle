@@ -19,6 +19,11 @@ dependencies {
     // We want the standard logging, which will be auto-installed by being on the classpath.
     testImplementation "io.mats3:mats-intercept-logging:$matsVersion"
 
+    // Spring
+    testImplementation "org.springframework:spring-test:$springVersion"
+    testImplementation "org.springframework:spring-context:$springVersion"
+//    testImplementation "org.springframework:spring-tx:$springVersion"
+
     // Need logging system in tests
     testRuntimeOnly "org.slf4j:log4j-over-slf4j:$slf4jVersion"
     testRuntimeOnly "ch.qos.logback:logback-classic:$logbackVersion"

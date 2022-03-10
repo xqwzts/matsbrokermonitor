@@ -64,6 +64,7 @@ import io.mats3.matsbrokermonitor.jms.JmsMatsBrokerBrowseAndActions;
 import io.mats3.serial.MatsSerializer;
 import io.mats3.serial.json.MatsSerializerJson;
 import io.mats3.test.MatsTestHelp;
+import io.mats3.test.broker.MatsTestBroker;
 import io.mats3.util.MatsFuturizer;
 import io.mats3.util.MatsFuturizer.Reply;
 
@@ -242,7 +243,7 @@ public class MatsBrokerMonitor_TestJettyServer {
                                     .from("/sendRequestInitiated")
                                     .to(SERVICE_1 + SetupTestMatsEndpoints.SERVICE_MAIN)
                                     .nonPersistent()
-                                    //.replyTo(SetupTestMatsEndpoints.TERMINATOR, sto)
+                                    // .replyTo(SetupTestMatsEndpoints.TERMINATOR, sto)
                                     .send(dto, new StateTO(1, 2));
                         }
                     });
@@ -458,33 +459,32 @@ public class MatsBrokerMonitor_TestJettyServer {
         System.setProperty(CoreConstants.DISABLE_SERVLET_CONTAINER_INITIALIZER_KEY, "true");
 
         // :: Get ConnectionFactory
-        ActiveMQConnectionFactory jmsConnectionFactory;
+        ConnectionFactory jmsConnectionFactory;
         if (false) {
-            BrokerService inVmActiveMqBroker = createInVmActiveMqBroker();
-
-            jmsConnectionFactory = new ActiveMQConnectionFactory("vm://" + inVmActiveMqBroker.getBrokerName()
-                    + "?create=false");
+            // BrokerService inVmActiveMqBroker = createInVmActiveMqBroker();
+            // jmsConnectionFactory = new ActiveMQConnectionFactory("vm://" + inVmActiveMqBroker.getBrokerName()
+            // + "?create=false");
+            MatsTestBroker matsTestBroker = MatsTestBroker.create();
+            jmsConnectionFactory = matsTestBroker.getConnectionFactory();
         }
         else {
             // Using deafaults
-            jmsConnectionFactory = new ActiveMQConnectionFactory();
+            ActiveMQConnectionFactory amqConnectionFactory = new ActiveMQConnectionFactory();
+
+            /*
+             * Set redelivery policies for testing.
+             */
+            RedeliveryPolicy redeliveryPolicy = amqConnectionFactory.getRedeliveryPolicy();
+            redeliveryPolicy.setMaximumRedeliveries(1);
+            redeliveryPolicy.setInitialRedeliveryDelay(100);
+
+            // Chill the prefetch.
+            ActiveMQPrefetchPolicy prefetchPolicy = amqConnectionFactory.getPrefetchPolicy();
+            prefetchPolicy.setQueuePrefetch(25);
+
+            jmsConnectionFactory = amqConnectionFactory;
         }
 
-        /*
-         * Set redelivery policies for testing.
-         */
-        RedeliveryPolicy redeliveryPolicy = jmsConnectionFactory.getRedeliveryPolicy();
-        redeliveryPolicy.setMaximumRedeliveries(1);
-        redeliveryPolicy.setInitialRedeliveryDelay(100);
-        redeliveryPolicy.setUseExponentialBackOff(false);
-        /*
-         * The queue prefetch is default 1000, which is very much when used as Mats with its transactional logic of
-         * "consume a message, produce a message, commit". Lowering this considerably to instead focus on good
-         * distribution, and if one consumer by any chance gets hung, it won't allocate so many of the messages
-         * "into a void".
-         */
-        ActiveMQPrefetchPolicy prefetchPolicy = jmsConnectionFactory.getPrefetchPolicy();
-        prefetchPolicy.setQueuePrefetch(25);
 
         Server server = createServer(jmsConnectionFactory, 8080);
         try {
@@ -496,66 +496,4 @@ public class MatsBrokerMonitor_TestJettyServer {
         }
         log.info("MAIN EXITING!!");
     }
-
-    protected static BrokerService createInVmActiveMqBroker() {
-        String ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        StringBuilder brokername = new StringBuilder(10);
-        brokername.append("MatsTestActiveMQ_");
-        for (int i = 0; i < 10; i++)
-            brokername.append(ALPHABET.charAt(ThreadLocalRandom.current().nextInt(ALPHABET.length())));
-
-        log.info("Setting up in-vm ActiveMQ BrokerService '" + brokername + "'.");
-        BrokerService brokerService = new BrokerService();
-        brokerService.setBrokerName(brokername.toString());
-        // :: Disable a bit of stuff for testing:
-        // No need for JMX registry; We won't control nor monitor it over JMX in tests
-        brokerService.setUseJmx(false);
-        // No need for persistence; No need for persistence across reboots, and don't want KahaDB dirs and files.
-        brokerService.setPersistent(false);
-        // No need for Advisory Messages; We won't be needing those events in tests.
-        brokerService.setAdvisorySupport(false);
-        // No need for shutdown hook; We'll shut it down ourselves in the tests.
-        brokerService.setUseShutdownHook(false);
-
-        // :: Add features that we would want in prod
-        // Add the statistics broker, just since that is what we want people to do in production.
-        brokerService.setPlugins(new BrokerPlugin[] { StatisticsBroker::new });
-
-        // :: Set Individual DLQ - which you most definitely should do in production.
-        // Hear, hear: http://activemq.2283324.n4.nabble.com/PolicyMap-api-is-really-bad-td4284307.html
-        // Create the individual DLQ policy, targeting all queues.
-        IndividualDeadLetterStrategy individualDeadLetterStrategy = new IndividualDeadLetterStrategy();
-        individualDeadLetterStrategy.setQueuePrefix("DLQ.");
-        // Throw expired messages out the window
-        individualDeadLetterStrategy.setProcessExpired(false);
-        // Also DLQ non-persistent messages
-        individualDeadLetterStrategy.setProcessNonPersistent(true);
-
-        PolicyEntry policyEntry = new PolicyEntry();
-        policyEntry.setQueue(">"); // all queues
-        policyEntry.setDeadLetterStrategy(individualDeadLetterStrategy);
-
-        // Optimized dispatch.. ?? "Don’t use a separate thread for dispatching from a Queue."
-        // .. didn't really see any result, so leave at default.
-        // policyEntry.setOptimizedDispatch(true);
-        // We do use prioritization, and this should ensure that priority information is persisted
-        // Store JavaDoc: "A hint to the store to try recover messages according to priority"
-        policyEntry.setPrioritizedMessages(true);
-
-        // .. Create the PolicyMap containing this DLQ policy.
-        PolicyMap policyMap = new PolicyMap();
-        policyMap.put(policyEntry.getDestination(), policyEntry);
-        // .. set this individual DLQ policy on the broker.
-        brokerService.setDestinationPolicy(policyMap);
-
-        // Start the broker.
-        try {
-            brokerService.start();
-        }
-        catch (Exception e) {
-            throw new AssertionError("Could not start ActiveMQ BrokerService '" + brokername + "'.", e);
-        }
-        return brokerService;
-    }
-
 }
