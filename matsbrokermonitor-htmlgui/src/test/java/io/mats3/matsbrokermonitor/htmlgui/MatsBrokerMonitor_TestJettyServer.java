@@ -8,9 +8,9 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 import javax.jms.ConnectionFactory;
 import javax.servlet.ServletContext;
@@ -25,12 +25,6 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.activemq.ActiveMQPrefetchPolicy;
 import org.apache.activemq.RedeliveryPolicy;
-import org.apache.activemq.broker.BrokerPlugin;
-import org.apache.activemq.broker.BrokerService;
-import org.apache.activemq.broker.region.policy.IndividualDeadLetterStrategy;
-import org.apache.activemq.broker.region.policy.PolicyEntry;
-import org.apache.activemq.broker.region.policy.PolicyMap;
-import org.apache.activemq.plugin.StatisticsBroker;
 import org.eclipse.jetty.annotations.AnnotationConfiguration;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.StatisticsHandler;
@@ -60,6 +54,7 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AllowAllAccessControl;
 import io.mats3.matsbrokermonitor.htmlgui.SetupTestMatsEndpoints.DataTO;
 import io.mats3.matsbrokermonitor.htmlgui.SetupTestMatsEndpoints.StateTO;
+import io.mats3.matsbrokermonitor.htmlgui.impl.MatsBrokerMonitorHtmlGuiImpl;
 import io.mats3.matsbrokermonitor.jms.JmsMatsBrokerBrowseAndActions;
 import io.mats3.serial.MatsSerializer;
 import io.mats3.serial.json.MatsSerializerJson;
@@ -101,7 +96,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             _matsFactory = JmsMatsFactory.createMatsFactory_JmsOnlyTransactions(
                     MatsBrokerMonitor_TestJettyServer.class.getSimpleName(), "*testing*",
                     JmsMatsJmsSessionHandler_Pooling.create(connFactory, PoolingKeyInitiator.INITIATOR,
-                            PoolingKeyStageProcessor.STAGE),
+                            PoolingKeyStageProcessor.FACTORY),
                     matsSerializer);
             // Configure the MatsFactory for testing (remember, we're running two instances in same JVM)
             // .. Concurrency of only 2
@@ -150,7 +145,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions1 = JmsMatsBrokerBrowseAndActions.create(connFactory);
 
             // :: Create the MatsBrokerMonitorHtmlGui #1
-            MatsBrokerMonitorHtmlGuiImpl matsBrokerMonitorHtmlGui1 = MatsBrokerMonitorHtmlGuiImpl.create(
+            MatsBrokerMonitorHtmlGuiImpl matsBrokerMonitorHtmlGui1 = MatsBrokerMonitorHtmlGui.create(
                     matsBrokerMonitor1, matsBrokerBrowseAndActions1, matsSerializer);
 
             // TODO: Enable multiple MQs.
@@ -242,9 +237,9 @@ public class MatsBrokerMonitor_TestJettyServer {
                                     .keepTrace(KeepTrace.FULL)
                                     .from("/sendRequestInitiated")
                                     .to(SERVICE_1 + SetupTestMatsEndpoints.SERVICE_MAIN)
-                                    .nonPersistent()
-                                    // .replyTo(SetupTestMatsEndpoints.TERMINATOR, sto)
-                                    .send(dto, new StateTO(1, 2));
+                                    // .nonPersistent()
+                                    .replyTo(SERVICE_1 + SetupTestMatsEndpoints.TERMINATOR, sto)
+                                    .request(dto, new StateTO(1, 2));
                         }
                     });
             double msTaken_sendMessages = (System.nanoTime() - nanosStart_sendMessages) / 1_000_000d;
@@ -272,6 +267,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             futurized = matsFuturizer.futurize("TraceId_" + Math.random(),
                     "/sendRequest_futurized", SERVICE_1 + SetupTestMatsEndpoints.SERVICE_MAIN, 2, TimeUnit.MINUTES,
                     DataTO.class, new DataTO(5, "fem"), msg -> {
+                        msg.setTraceProperty(SetupTestMatsEndpoints.DONT_THROW, Boolean.TRUE);
                         if (interactive) {
                             msg.interactive();
                         }
@@ -296,13 +292,36 @@ public class MatsBrokerMonitor_TestJettyServer {
      */
     @WebServlet("/matsbrokermonitor/*")
     public static class MatsBrokerMonitorServlet extends HttpServlet {
+
         @Override
-        protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-            resp.setContentType("text/html; charset=utf-8");
+        protected void doPost(HttpServletRequest req, HttpServletResponse res) throws IOException {
+            // :: MatsBrokerMonitorHtmlGUI instance
             MatsBrokerMonitorHtmlGui brokerMonitorHtmlGui = (MatsBrokerMonitorHtmlGui) req.getServletContext()
                     .getAttribute("matsBrokerMonitorHtmlGui1");
 
-            // :: Localinspect
+            AllowAllAccessControl accessControl = new AllowAllAccessControl();
+
+            if ((req.getPathInfo() != null) && req.getPathInfo().startsWith("/json")) {
+                String body = req.getReader().lines().collect(Collectors.joining("\n"));
+                res.setContentType("application/json; charset=utf-8");
+                PrintWriter out = res.getWriter();
+                brokerMonitorHtmlGui.json(out, req.getParameterMap(), body, accessControl);
+            }
+        }
+
+        @Override
+        protected void doGet(HttpServletRequest req, HttpServletResponse res) throws IOException {
+            // :: MatsBrokerMonitorHtmlGUI instance
+            MatsBrokerMonitorHtmlGui brokerMonitorHtmlGui = (MatsBrokerMonitorHtmlGui) req.getServletContext()
+                    .getAttribute("matsBrokerMonitorHtmlGui1");
+
+            AllowAllAccessControl accessControl = new AllowAllAccessControl();
+
+            res.setContentType("text/html; charset=utf-8");
+
+            PrintWriter out = res.getWriter();
+
+            // :: LocalHtmlInspectForMatsFactory instance
             LocalHtmlInspectForMatsFactory localInspect = (LocalHtmlInspectForMatsFactory) req.getServletContext()
                     .getAttribute(LocalHtmlInspectForMatsFactory.class.getName());
 
@@ -310,7 +329,6 @@ public class MatsBrokerMonitor_TestJettyServer {
             boolean includeBootstrap4 = req.getParameter("includeBootstrap4") != null;
             boolean includeBootstrap5 = req.getParameter("includeBootstrap5") != null;
 
-            PrintWriter out = resp.getWriter();
             out.println("<!DOCTYPE html>");
             out.println("<html>");
             out.println("  <head>");
@@ -366,7 +384,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             }
             out.println("<h1>MatsBrokerMonitor HTML embedded GUI</h1>");
             Map<String, String[]> parameterMap = req.getParameterMap();
-            brokerMonitorHtmlGui.main(out, parameterMap, new AllowAllAccessControl());
+            brokerMonitorHtmlGui.gui(out, parameterMap, accessControl);
             if (includeBootstrap3) {
                 out.write("</div>\n");
             }
@@ -460,7 +478,7 @@ public class MatsBrokerMonitor_TestJettyServer {
 
         // :: Get ConnectionFactory
         ConnectionFactory jmsConnectionFactory;
-        if (false) {
+        if (true) {
             // BrokerService inVmActiveMqBroker = createInVmActiveMqBroker();
             // jmsConnectionFactory = new ActiveMQConnectionFactory("vm://" + inVmActiveMqBroker.getBrokerName()
             // + "?create=false");
@@ -484,7 +502,6 @@ public class MatsBrokerMonitor_TestJettyServer {
 
             jmsConnectionFactory = amqConnectionFactory;
         }
-
 
         Server server = createServer(jmsConnectionFactory, 8080);
         try {

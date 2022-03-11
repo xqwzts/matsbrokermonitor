@@ -135,7 +135,7 @@ public interface MatsBrokerMonitor extends Closeable {
         /**
          * If this {@link #getDestinationName()} represent a Mats Stage (both a normal Queue or Topic for a Mats Stage,
          * or an individual DLQ for a Mats Stage), then this will be the StageId - i.e. the destination name with the
-         * MatsDestinationPrefix (default "mats."), or and any "DLQ." prefix (thus standard/default "DLQ.mats.") cropped
+         * MatsDestinationPrefix (default "mats."), and any "DLQ." prefix (thus standard/default "DLQ.mats.") cropped
          * off.
          * <p/>
          * If the broker isn't properly configured with a broker-specific <i>Individual Dead Letter Queue policy</i>
@@ -180,4 +180,10 @@ public interface MatsBrokerMonitor extends Closeable {
         OptionalLong getHeadMessageAgeMillis();
     }
 
+    /**
+     * Queue or Topic.
+     */
+    enum DestinationType {
+        QUEUE, TOPIC;
+    }
 }

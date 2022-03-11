@@ -1,12 +1,11 @@
 package io.mats3.matsbrokermonitor.api;
 
 import java.io.Closeable;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * NOTE!! Has special handling for MatsFactories employing MatsTrace as envelope.
- *
  * @author Endre Stølsvik 2022-01-15 00:08 - http://stolsvik.com/, endre@stolsvik.com
  */
 public interface MatsBrokerBrowseAndActions extends Closeable {
@@ -42,14 +41,14 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
     Optional<MatsBrokerMessageRepresentation> examineMessage(String queueId, String messageSystemId)
             throws BrokerIOException;
 
-    List<String> deleteMessages(String queueId, List<String> messageSystemIds) throws BrokerIOException;
+    List<String> deleteMessages(String queueId, Collection<String> messageSystemIds) throws BrokerIOException;
 
-    int deleteAllMessages(String destinationId) throws BrokerIOException;
+    int deleteAllMessages(String queueId) throws BrokerIOException;
 
-    List<String> moveMessages(String sourceQueueId, String targetQueueId, List<String> messageSystemIds)
+    List<String> reissueMessages(String deadLetterQueueId, Collection<String> messageSystemIds)
             throws BrokerIOException;
 
-    int moveAllMessages(String sourceQueueId, String targetQueueId) throws BrokerIOException;
+    int reissueAllMessages(String deadLetterQueueId) throws BrokerIOException;
 
     interface MatsBrokerMessageIterable extends Iterable<MatsBrokerMessageRepresentation>, AutoCloseable {
         /**
@@ -76,6 +75,10 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
 
         String getInitiatorId();
 
+        /**
+         * @return the (original) To-Stage Id - even if this message is now DLQed, even if to a Global DLQ where
+         *         otherwise the original queue name is lost.
+         */
         String getToStageId();
 
         boolean isPersistent();

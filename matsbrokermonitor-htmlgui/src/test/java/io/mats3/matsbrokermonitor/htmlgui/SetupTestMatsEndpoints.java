@@ -2,10 +2,11 @@ package io.mats3.matsbrokermonitor.htmlgui;
 
 import java.util.Objects;
 
-import io.mats3.MatsEndpoint.MatsRefuseMessageException;
+import io.mats3.MatsEndpoint.ProcessContext;
 import org.junit.Assert;
 
 import io.mats3.MatsEndpoint;
+import io.mats3.MatsEndpoint.MatsRefuseMessageException;
 import io.mats3.MatsFactory;
 
 /**
@@ -30,9 +31,15 @@ public class SetupTestMatsEndpoints {
     static final String TERMINATOR = ".terminator";
     static final String SUBSCRIPTION_TERMINATOR = ".subscriptionTerminator";
 
+    // If present as TraceProperty with Boolean.TRUE, the randomThrow(context) won't throw!
+    static final String DONT_THROW = "DONT_THROW";
+
     public static void setupLeafService(String servicePrefix, MatsFactory matsFactory) {
         MatsEndpoint<DataTO, Void> single = matsFactory.single(servicePrefix + SERVICE_LEAF, DataTO.class, DataTO.class,
                 (context, dto) -> {
+
+                    randomThrow(context);
+
                     // Use the 'multiplier' in the request to formulate the reply.. I.e. multiply the number..!
                     return new DataTO(dto.number * dto.multiplier, dto.string + ":FromLeafService");
                 });
@@ -55,6 +62,9 @@ public class SetupTestMatsEndpoints {
             Assert.assertEquals(Math.PI, sto.number2, 0d);
             // Change the important number in state..!
             sto.number2 = Math.E;
+
+            randomThrow(context);
+
             context.next(new DataTO(dto.number, dto.string + ":NextCall"));
         });
         ep.lastStage(DataTO.class, (context, sto, dto) -> {
@@ -80,6 +90,9 @@ public class SetupTestMatsEndpoints {
             Assert.assertEquals(new StateTO(Integer.MAX_VALUE, Math.E), sto);
             sto.number1 = 1;
             sto.number2 = 2;
+
+            randomThrow(context);
+
             context.next(dto);
         });
         ep.stage(DataTO.class, (context, sto, dto) -> {
@@ -115,10 +128,7 @@ public class SetupTestMatsEndpoints {
         ep.lastStage(DataTO.class, (context, sto, dto) -> {
             Assert.assertEquals(new StateTO(Integer.MAX_VALUE / 4, Math.PI / 4), sto);
 
-            // RANDOM THROW!
-            if (Math.random() < 0.01) {
-                throw new MatsRefuseMessageException("Random DLQ!");
-            }
+            randomThrow(context);
 
             return new DataTO(dto.number * 5, dto.string + ":FromMasterService");
         });
@@ -127,6 +137,10 @@ public class SetupTestMatsEndpoints {
     public static void setupTerminator(String servicePrefix, MatsFactory matsFactory) {
         matsFactory.terminator(servicePrefix + TERMINATOR, StateTO.class, DataTO.class,
                 (context, sto, dto) -> {
+                    // RANDOM THROW!
+                    if (Math.random() < 0.01) {
+                        throw new MatsRefuseMessageException("Random from Terminator DLQ!");
+                    }
                 });
     }
 
@@ -134,6 +148,15 @@ public class SetupTestMatsEndpoints {
         matsFactory.subscriptionTerminator(servicePrefix + SUBSCRIPTION_TERMINATOR, StateTO.class, DataTO.class,
                 (context, sto, dto) -> {
                 });
+    }
+
+    private static void randomThrow(ProcessContext<?> context) throws MatsRefuseMessageException {
+        if (context.getTraceProperty("DONT_THROW", Boolean.class) == Boolean.TRUE) {
+            return;
+        }
+        if (Math.random() < 0.01) {
+            throw new MatsRefuseMessageException("Random DLQ!");
+        }
     }
 
     public static class DataTO {

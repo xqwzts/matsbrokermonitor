@@ -1,44 +1,18 @@
-package io.mats3.matsbrokermonitor.htmlgui;
+package io.mats3.matsbrokermonitor.htmlgui.impl;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayDeque;
-import java.util.Collection;
 import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.mats3.matsbrokermonitor.api.DestinationType;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
-import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.BrokerIOException;
-import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageIterable;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
-import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerInfo;
-import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
-import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation;
-import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation.MatsEndpointBrokerRepresentation;
-import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation.MatsEndpointGroupBrokerRepresentation;
-import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation.MatsStageBrokerRepresentation;
 import io.mats3.serial.MatsSerializer;
 import io.mats3.serial.MatsSerializer.DeserializedMatsTrace;
 import io.mats3.serial.MatsTrace;
@@ -48,299 +22,74 @@ import io.mats3.serial.MatsTrace.KeepMatsTrace;
 import io.mats3.serial.MatsTrace.StackState;
 
 /**
- * Instantiate a <b>singleton</b> of this class, supplying it a {@link MatsBrokerMonitor} instance, <b>to which this
- * instance will register as listener</b>. Again: You are NOT supposed to instantiate an instance of this class per
- * rendering, as this instance is "active" and will register as listener and may instantiate threads.
- *
- * @author Endre Stølsvik 2021-12-17 10:22 - http://stolsvik.com/, endre@stolsvik.com
+ * @author Endre Stølsvik 2022-03-13 23:33 - http://stolsvik.com/, endre@stolsvik.com
  */
-public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
-    private final Logger log = LoggerFactory.getLogger(MatsBrokerMonitorHtmlGuiImpl.class);
+public class ExamineMessage implements Statics {
 
-    private final MatsBrokerMonitor _matsBrokerMonitor;
-    private final MatsBrokerBrowseAndActions _matsBrokerBrowseAndActions;
-    private final MatsSerializer<?> _matsSerializer;
-
-    public static MatsBrokerMonitorHtmlGuiImpl create(MatsBrokerMonitor matsBrokerMonitor,
-            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions,
-            MatsSerializer<?> matsSerializer) {
-        return new MatsBrokerMonitorHtmlGuiImpl(matsBrokerMonitor, matsBrokerBrowseAndActions, matsSerializer);
-    }
-
-    public static MatsBrokerMonitorHtmlGuiImpl create(MatsBrokerMonitor matsBrokerMonitor,
-            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions) {
-        return create(matsBrokerMonitor, matsBrokerBrowseAndActions, null);
-    }
-
-    MatsBrokerMonitorHtmlGuiImpl(MatsBrokerMonitor matsBrokerMonitor,
-            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions,
-            MatsSerializer<?> matsSerializer) {
-        _matsBrokerMonitor = matsBrokerMonitor;
-        _matsBrokerBrowseAndActions = matsBrokerBrowseAndActions;
-        _matsSerializer = matsSerializer;
-    }
-
-    /**
-     * Note: The return from this method is static, and should only be included once per HTML page.
-     */
-    public void getStyleSheet(Appendable out) throws IOException {
-        includeFile(out, "matsbrokermonitor.css");
-    }
-
-    /**
-     * Note: The return from this method is static, and should only be included once per HTML page.
-     */
-    public void getJavaScript(Appendable out) throws IOException {
-        includeFile(out, "matsbrokermonitor.js");
-    }
-
-    private static void includeFile(Appendable out, String file) throws IOException {
-        String filename = MatsBrokerMonitorHtmlGuiImpl.class.getPackage().getName().replace('.', '/') + '/' + file;
-        InputStream is = MatsBrokerMonitorHtmlGuiImpl.class.getClassLoader().getResourceAsStream(filename);
-        if (is == null) {
-            throw new IllegalStateException("Missing '" + file + "' from ClassLoader.");
-        }
-        InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8);
-        BufferedReader br = new BufferedReader(isr);
-        while (true) {
-            String line = br.readLine();
-            if (line == null) {
-                break;
-            }
-            out.append(line).append('\n');
-        }
-    }
-
-    public void main(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
-            throws IOException {
-        if (requestParameters.containsKey("browse")) {
-            String destinationId = getDestinationId(requestParameters, ac);
-            // ----- Passed Access Control for browse of specific destination, render it.
-            browseQueue(out, destinationId, ac);
-            return;
-        }
-
-        else if (requestParameters.containsKey("examineMessage")) {
-            String destinationId = getDestinationId(requestParameters, ac);
-
-            String[] messageSystemIds = requestParameters.get("messageSystemId");
-            if (messageSystemIds == null) {
-                throw new IllegalArgumentException("Missing messageSystemIds");
-            }
-            if (messageSystemIds.length > 1) {
-                throw new IllegalArgumentException(">1 messageSystemId args");
-            }
-            String messageSystemId = messageSystemIds[0];
-            examineMessage(out, destinationId, messageSystemId);
-            return;
-        }
-
-        // E-> No special argument, assume overview
-        boolean overview = ac.overview();
-        if (!overview) {
-            throw new AccessDeniedException("Not allowed to see broker overview!");
-        }
-        // ----- Passed Access Control for overview, render it.
-        overview(out, requestParameters, ac);
-    }
-
-    private String getDestinationId(Map<String, String[]> requestParameters, AccessControl ac) {
-        String[] destinationIds = requestParameters.get("destinationId");
-        if (destinationIds == null) {
-            throw new IllegalArgumentException("Missing destinationId");
-        }
-        if (destinationIds.length > 1) {
-            throw new IllegalArgumentException(">1 browse args");
-        }
-        String destinationId = destinationIds[0];
-        if (!(destinationId.startsWith("queue:") || destinationId.startsWith("topic:"))) {
-            throw new IllegalArgumentException("the browse arg should start with queue: or topic:");
-        }
-        boolean browseAllowed = ac.browse(destinationId);
-        if (!browseAllowed) {
-            throw new AccessDeniedException("Not allowed to browse destination!");
-        }
-        return destinationId;
-    }
-
-    @Override
-    public void json(Appendable out, Map<String, String[]> requestParameters,
-            AccessControl ac) throws IOException, AccessDeniedException {
-
-    }
-
-    @Override
-    public void html(Appendable out, Map<String, String[]> requestParameters,
-            AccessControl ac) throws IOException, AccessDeniedException {
-
-    }
-
-    protected void browseQueue(Appendable out, String destinationId, AccessControl ac)
-            throws IOException {
-        boolean queue = destinationId.startsWith("queue:");
-        if (!queue) {
-            throw new IllegalArgumentException("Cannot browse anything other than queues!");
-        }
-        out.append("<div class='matsbm_report matsbm_browse_queue'>\n");
-        out.append("<a href='?'>Back to Broker overview</a><br />\n");
-
-        String queueId = destinationId.substring("queue:".length());
-
-        Collection<MatsBrokerDestination> values = _matsBrokerMonitor.getMatsDestinations().values();
-        MatsBrokerDestination matsBrokerDestination = null;
-        for (MatsBrokerDestination dest : values) {
-            if (dest.getDestinationType() == DestinationType.QUEUE
-                    && queueId.equals(dest.getDestinationName())) {
-                matsBrokerDestination = dest;
-            }
-        }
-        if (matsBrokerDestination == null) {
-            throw new IllegalArgumentException("Unknown destination!");
-        }
-
-        out.append("Broker Queue '").append(queueId).append("'");
-        // ?: Is this the Global DLQ?
-        if (matsBrokerDestination.isGlobalDlq()) {
-            // -> Yes, global DLQ
-            out.append(" is the Global DLQ, fully qualified name: [")
-                    .append(matsBrokerDestination.getFqDestinationName())
-                    .append("]<br />\n");
-        }
-        else {
-            // -> No, not the Global DLQ
-            // ?: Is this a MatsStage Queue or DLQ?
-            if (matsBrokerDestination.getMatsStageId().isPresent()) {
-                // -> Mats stage queue.
-                out.append(" is the ");
-                out.append(matsBrokerDestination.isDlq() ? "DLQ" : "incoming Queue");
-                out.append(" for Mats Stage [")
-                        .append(matsBrokerDestination.getMatsStageId().get());
-            }
-            else {
-                // -> Non-Mats Queue. Not really supported, but just to handle it.
-                out.append(" is a ");
-                out.append(matsBrokerDestination.isDlq() ? "DLQ" : "Queue");
-            }
-            out.append("<br />\n");
-        }
-        out.append("It has ").append(Long.toString(matsBrokerDestination.getNumberOfQueuedMessages())).append(
-                " messages");
-        if (matsBrokerDestination.getNumberOfInflightMessages().isPresent()) {
-            out.append(" of which ")
-                    .append(Long.toString(matsBrokerDestination.getNumberOfInflightMessages().getAsLong()))
-                    .append(" are in-flight.");
-        }
-        out.append("<br />\n");
-        out.append("<br />\n");
-
-        try (MatsBrokerMessageIterable iterable = _matsBrokerBrowseAndActions.browseQueue(queueId)) {
-            out.append("<table class='matsbm_table_browse_queue'>");
-            out.append("<thead>");
-            out.append("<th>Sent</th>");
-            out.append("<th>TraceId</th>");
-            out.append("<th>Init App</th>");
-            out.append("<th>InitatorId</th>");
-            out.append("<th>Type</th>");
-            out.append("<th>From Id</th>");
-            out.append("<th>Persistent</th>");
-            out.append("<th>Interactive</th>");
-            out.append("<th>Expires</th>");
-            out.append("</thead>");
-            out.append("<tbody>");
-            for (MatsBrokerMessageRepresentation matsMsg : iterable) {
-                out.append("<tr>");
-
-                out.append("<td>");
-                out.append("<a href='?examineMessage&destinationId=").append(destinationId)
-                        .append("&messageSystemId=").append(matsMsg.getMessageSystemId()).append("'>");
-                Instant instant = Instant.ofEpochMilli(matsMsg.getTimestamp());
-                out.append(formatTimestamp(instant));
-                out.append("</a>");
-                out.append("</td>");
-
-                // Found MessageSystemId to be pretty irrelevant in this overview.
-
-                out.append("<td>");
-                out.append(matsMsg.getTraceId());
-                out.append("</td>");
-
-                out.append("<td>");
-                out.append(matsMsg.getInitializingApp() != null ? matsMsg.getInitializingApp() : "{missing init app}");
-                out.append("</td>");
-
-                out.append("<td>");
-                out.append(matsMsg.getInitiatorId() != null ? matsMsg.getInitiatorId() : "{missing init id}");
-                out.append("</td>");
-
-                out.append("<td>");
-                out.append(matsMsg.getMessageType());
-                out.append(" from");
-                out.append("</td>");
-
-                out.append("<td>");
-                out.append(matsMsg.getFromStageId());
-                out.append("</td>");
-
-                out.append("<td>");
-                out.append(matsMsg.isPersistent() ? "Persistent" : "Non-Persistent");
-                out.append("</td>");
-
-                out.append("<td>");
-                out.append(matsMsg.isInteractive() ? "Interactive" : "Non-Interactive");
-                out.append("</td>");
-
-                out.append("<td>");
-                out.append(matsMsg.getExpirationTimestamp() == 0
-                        ? "Never expires"
-                        : formatTimestamp(matsMsg.getExpirationTimestamp()));
-                out.append("</td>");
-
-                out.append("</tr>\n");
-            }
-            out.append("</div>");
-            out.append("</tbody>");
-            out.append("</table>");
-        }
-        catch (BrokerIOException e) {
-            throw new IOException("Can't talk with broker.", e);
-        }
-    }
-
-    protected void examineMessage(Appendable out, String destinationId, String messageSystemId) throws IOException {
+    static void gui_ExamineMessage(MatsBrokerMonitor matsBrokerMonitor,
+            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, MatsSerializer<?> matsSerializer,
+            String jsonUrlPath, Appendable out,
+            String destinationId, String messageSystemId) throws IOException {
         boolean queue = destinationId.startsWith("queue:");
         if (!queue) {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
         out.append("<div class='matsbm_report matsbm_examine_message'>\n");
-        out.append("<a href='?'>Back to broker overview</a><br />\n");
+        out.append("<div class='matsmb_actionbuttons'>\n");
+        out.append("<a href='?'>Back to Broker Overview</a><br />\n");
         out.append("<a href='?browse&destinationId=").append(destinationId)
                 .append("'>Back to Queue</a> - ");
 
         String queueId = destinationId.substring("queue:".length());
-        Optional<MatsBrokerMessageRepresentation> matsBrokerMessageRepresentationO = _matsBrokerBrowseAndActions
+        out.append(queueId).append("<br />\n");
+
+        Optional<MatsBrokerMessageRepresentation> matsBrokerMessageRepresentationO = matsBrokerBrowseAndActions
                 .examineMessage(queueId, messageSystemId);
         if (!matsBrokerMessageRepresentationO.isPresent()) {
             out.append("<h1>No such message!</h1><br/>\n");
             out.append("MessageSystemId: [" + messageSystemId + "].<br/>\n");
             out.append("Queue:[" + queueId + "]<br/>\n");
             out.append("</div>");
+            out.append("</div>");
             return;
         }
+
         MatsBrokerMessageRepresentation matsMsg = matsBrokerMessageRepresentationO.get();
 
         MatsTrace<?> matsTrace = null;
         int matsTraceDecompressedLength = 0;
-        if ((_matsSerializer != null)
+        if ((matsSerializer != null)
                 && matsMsg.getMatsTraceBytes().isPresent() && matsMsg.getMatsTraceMeta().isPresent()) {
             byte[] matsTraceBytes = matsMsg.getMatsTraceBytes().get();
             String matsTraceMeta = matsMsg.getMatsTraceMeta().get();
-            DeserializedMatsTrace<?> deserializedMatsTrace = _matsSerializer.deserializeMatsTrace(matsTraceBytes,
+            DeserializedMatsTrace<?> deserializedMatsTrace = matsSerializer.deserializeMatsTrace(matsTraceBytes,
                     matsTraceMeta);
             matsTraceDecompressedLength = deserializedMatsTrace.getSizeDecompressed();
             matsTrace = deserializedMatsTrace.getMatsTrace();
         }
 
-        out.append("Queue:[" + queueId + "], MessageSystemId:[" + messageSystemId + "]<br />\n");
+
+        // :: ACTION BUTTONS
+
+        // move programmatically configured json-path over to static javascript:
+        out.append("<script>window.matsmb_json_path = ").append(jsonUrlPath != null
+                ? "'" + jsonUrlPath + "'"
+                : "null").append(";</script>");
+
+        out.append("<div class='matsmb_button matsmb_button_reissue'"
+                + " onclick='matsmb_reissue(event, \"" + queueId + "\", \"" + messageSystemId + "\")'>"
+                + "Reissue [R]</div>");
+        out.append("<div id='matsmb_delete' class='matsmb_button matsmb_button_delete'"
+                + " onclick='matsmb_delete_propose(event)'>"
+                + "Delete [D]</div>");
+        out.append("<div id='matsmb_delete_cancel' class='matsmb_button matsmb_button_delete_cancel"
+                + " matsmb_button_hidden' onclick='matsmb_delete_cancel(event)'>"
+                + "Cancel Delete [Esc]</div>");
+        out.append("<div id='matsmb_delete_confirm' class='matsmb_button matsmb_button_delete matsmb_button_hidden'"
+                + " onclick='matsmb_delete_confirmed(event, \"" + queueId + "\", \"" + messageSystemId + "\")'>"
+                + "Confirm Delete [X]</div>");
+        out.append("</div>");
+        out.append("<br/>");
 
         // :: FLOW AND MESSAGE PROPERTIES
 
@@ -388,7 +137,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         out.append("</div>");
     }
 
-    private void examineMessage_FlowAndMessageProperties(Appendable out, MatsBrokerMessageRepresentation brokerMsg,
+    private static void examineMessage_FlowAndMessageProperties(Appendable out, MatsBrokerMessageRepresentation brokerMsg,
             MatsTrace<?> matsTrace,
             int matsTraceDecompressedLength) throws IOException {
         out.append("<table class='matsbm_table_flow_and_message'><tr>"); // start Flow/Message table
@@ -457,7 +206,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         if (matsTrace != null) {
             out.append("<tr>");
             out.append("<td>Mats Flow Initialized Timestamp</td>");
-            out.append("<td>").append(formatTimestamp(matsTrace.getInitializedTimestamp())).append("</td>");
+            out.append("<td>").append(Statics.formatTimestamp(matsTrace.getInitializedTimestamp())).append("</td>");
             out.append("</tr>\n");
         }
 
@@ -564,7 +313,8 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         if (matsTrace != null) {
             out.append("<tr>");
             out.append("<td>Mats Message Timestamp</td>");
-            out.append("<td>").append(formatTimestamp(matsTrace.getCurrentCall().getCalledTimestamp())).append("</td>");
+            out.append("<td>").append(Statics.formatTimestamp(matsTrace.getCurrentCall().getCalledTimestamp()))
+                    .append("</td>");
             out.append("</tr>\n");
         }
 
@@ -595,7 +345,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
 
         out.append("<tr>");
         out.append("<td>MsgSys Message Timestamp</td>");
-        out.append("<td>").append(formatTimestamp(brokerMsg.getTimestamp())).append("</td>");
+        out.append("<td>").append(Statics.formatTimestamp(brokerMsg.getTimestamp())).append("</td>");
         out.append("</tr>\n");
 
         out.append("<tr>");
@@ -607,7 +357,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         out.append("<td>MsgSys Expires</td>");
         out.append("<td>").append(brokerMsg.getExpirationTimestamp() == 0
                 ? "Never expires"
-                : formatTimestamp(brokerMsg.getExpirationTimestamp()))
+                : Statics.formatTimestamp(brokerMsg.getExpirationTimestamp()))
                 .append("</td>");
         out.append("</tr>");
 
@@ -618,9 +368,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         out.append("</tr></table>"); // end Flow/Message table
     }
 
-    private void examineMessage_MatsTrace(Appendable out, MatsTrace<?> matsTrace) throws IOException {
-        List<? extends Call<?>> callFlow = matsTrace.getCallFlow();
-        List<? extends StackState<?>> stateFlow = matsTrace.getStateFlow();
+    private static void examineMessage_MatsTrace(Appendable out, MatsTrace<?> matsTrace) throws IOException {
 
         // TODO: ONLY DO IF KeepMatsTrace.FULL
 
@@ -653,6 +401,9 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         // From StateFlow with "send(dto, initialState)"
         // # Notice the added extra "0" in front, for the initialState to the sent-to endpoint.
         // 0:0:1:1:0:0:1:1:0:0:0:1:1:0:1:1:
+
+        List<? extends Call<?>> callFlow = matsTrace.getCallFlow();
+        List<? extends StackState<?>> stateFlow = matsTrace.getStateFlow();
 
         StringBuilder actualStateHeightsFromStateFlow = new StringBuilder();
         stateFlow.forEach(stackState -> actualStateHeightsFromStateFlow.append(stackState.getHeight()).append(':'));
@@ -705,12 +456,6 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             initialStateStatus = -1;
         }
 
-        // out.append("" + actualStateHeightsFromStateFlow).append(" -- actual<br/>\n");
-        // out.append("" + stateHeightsFromCallFlow_normal).append(" -- fromCallFlow assuming normal<br/>\n");
-        // out.append("" + stateHeightsFromCallFlow_initialState).append(
-        // " -- fromCallFlow assuming initialState<br/>\n");
-        // out.append("InitialStateStatus: " + initialStateStatus + "<br/>\n");
-
         // :: Go through the state flow, and re-run the stack, so that we know incoming state, if any, for each call
 
         // Store the incoming state as an identity map from the call.
@@ -760,9 +505,16 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         out.append("<b>Remember that the MatsTrace, and the rows in this table, refers to the <i>calls, i.e. the"
                 + " messages from one stage to the next in a flow</i>, not the processing on the stages"
                 + " themselves.</b><br/>\n");
-        out.append("Thus, it is the REQUEST, REPLY and NEXT parts in the table that are the real info carriers -"
-                + " the \"call produced on\" lines in the table are extracted from the previous stage in the flow,"
+        out.append("Thus, it is the REQUEST, REPLY and NEXT rows (the calls) in the table that are the real info"
+                + " carriers - the <i>\"Processed on\"</i> rows are synthesized with stageId taken from the previous"
+                + " call's \"to\", and the <i>app/host</i> and <i>DebugInfo</i> from current call -"
                 + " just to aid your intuition.<br />\n");
+
+        int highestStackHeight = 0;
+        for (int i = 0; i < callFlow.size(); i++) {
+            Call<?> currentCall = callFlow.get(i);
+            highestStackHeight = Math.max(highestStackHeight, currentCall.getReplyStackHeight());
+        }
 
         out.append("<table class='matsbm_table_matstrace' id='matsbm_table_matstrace'>");
         out.append("<thead>");
@@ -770,7 +522,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         out.append("<th>Call#</th>");
         out.append("<th>time</th>");
         out.append("<th>diff</th>");
-        out.append("<th>Call/Processing</th>");
+        out.append("<th colspan='" + (highestStackHeight + 1) + "'>Call/Processing</th>");
         out.append("<th>Application</th>");
         out.append("<th>Host</th>");
         out.append("<th>DebugInfo</th>");
@@ -781,13 +533,12 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         out.append("<tbody>");
 
         // :: MatsTrace's Initiation
-        out.append("<tr>");
+        out.append("<tr class='call'>");
         out.append("<td>#0</td>");
         out.append("<td>0 ms</td>");
         out.append("<td></td>");
-        out.append("<td colspan=4>");
-        out.append("INIT<br />");
-        out.append(matsTrace.getInitiatorId());
+        out.append("<td colspan=100>");
+        out.append("INIT<br />from: ").append(matsTrace.getInitiatorId());
         out.append("</td>");
         out.append("</tr>\n");
 
@@ -799,17 +550,12 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             }
         }
 
-        // :: MatsTrace's Calls
-
-        int highestStackHeight = 0;
-        for (int i = 0; i < callFlow.size(); i++) {
-            Call<?> currentCall = callFlow.get(i);
-            highestStackHeight = Math.max(highestStackHeight, currentCall.getReplyStackHeight());
-        }
+        // :: MATSTRACE Calls table
 
         long initializedTimestamp = matsTrace.getInitializedTimestamp();
         // NOTE: If we are KeepMatsTrace.MINIMAL, then there is only 1 entry here
         String prevIndent = "";
+        int prevIndentLevel = 0;
         long previousCalledTimestamp = matsTrace.getInitializedTimestamp();
         for (int i = 0; i < callFlow.size(); i++) {
             Call<?> currentCall = callFlow.get(i);
@@ -820,25 +566,26 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
                     ? null
                     : callFlow.get(i - 1);
 
-            StringBuilder indentBuf = new StringBuilder("&nbsp;&nbsp;");
-            int replyStackHeight = currentCall.getReplyStackHeight();
-            for (int x = 0; x < replyStackHeight; x++) {
-                // indentBuf.append("\u00A6&nbsp;&nbsp;");
-                indentBuf.append("\u00A6&nbsp;&nbsp;&nbsp;&nbsp;");
-                if (x != (replyStackHeight - 1)) {
-                    indentBuf.append("&nbsp;&nbsp;");
-                }
+            StringBuilder indentBuf = new StringBuilder("");
+            int indentLevel = currentCall.getReplyStackHeight();
+            for (int x = 0; x < indentLevel; x++) {
+                indentBuf.append("<td class='indent'><div class='matsbm_line'></div></td>");
             }
-
-            // "Processing" row
-            out.append("<tr>");
-            out.append("<td></td>");
-            out.append("<td></td>");
-            out.append("<td></td>");
             String indent = indentBuf.toString();
-            out.append("<td>")
-                    .append(prevIndent + "&nbsp;<i>Processed&nbsp;on&nbsp;</i>");
+            int reverseIndent = highestStackHeight - indentLevel;
+
+            // :: PROCESSING row
+            out.append("<tr class='processing' id='matsbm_processrow_" + currentCallNumber + "'"
+                    + " onmouseover='matsmb_hover_call(event)' onmouseout='matsmb_hover_call_out(event)' data-callno='"
+                    + currentCallNumber + "'>");
+            out.append("<td></td>");
+            out.append("<td></td>");
+            out.append("<td></td>");
+            out.append(prevIndent).append("<td onclick='matsbm_callmodal(event)' colspan='" + (highestStackHeight
+                    - prevIndentLevel + 1) + "'>")
+                    .append("<i>Processed&nbsp;on&nbsp;</i>");
             prevIndent = indent;
+            prevIndentLevel = indentLevel;
             if (prevCall != null) {
                 out.append(prevCall.getTo().getId());
             }
@@ -873,8 +620,10 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             out.append("</td>");
             out.append("</tr>");
 
-            // "Call row"
-            out.append("<tr id='matsbm_callrow_" + currentCallNumber + "'>");
+            // :: CALL row
+            out.append("<tr class='call' id='matsbm_callrow_" + currentCallNumber + "'"
+                    + " onmouseover='matsmb_hover_call(event)' onmouseout='matsmb_hover_call_out(event)' data-callno='"
+                    + currentCallNumber + "'>");
             out.append("<td>#");
             out.append(Integer.toString(currentCallNumber));
             out.append("</td>");
@@ -885,33 +634,30 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
             previousCalledTimestamp = currentCallTimestamp;
             out.append("<td>").append(Long.toString(diffBetweenLast)).append("&nbsp;ms</td>"); // Proc
 
-            out.append("<td onclick='matsbm_callmodal(event)' data-callno='" + currentCallNumber + "' colspan='4'>");
-            String indentAndCallType;
+            out.append(indent).append("<td onclick='matsbm_callmodal(event)'"
+                    + " colspan='" + (highestStackHeight - indentLevel + 5) + "'>");
+            String callType;
             switch (currentCall.getCallType()) {
                 case REQUEST:
-                    indentAndCallType = indent + "\u2198 this is a REQUEST";
+                    callType = "\u2198 this is a REQUEST";
                     break;
                 case REPLY:
-                    indentAndCallType = indent + "&nbsp;&nbsp;\u2199 this is a REPLY";
+                    callType = "&nbsp;&nbsp;\u2199 this is a REPLY";
                     break;
                 case NEXT:
                 case GOTO:
-                    indentAndCallType = indent + "&nbsp;<b>\u2193</b>&nbsp; this is a " + currentCall.getCallType();
+                    callType = "&nbsp;<b>\u2193</b>&nbsp; this is a " + currentCall.getCallType();
                     break;
                 default:
-                    indentAndCallType = indent + "this is a " + currentCall.getCallType();
+                    callType = "this is a " + currentCall.getCallType();
             }
-            out.append(indentAndCallType).append(" call");
+            out.append(callType).append(" call");
             StackState<?> stackState = callToState.get(currentCall);
             if (stackState != null) {
                 out.append(i == 0 ? " w/ initial state" : " w/ state");
             }
             out.append(" - <a href='//show call' onclick='matsbm_noclick(event)'>show</a>");
             out.append("<br/>");
-            out.append(indent);
-            if (replyStackHeight > 0) {
-                out.append("&nbsp;");
-            }
 
             out.append("<i>to:</i>&nbsp;").append(currentCall.getTo().getId());
             out.append("</td>");
@@ -971,37 +717,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         out.append("</pre>");
     }
 
-    private void presentTransferredObject(Appendable out, Object data) throws IOException {
-        if (data instanceof String) {
-            String stringData = (String) data;
-            out.append("String[").append(Integer.toString(stringData.length())).append(" chars]<br/>\n");
-
-            try {
-                String jsonData = new ObjectMapper().readTree(stringData).toPrettyString();
-                out.append("<div class='matsbm_box_call_or_state_div'>").append(jsonData).append("</div>");
-            }
-            catch (JsonProcessingException e) {
-                out.append(
-                        "Couldn't parse incoming String as json (thus no pretty printing), so here it is unparsed.<br/>");
-                out.append(stringData);
-            }
-        }
-        if (data instanceof byte[]) {
-            byte[] byteData = (byte[]) data;
-            out.append("byte[").append(Integer.toString(byteData.length)).append(" bytes]<br/>\n");
-        }
-    }
-
-    private String debugInfoToHtml(String debugInfo) {
-        if ((debugInfo == null) || (debugInfo.trim().isEmpty())) {
-            debugInfo = "{none present}";
-        }
-        debugInfo = debugInfo.replace("<", "&lt;").replace(">", "&gt;")
-                .replace(";", "<br>\n");
-        return "<code>" + debugInfo + "</code>";
-    }
-
-    protected void examimeMessage_currentCallMatsTrace(Appendable out, MatsTrace<String> stringMatsTrace)
+    private static void examimeMessage_currentCallMatsTrace(Appendable out, MatsTrace<String> stringMatsTrace)
             throws IOException {
         if (stringMatsTrace != null) {
             Call<String> currentCall = stringMatsTrace.getCurrentCall();
@@ -1023,193 +739,44 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         }
     }
 
-    private Optional<MatsTrace<String>> getStringMatsTrace(MatsTrace<?> matsTrace) throws IOException {
+    private static void presentTransferredObject(Appendable out, Object data) throws IOException {
+        if (data instanceof String) {
+            String stringData = (String) data;
+            out.append("String[").append(Integer.toString(stringData.length())).append(" chars]<br/>\n");
+
+            try {
+                String jsonData = new ObjectMapper().readTree(stringData).toPrettyString();
+                out.append("<div class='matsbm_box_call_or_state_div'>").append(jsonData).append("</div>");
+            }
+            catch (JsonProcessingException e) {
+                out.append(
+                        "Couldn't parse incoming String as json (thus no pretty printing), so here it is unparsed.<br/>");
+                out.append(stringData);
+            }
+        }
+        if (data instanceof byte[]) {
+            byte[] byteData = (byte[]) data;
+            out.append("byte[").append(Integer.toString(byteData.length)).append(" bytes]<br/>\n");
+        }
+    }
+
+    private static String debugInfoToHtml(String debugInfo) {
+        if ((debugInfo == null) || (debugInfo.trim().isEmpty())) {
+            debugInfo = "{none present}";
+        }
+        debugInfo = debugInfo.replace("<", "&lt;").replace(">", "&gt;")
+                .replace(";", "<br>\n");
+        return "<code>" + debugInfo + "</code>";
+    }
+
+
+    private static Optional<MatsTrace<String>> getStringMatsTrace(MatsTrace<?> matsTrace) throws IOException {
         Object data = matsTrace.getCurrentCall().getData();
         if (data instanceof String) {
+            @SuppressWarnings("unchecked")
             MatsTrace<String> casted = (MatsTrace<String>) matsTrace;
             return Optional.of(casted);
         }
         return Optional.empty();
-    }
-
-    protected void overview(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
-            throws IOException {
-        out.append("<div class='matsbm_report matsbm_broker'>\n");
-        out.append("  <div class='matsbm_heading'>");
-        Optional<BrokerInfo> brokerInfoO = _matsBrokerMonitor.getBrokerInfo();
-        if (brokerInfoO.isPresent()) {
-            BrokerInfo brokerInfo = brokerInfoO.get();
-            out.append("Broker <h1>'").append(brokerInfo.getBrokerName()).append("'</h1>");
-            out.append("   of type ").append(brokerInfo.getBrokerType());
-        }
-        else {
-            out.append("<h2>Unknown broker</h2>");
-        }
-        out.append("  </div>\n");
-
-        Map<String, MatsBrokerDestination> matsDestinations = _matsBrokerMonitor.getMatsDestinations();
-        MatsFabricBrokerRepresentation stack = MatsFabricBrokerRepresentation.stack(matsDestinations.values());
-
-        // :: ToC
-        out.append("<b>EndpointGroups ToC</b><br />\n");
-        for (MatsEndpointGroupBrokerRepresentation service : stack.getMatsEndpointGroupBrokerRepresentations()
-                .values()) {
-            String endpointGroupId = service.getEndpointGroup().trim().isEmpty()
-                    ? "{empty string}"
-                    : service.getEndpointGroup();
-            out.append("&nbsp;&nbsp;<b><a href='#").append(endpointGroupId).append("'>")
-                    .append(endpointGroupId)
-                    .append("</a></b><br />\n");
-        }
-        out.append("<br />\n");
-
-        // :: Global DLQ
-        if (stack.getGlobalDlq().isPresent()) {
-            out.append("<div class='matsbm_endpoint_group'>\n");
-            out.append("<h2>Global DLQ</h2><br />");
-            MatsBrokerDestination globalDlq = stack.getGlobalDlq().get();
-            out.append("<div class='matsbm_epid'>")
-                    .append(globalDlq.getDestinationName())
-                    .append("</div>");
-            out.append("<div class='matsbm_stage'>")
-                    .append(globalDlq.getFqDestinationName());
-
-            queueCount(out, globalDlq);
-
-            out.append("</div>");
-            out.append("</div>");
-        }
-
-        // :: Foreach EndpointGroup
-        for (MatsEndpointGroupBrokerRepresentation service : stack.getMatsEndpointGroupBrokerRepresentations()
-                .values()) {
-            // :: EndpointGroup
-            String endpointGroupId = service.getEndpointGroup().trim().isEmpty()
-                    ? "{empty string}"
-                    : service.getEndpointGroup();
-            out.append("<div class='matsbm_endpoint_group' id='").append(endpointGroupId).append("'>\n");
-            out.append("<a href='#").append(endpointGroupId).append("'>");
-            out.append("<h2>").append(endpointGroupId).append("</h2></a><br />\n");
-
-            // :: Foreach Endpoint
-            for (MatsEndpointBrokerRepresentation endpoint : service.getMatsEndpointBrokerRepresentations().values()) {
-                String endpointId = endpoint.getEndpointId();
-                Map<Integer, MatsStageBrokerRepresentation> stages = endpoint.getStages();
-
-                // There will always be at least one stage, otherwise the endpoint wouldn't be defined.
-                MatsStageBrokerRepresentation first = stages.values().iterator().next();
-                // There will either be an incoming, or a DLQ, otherwise the endpoint wouldn't be defined.
-                MatsBrokerDestination firstIncomingOrDlq = first.getIncomingDestination()
-                        .orElseGet(() -> first.getDlqDestination()
-                                .orElseThrow(() -> new AssertionError("Missing both Incoming and DLQ destinations!")));
-                String endpointType = firstIncomingOrDlq.getDestinationType() == DestinationType.QUEUE
-                        ? "<div class='matsbm_queue'>Queue</div>"
-                        : "<div class='matsbm_topic'>Topic</div>";
-
-                out.append("<div class='matsbm_epid'>").append(endpointId).append("</div>");
-                out.append(" ").append(endpointType);
-
-                // :: Foreach Stage
-                for (MatsStageBrokerRepresentation stage : stages.values()) {
-                    out.append("<div class='matsbm_stage'>");
-                    out.append(stage.getStageIndex() == 0 ? "Initial" : "S" + stage.getStageIndex());
-                    Optional<MatsBrokerDestination> incomingDest = stage.getIncomingDestination();
-                    if (incomingDest.isPresent()) {
-                        MatsBrokerDestination incoming = incomingDest.get();
-                        queueCount(out, incoming);
-                    }
-
-                    Optional<MatsBrokerDestination> dlqDest = stage.getDlqDestination();
-                    if (dlqDest.isPresent()) {
-                        queueCount(out, dlqDest.get());
-                    }
-                    out.append("</div>"); // /matsbm_stage
-                }
-                out.append("<br />\n");
-            }
-            out.append("</div>\n");
-        }
-        out.append("</div>\n");
-    }
-
-    private void queueCount(Appendable out, MatsBrokerDestination destination) throws IOException {
-        String style = destination.isDlq()
-                ? "dlq"
-                : destination.getNumberOfQueuedMessages() == 0 ? "incoming_zero" : "incoming";
-        out.append("<a class='").append(style).append("' href='?browse&destinationId=")
-                .append(destination.getDestinationType() == DestinationType.QUEUE ? "queue:" : "topic:")
-                .append(destination.getDestinationName())
-                .append("'>")
-                .append(destination.isDlq() ? "DLQ:" : "")
-                .append(Long.toString(destination.getNumberOfQueuedMessages()))
-                .append("</a>");
-        long age = destination.getHeadMessageAgeMillis().orElse(0);
-        if (age > 0) {
-            out.append("<div class='matsbm_age'>(").append(millisSpanToHuman(age)).append(")</div>");
-        }
-    }
-
-    private static String millisSpanToHuman(long millis) {
-        if (millis < 60_000) {
-            return millis + " ms";
-        }
-        else {
-            Duration d = Duration.ofMillis(millis);
-            long days = d.toDays();
-            d = d.minusDays(days);
-            long hours = d.toHours();
-            d = d.minusHours(hours);
-            long minutes = d.toMinutes();
-            d = d.minusMinutes(minutes);
-            long seconds = d.getSeconds();
-
-            StringBuilder buf = new StringBuilder();
-            if (days > 0) {
-                buf.append(days).append("d");
-            }
-            if ((hours > 0) || (buf.length() != 0)) {
-                if (buf.length() != 0) {
-                    buf.append(":");
-                }
-                buf.append(hours).append("h");
-            }
-            if ((minutes > 0) || (buf.length() != 0)) {
-                if (buf.length() != 0) {
-                    buf.append(":");
-                }
-                buf.append(minutes).append("m");
-            }
-            if (buf.length() != 0) {
-                buf.append(":");
-            }
-            buf.append(seconds).append("s");
-            return buf.toString();
-        }
-    }
-
-    private static String formatTimestamp(Instant instant) {
-        long millisAgo = System.currentTimeMillis() - instant.toEpochMilli();
-        return LocalDateTime.ofInstant(instant, ZoneId.systemDefault()) + " (" + millisSpanToHuman(millisAgo) + ")";
-    }
-
-    private static String formatTimestamp(long timestamp) {
-        return formatTimestamp(Instant.ofEpochMilli(timestamp));
-    }
-
-    static final DecimalFormatSymbols NF_SYMBOLS;
-    static final DecimalFormat NF_INTEGER;
-    static final DecimalFormat NF_3_DECIMALS;
-    static {
-        NF_SYMBOLS = new DecimalFormatSymbols(Locale.US);
-        NF_SYMBOLS.setDecimalSeparator('.');
-        NF_SYMBOLS.setGroupingSeparator('\u202f');
-
-        NF_INTEGER = new DecimalFormat("#,##0");
-        NF_INTEGER.setMaximumFractionDigits(0);
-        NF_INTEGER.setDecimalFormatSymbols(NF_SYMBOLS);
-
-        NF_3_DECIMALS = new DecimalFormat("#,##0.000");
-        NF_3_DECIMALS.setMaximumFractionDigits(3);
-        NF_3_DECIMALS.setDecimalFormatSymbols(NF_SYMBOLS);
     }
 }

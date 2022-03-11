@@ -56,10 +56,6 @@
 /* ============ */
 
 
-.matsbm_integer {
-    color: #b02a37;
-}
-
 .matsbm_age {
     display: inline;
     font-size: 75%;
@@ -98,7 +94,6 @@
     text-decoration: none;
     background-color: initial;
     background-image: linear-gradient(#00D775, #00BD68);
-  /*  box-shadow: rgba(0, 0, 0, .3) 0 5px 15px; */
     border-radius: 6px;
     box-shadow: rgba(0, 0, 0, 0.1) 0 2px 4px;
     color: #FFFFFF;
@@ -143,7 +138,7 @@
 }
 
 .matsbm_info {
-    margin: 0em 0em 0em 0.5em;
+    margin: 0 0 0 0.5em;
 }
 
 /* boxes */
@@ -240,6 +235,43 @@
     border-bottom: thin solid #dddddd;
 }
 
+/* Action buttons */
+.matsmb_actionbuttons {
+    position: sticky;
+    top: 0;
+    background: #d0d0d0;
+    z-index: 1;
+}
+
+.matsmb_button {
+    color: white;
+    padding: 0.5em 2em 0.5em 2em;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+    border-radius: 8px;
+}
+
+.matsmb_button_reissue {
+    background-color: #4CAF50;
+}
+.matsmb_button_delete {
+    background-color: #f44336;
+}
+.matsmb_button_delete_cancel {
+    background-color: dimgray;
+}
+.matsmb_button_delete_disabled {
+    background-color: #e0e0e0;
+    color: dimgray;
+}
+.matsmb_button_hidden {
+    display: none;
+}
+
 /* TABLE: Flow and Message properties */
 
 .matsbm_table_message_props {
@@ -250,7 +282,7 @@
 
 .matsbm_table_message_props thead th {
     position: sticky;
-    top: 0;
+    top: 6em;
     background-color: #009879;
     color: #ffffff;
 }
@@ -285,25 +317,41 @@
 
 .matsbm_table_matstrace thead th {
     position: sticky;
-    top: 0;
+    top: 6em;
     background-color: #009879;
     color: #ffffff;
 }
 
 .matsbm_table_matstrace th, .matsbm_table_matstrace td {
-    padding: 0.5em 0.5em 0.5em 0.5em;
+    padding: 0.1em 0.5em 0.1em 0.5em;
 }
 
-.matsbm_table_matstrace tbody tr {
-    border-bottom: thin solid #dddddd;
+.matsbm_table_matstrace .processing {
+    height: 100%;
+    background: linear-gradient(0deg, #f0f0f0 0%, darkgray 20%, darkgray 80%, #f0f0f0 100%);;
+    color: #00333f;
 }
 
-.matsbm_table_matstrace tbody tr:nth-of-type(even) {
-    background-color: #f3f3f3;
+.matsmb_row_hover {
+    background: #ffff99 !important;
 }
 
-.matsbm_table_matstrace tbody tr:hover {
-    background-color: #ffff99;
+.matsbm_table_matstrace .call {
+    height: 100%;
+    background: #f0f0f0;
+}
+
+.matsbm_table_matstrace .indent {
+    width: 2em;
+    height: 100%;
+    padding: 0 0 0 1em;
+}
+
+.matsbm_line {
+    border-left: 6px solid green;
+    height: 100%;
+    margin-top: -1em;
+    padding-bottom: 1em;
 }
 
 .matsbm_table_matstrace tbody tr:last-of-type {
@@ -317,15 +365,14 @@
 
 /* Call modal */
 
-.matsmb_callrow_active {
-    background-color: #00D775 !important;
+.matsmb_row_active {
+    background: #00D775 !important;
 }
 
 .matsbm_box_call_and_state_modal {
     border-radius: 3px;
     box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
     border: thin solid #a0a0a0;
-    /*margin: 0.2em 0.2em 0.2em 0.5em;*/
     padding: 0.5em 1em 0.7em 0.5em;
     background-color: white;
 
@@ -334,15 +381,10 @@
     position: fixed;
     top: 200px;
     left: 700px;
-    /*transition: visibility 0s linear 0.25s, opacity 0.25s 0s, transform 0.25s;*/
-    /*top: 50%;*/
-    /*left: 70%;*/
-    /*transform: translate(-50%, -50%);*/
 }
 
 .matsbm_box_call_and_state_modal_visible {
     visibility: visible;
-    /*transition: visibility 0s linear 0s, opacity 0.25s 0s, transform 0.25s;*/
 }
 /* the JSON box for DTO and STO */
 .matsbm_box_call_or_state {
@@ -354,7 +396,6 @@
     margin: 0.2em 0 0.2em 0.5em;
     padding: 0.2em 0.2em 0.2em 0.2em;
     max-width: 1000px;
-    /* max-height: 50px; */
 }
 
 /* the actual JSON, with scrollbars */
@@ -381,54 +422,6 @@
 }
 
 .matsmb_callmodalunderlay_visible {
-    opacity: 1;
-    visibility: visible;
-    transform: scaleX(1.0) scaleY(1.0);
-    transition: visibility 0s linear 0s, opacity 0.25s 0s, transform 0.25s;
-}
-
-/* ==================== */
-
-.modal {
-    position: fixed;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
-    opacity: 0;
-    visibility: hidden;
-    transform: scaleX(1.1) scaleY(1.1);
-    transition: visibility 0s linear 0.25s, opacity 0.25s 0s, transform 0.25s;
-    font-family: sans-serif;
-}
-
-.modal-content {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background-color: white;
-    padding: 1rem 1.5rem;
-    width: 24rem;
-    border-radius: 0.5rem;
-}
-
-.close-button {
-    float: right;
-    width: 1.5rem;
-    line-height: 1.5rem;
-    text-align: center;
-    cursor: pointer;
-    border-radius: 0.25rem;
-    background-color: lightgray;
-}
-
-.close-button:hover {
-    background-color: darkgray;
-}
-
-.show-modal {
     opacity: 1;
     visibility: visible;
     transform: scaleX(1.0) scaleY(1.0);

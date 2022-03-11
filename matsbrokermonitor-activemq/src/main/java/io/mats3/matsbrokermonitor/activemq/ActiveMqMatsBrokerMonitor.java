@@ -19,7 +19,6 @@ import java.util.function.Consumer;
 
 import javax.jms.ConnectionFactory;
 
-import io.mats3.matsbrokermonitor.api.DestinationType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

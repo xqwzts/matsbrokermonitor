@@ -1,5 +1,6 @@
 package io.mats3.matsbrokermonitor.jms;
 
+import java.util.Collection;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
@@ -292,7 +293,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
     }
 
     @Override
-    public List<String> deleteMessages(String queueId, List<String> messageSystemIds) {
+    public List<String> deleteMessages(String queueId, Collection<String> messageSystemIds) {
         // TODO: Implement!
         throw new IllegalStateException("Not implemented");
     }
@@ -304,13 +305,14 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
     }
 
     @Override
-    public List<String> moveMessages(String sourceQueueId, String targetQueueId, List<String> messageSystemIds) {
+    public List<String> reissueMessages(String deadLetterQueueId,
+            Collection<String> messageSystemIds) {
         // TODO: Implement!
         throw new IllegalStateException("Not implemented");
     }
 
     @Override
-    public int moveAllMessages(String sourceQueueId, String targetQueueId) {
+    public int reissueAllMessages(String deadLetterQueueId) {
         // TODO: Implement!
         throw new IllegalStateException("Not implemented");
     }
