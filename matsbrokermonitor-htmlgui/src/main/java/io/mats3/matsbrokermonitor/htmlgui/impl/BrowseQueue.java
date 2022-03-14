@@ -27,7 +27,7 @@ class BrowseQueue {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
         out.append("<div class='matsbm_report matsbm_browse_queue'>\n");
-        out.append("<a href='?'>Back to Broker overview</a><br />\n");
+        out.append("<a href='?'>Back to Broker Overview</a><br />\n");
 
         String queueId = destinationId.substring("queue:".length());
 

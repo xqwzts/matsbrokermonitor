@@ -1,5 +1,9 @@
 package io.mats3.matsbrokermonitor.htmlgui.impl;
 
+import java.io.IOException;
+import java.util.Map;
+import java.util.Optional;
+
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerInfo;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.DestinationType;
@@ -10,15 +14,12 @@ import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation.MatsEndpoin
 import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation.MatsStageBrokerRepresentation;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl;
 
-import java.io.IOException;
-import java.util.Map;
-import java.util.Optional;
-
 /**
  * @author Endre Stølsvik 2022-03-13 23:32 - http://stolsvik.com/, endre@stolsvik.com
  */
 class BrokerOverview implements Statics {
-    static void gui_BrokerOverview(MatsBrokerMonitor matsBrokerMonitor, Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
+    static void gui_BrokerOverview(MatsBrokerMonitor matsBrokerMonitor, Appendable out,
+            Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException {
         out.append("<div class='matsbm_report matsbm_broker'>\n");
         out.append("  <div class='matsbm_heading'>");
@@ -118,18 +119,23 @@ class BrokerOverview implements Statics {
         out.append("</div>\n");
     }
 
-
     private static void out_queueCount(Appendable out, MatsBrokerDestination destination) throws IOException {
         String style = destination.isDlq()
                 ? "dlq"
                 : destination.getNumberOfQueuedMessages() == 0 ? "incoming_zero" : "incoming";
-        out.append("<a class='").append(style).append("' href='?browse&destinationId=")
-                .append(destination.getDestinationType() == DestinationType.QUEUE ? "queue:" : "topic:")
-                .append(destination.getDestinationName())
-                .append("'>")
-                .append(destination.isDlq() ? "DLQ:" : "")
-                .append(Long.toString(destination.getNumberOfQueuedMessages()))
-                .append("</a>");
+        if (destination.getDestinationType() == DestinationType.QUEUE) {
+            out.append("<a class='").append(style).append("' href='?browse&destinationId=")
+                    .append(destination.getDestinationType() == DestinationType.QUEUE ? "queue:" : "topic:")
+                    .append(destination.getDestinationName())
+                    .append("'>");
+        }
+        else {
+            out.append("<div class='matsbm_topic'>");
+        }
+        out.append(destination.isDlq() ? "DLQ:" : "")
+                .append(Long.toString(destination.getNumberOfQueuedMessages()));
+        out.append(destination.getDestinationType() == DestinationType.QUEUE ? "</a>" : "</div>");
+
         long age = destination.getHeadMessageAgeMillis().orElse(0);
         if (age > 0) {
             out.append("<div class='matsbm_age'>(").append(Statics.millisSpanToHuman(age)).append(")</div>");

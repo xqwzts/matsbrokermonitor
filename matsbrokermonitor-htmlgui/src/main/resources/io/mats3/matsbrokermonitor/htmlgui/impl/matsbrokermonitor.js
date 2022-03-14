@@ -82,10 +82,6 @@ function matsmb_clearcallmodal_noncond() {
 }
 
 function matsbm_callmodal(event) {
-    console.log("Triggered!");
-    console.log(event);
-    console.log(event.target)
-
     // Un-hide on the specific call modal
     let tr = event.target.closest("tr");
     let callno = tr.getAttribute("data-callno");
@@ -103,6 +99,9 @@ function matsbm_callmodal(event) {
     callRow.classList.add("matsmb_row_active")
     processRow.classList.add("matsmb_row_active")
 
+    // Clear hover
+    matsmb_hover_call_out();
+
     // Set the active call number
     matsmb_activecallmodal = callno;
 }
@@ -116,7 +115,7 @@ function matsmb_hover_call(event) {
     processRow.classList.add("matsmb_row_hover")
 }
 
-function matsmb_hover_call_out(event) {
+function matsmb_hover_call_out() {
     for (const row of document.body.querySelectorAll("#matsbm_table_matstrace tr")) {
         row.classList.remove("matsmb_row_hover");
     }

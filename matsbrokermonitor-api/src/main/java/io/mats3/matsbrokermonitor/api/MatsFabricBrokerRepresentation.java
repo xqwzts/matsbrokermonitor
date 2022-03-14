@@ -1,10 +1,11 @@
 package io.mats3.matsbrokermonitor.api;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
-import java.util.SortedMap;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
+import io.mats3.matsbrokermonitor.api.impl.MatsFabricArranger;
 
 /**
  * Consumes the info from {@link MatsBrokerMonitor}, and stacks it up in a Mats-relevant representation.
@@ -19,7 +20,7 @@ public interface MatsFabricBrokerRepresentation {
      * @return a Mats-relevant representation.
      */
     static MatsFabricBrokerRepresentation stack(Collection<MatsBrokerDestination> matsDestinations) {
-        return _Impl.stack_interal(matsDestinations);
+        return MatsFabricArranger.stack_interal(matsDestinations);
     }
 
     /**
@@ -29,24 +30,14 @@ public interface MatsFabricBrokerRepresentation {
     Optional<MatsBrokerDestination> getGlobalDlq();
 
     /**
-     * @return Map[String:EndpointGroupName, MatsEndpointGroupBrokerRepresentation]
-     */
-    SortedMap<String, MatsEndpointGroupBrokerRepresentation> getMatsEndpointGroupBrokerRepresentations();
-
-    /**
      * @return Map[String:EndpointId, MatsEndpointBrokerRepresentation]
      */
-    SortedMap<String, MatsEndpointBrokerRepresentation> getMatsEndpointBrokerRepresentations();
+    Map<String, MatsEndpointBrokerRepresentation> getMatsEndpointBrokerRepresentations();
 
     /**
-     * Representation of a Mats "EndpointGroup", as defined by the first part of the endpoint name, i.e.
-     * <code>"EndpointGroup.[SubServiceName.]methodName"</code>.
+     * @return Map[String:EndpointGroupName, MatsEndpointGroupBrokerRepresentation]
      */
-    interface MatsEndpointGroupBrokerRepresentation {
-        String getEndpointGroup();
-
-        SortedMap<String, MatsEndpointBrokerRepresentation> getMatsEndpointBrokerRepresentations();
-    }
+    Map<String, MatsEndpointGroupBrokerRepresentation> getMatsEndpointGroupBrokerRepresentations();
 
     /**
      * Representation of a Mats Endpoint (which contains all stages) as seen from the "Mats Fabric", i.e. as seen from
@@ -55,7 +46,17 @@ public interface MatsFabricBrokerRepresentation {
     interface MatsEndpointBrokerRepresentation {
         String getEndpointId();
 
-        SortedMap<Integer, MatsStageBrokerRepresentation> getStages();
+        Map<Integer, MatsStageBrokerRepresentation> getStages();
+    }
+
+    /**
+     * Representation of a Mats "EndpointGroup", a collection of Endpoint, grouped by the first part of the endpoint
+     * name, i.e. <code>"EndpointGroup.[SubServiceName.]methodName"</code>.
+     */
+    interface MatsEndpointGroupBrokerRepresentation {
+        String getEndpointGroup();
+
+        Map<String, MatsEndpointBrokerRepresentation> getMatsEndpointBrokerRepresentations();
     }
 
     /**

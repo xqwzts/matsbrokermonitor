@@ -1,7 +1,9 @@
-package io.mats3.matsbrokermonitor.api;
+package io.mats3.matsbrokermonitor.api.impl;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.SortedMap;
@@ -11,6 +13,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
+import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation.MatsEndpointBrokerRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation.MatsEndpointGroupBrokerRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation.MatsStageBrokerRepresentation;
@@ -18,15 +21,16 @@ import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation.MatsStageBr
 /**
  * @author Endre Stølsvik 2022-01-09 00:23 - http://stolsvik.com/, endre@stolsvik.com
  */
-public final class _Impl {
+public final class MatsFabricArranger {
 
-    private _Impl() {
+    private MatsFabricArranger() {
         /* hide constructor */
     }
 
     private static final Pattern STAGE_PATTERN = Pattern.compile("(.*)\\.stage(\\d+)");
 
-    static MatsFabricBrokerRepresentation stack_interal(Collection<MatsBrokerDestination> matsBrokerDestinations) {
+    public static MatsFabricBrokerRepresentation stack_interal(
+            Collection<MatsBrokerDestination> matsBrokerDestinations) {
         MatsBrokerDestination globalDlq = null;
         SortedMap<String, MatsEndpointBrokerRepresentationImpl> endpointBrokerRepresentations = new TreeMap<>();
         for (MatsBrokerDestination matsBrokerDestination : matsBrokerDestinations) {
@@ -74,7 +78,8 @@ public final class _Impl {
             }
         }
 
-        // :: Stack up into "EndpointGroups"
+        // :: Stack endpoints up into "EndpointGroups"
+        // [EndpointGroupId, [EndpointId, EndpointRepresentation]]
         TreeMap<String, TreeMap<String, MatsEndpointBrokerRepresentation>> services = endpointBrokerRepresentations
                 .values().stream()
                 .map(e -> (MatsEndpointBrokerRepresentation) e)
@@ -88,7 +93,8 @@ public final class _Impl {
                             throw new IllegalStateException("Collision! [" + ep1 + "], [" + ep2 + "]");
                         }, TreeMap::new)));
 
-        TreeMap<String, MatsEndpointGroupBrokerRepresentation> matsServiceBrokerRepresentations = services.entrySet().stream()
+        TreeMap<String, MatsEndpointGroupBrokerRepresentation> matsServiceBrokerRepresentations = services.entrySet()
+                .stream()
                 .collect(Collectors.toMap(Entry::getKey,
                         entry -> new MatsEndpointGroupBrokerRepresentationImpl(entry.getKey(), entry.getValue()),
                         (sg1, sg2) -> {
@@ -102,12 +108,12 @@ public final class _Impl {
 
     static class MatsFabricBrokerRepresentationImpl implements MatsFabricBrokerRepresentation {
         private final MatsBrokerDestination _globalDlq;
-        private final SortedMap<String, ? extends MatsEndpointGroupBrokerRepresentation> _matsServiceBrokerRepresentations;
-        private final SortedMap<String, ? extends MatsEndpointBrokerRepresentation> _matsEndpointBrokerRepresentations;
+        private final Map<String, ? extends MatsEndpointGroupBrokerRepresentation> _matsServiceBrokerRepresentations;
+        private final Map<String, ? extends MatsEndpointBrokerRepresentation> _matsEndpointBrokerRepresentations;
 
         public MatsFabricBrokerRepresentationImpl(MatsBrokerDestination globalDlq,
-                SortedMap<String, ? extends MatsEndpointGroupBrokerRepresentation> matsServiceBrokerRepresentations,
-                SortedMap<String, ? extends MatsEndpointBrokerRepresentation> matsEndpointBrokerRepresentations) {
+                Map<String, ? extends MatsEndpointGroupBrokerRepresentation> matsServiceBrokerRepresentations,
+                Map<String, ? extends MatsEndpointBrokerRepresentation> matsEndpointBrokerRepresentations) {
             _matsServiceBrokerRepresentations = matsServiceBrokerRepresentations;
             _matsEndpointBrokerRepresentations = matsEndpointBrokerRepresentations;
             _globalDlq = globalDlq;
@@ -119,41 +125,20 @@ public final class _Impl {
         }
 
         @Override
-        public SortedMap<String, MatsEndpointGroupBrokerRepresentation> getMatsEndpointGroupBrokerRepresentations() {
-            return Collections.unmodifiableSortedMap(_matsServiceBrokerRepresentations);
+        public Map<String, MatsEndpointBrokerRepresentation> getMatsEndpointBrokerRepresentations() {
+            return Collections.unmodifiableMap(_matsEndpointBrokerRepresentations);
         }
 
         @Override
-        public SortedMap<String, MatsEndpointBrokerRepresentation> getMatsEndpointBrokerRepresentations() {
-            return Collections.unmodifiableSortedMap(_matsEndpointBrokerRepresentations);
-        }
-    }
-
-    static class MatsEndpointGroupBrokerRepresentationImpl implements MatsEndpointGroupBrokerRepresentation {
-        private final String _serviceName;
-        private final SortedMap<String, MatsEndpointBrokerRepresentation> _matsEndpointBrokerRepresentations;
-
-        public MatsEndpointGroupBrokerRepresentationImpl(String serviceName,
-                SortedMap<String, MatsEndpointBrokerRepresentation> matsEndpointBrokerRepresentations) {
-            _serviceName = serviceName;
-            _matsEndpointBrokerRepresentations = matsEndpointBrokerRepresentations;
-        }
-
-        @Override
-        public String getEndpointGroup() {
-            return _serviceName;
-        }
-
-        @Override
-        public SortedMap<String, MatsEndpointBrokerRepresentation> getMatsEndpointBrokerRepresentations() {
-            return Collections.unmodifiableSortedMap(_matsEndpointBrokerRepresentations);
+        public Map<String, MatsEndpointGroupBrokerRepresentation> getMatsEndpointGroupBrokerRepresentations() {
+            return Collections.unmodifiableMap(_matsServiceBrokerRepresentations);
         }
     }
 
     static class MatsEndpointBrokerRepresentationImpl implements MatsEndpointBrokerRepresentation {
 
         private final String _endpointId;
-        private final SortedMap<Integer, MatsStageBrokerRepresentationImpl> _stages = new TreeMap<>();
+        private final Map<Integer, MatsStageBrokerRepresentationImpl> _stages = new TreeMap<>();
 
         public MatsEndpointBrokerRepresentationImpl(String endpointId) {
             _endpointId = endpointId;
@@ -165,8 +150,43 @@ public final class _Impl {
         }
 
         @Override
-        public SortedMap<Integer, MatsStageBrokerRepresentation> getStages() {
-            return Collections.unmodifiableSortedMap(_stages);
+        public Map<Integer, MatsStageBrokerRepresentation> getStages() {
+            return Collections.unmodifiableMap(_stages);
+        }
+    }
+
+    static class MatsEndpointGroupBrokerRepresentationImpl implements MatsEndpointGroupBrokerRepresentation {
+        private final String _serviceName;
+        private final Map<String, MatsEndpointBrokerRepresentation> _matsEndpointBrokerRepresentations;
+
+        public MatsEndpointGroupBrokerRepresentationImpl(String serviceName,
+                Map<String, MatsEndpointBrokerRepresentation> matsEndpointBrokerRepresentations) {
+            _serviceName = serviceName;
+            // :: We want the "private" endpoints at the end
+            // Split into two maps, then join
+            LinkedHashMap<String, MatsEndpointBrokerRepresentation> nonPrivateEps = new LinkedHashMap<>();
+            LinkedHashMap<String, MatsEndpointBrokerRepresentation> privateEps = new LinkedHashMap<>();
+            for (MatsEndpointBrokerRepresentation epr : matsEndpointBrokerRepresentations.values()) {
+                if (epr.getEndpointId().contains(".private.")) {
+                    privateEps.put(epr.getEndpointId(), epr);
+                }
+                else {
+                    nonPrivateEps.put(epr.getEndpointId(), epr);
+                }
+            }
+            // .. tack the private onto the end of the non-private.
+            nonPrivateEps.putAll(privateEps);
+            _matsEndpointBrokerRepresentations = nonPrivateEps;
+        }
+
+        @Override
+        public String getEndpointGroup() {
+            return _serviceName;
+        }
+
+        @Override
+        public Map<String, MatsEndpointBrokerRepresentation> getMatsEndpointBrokerRepresentations() {
+            return Collections.unmodifiableMap(_matsEndpointBrokerRepresentations);
         }
     }
 

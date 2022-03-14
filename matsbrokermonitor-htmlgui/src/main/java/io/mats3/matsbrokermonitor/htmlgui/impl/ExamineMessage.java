@@ -668,8 +668,9 @@ public class ExamineMessage implements Statics {
 
         // :: MODALS: Calls and optionally also state
 
-        out.append(
-                "<div id='matsmb_callmodalunderlay' class='matsmb_callmodalunderlay' onclick='matsmb_clearcallmodal(event)'>");
+        // The "modal underlay", i.e. "gray out" - starts out 'display: none', visible if modal is showing.
+        out.append("<div id='matsmb_callmodalunderlay' class='matsmb_callmodalunderlay'"
+                + " onclick='matsmb_clearcallmodal(event)'>");
 
         String previousTo = "Initiation";
         for (int i = 0; i < callFlow.size(); i++) {
@@ -678,10 +679,19 @@ public class ExamineMessage implements Statics {
             int currentCallNumber = callFlow.size() == 1 ? matsTrace.getCallNumber() : i + 1;
             out.append("<div class='matsbm_box_call_and_state_modal' id='matsbm_callmodal_" + currentCallNumber
                     + "'>\n");
-            out.append("This is a message from <b>").append(previousTo)
-                    .append("</b><br/>on application <b>").append(currentCall.getCallingAppName())
-                    .append("; v.").append(currentCall.getCallingAppVersion())
-                    .append("</b><br/>running on node <b>").append(currentCall.getCallingHost())
+            String from = matsTrace.getKeepTrace() == KeepMatsTrace.MINIMAL
+                    ? currentCall.getFrom()
+                    : previousTo;
+            String appAndVer = currentCallNumber == 1
+                    ? matsTrace.getInitializingAppName() + "; v."+matsTrace.getInitializingAppVersion()
+                    : currentCall.getCallingAppName() +"; v."+currentCall.getCallingAppVersion();
+            String host = currentCallNumber == 1
+                    ? matsTrace.getInitializingHost()
+                    : currentCall.getCallingHost();
+
+            out.append("This is a message from <b>").append(from)
+                    .append("</b><br/>on application <b>").append(appAndVer)
+                    .append("</b><br/>running on node <b>").append(host)
                     .append("</b><br/>.. and it is a<br />\n");
             out.append("<h3>").append(currentCall.getCallType().toString())
                     .append(" call to <b>").append(currentCall.getTo().getId())
@@ -692,7 +702,7 @@ public class ExamineMessage implements Statics {
             StackState<?> stackState = callToState.get(currentCall);
             if (stackState != null) {
                 out.append("Incoming state: ");
-                presentTransferredObject(out, stackState.getState());
+                out_displaySerializedRepresentation(out, stackState.getState());
             }
             else {
                 out.append("<i>-no incoming state-</i>");
@@ -702,7 +712,7 @@ public class ExamineMessage implements Statics {
             // Message:
             out.append("<div class='matsbm_box_call_or_state'>\n");
             out.append("Incoming message: ");
-            presentTransferredObject(out, currentCall.getData());
+            out_displaySerializedRepresentation(out, currentCall.getData());
             out.append("</div><br />\n");
 
             out.append("</div><br/>\n");
@@ -739,7 +749,10 @@ public class ExamineMessage implements Statics {
         }
     }
 
-    private static void presentTransferredObject(Appendable out, Object data) throws IOException {
+    /**
+     * If String, try to display as JSON, if not just raw. If byte, just display array size.
+     */
+    private static void out_displaySerializedRepresentation(Appendable out, Object data) throws IOException {
         if (data instanceof String) {
             String stringData = (String) data;
             out.append("String[").append(Integer.toString(stringData.length())).append(" chars]<br/>\n");
