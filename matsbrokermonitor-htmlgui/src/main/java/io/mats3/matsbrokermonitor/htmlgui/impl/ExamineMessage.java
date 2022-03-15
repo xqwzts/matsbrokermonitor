@@ -68,7 +68,6 @@ public class ExamineMessage implements Statics {
             matsTrace = deserializedMatsTrace.getMatsTrace();
         }
 
-
         // :: ACTION BUTTONS
 
         // move programmatically configured json-path over to static javascript:
@@ -100,7 +99,7 @@ public class ExamineMessage implements Statics {
         Optional<MatsTrace<String>> stringMatsTraceO = getStringMatsTrace(matsTrace);
 
         if (stringMatsTraceO.isPresent()) {
-            examimeMessage_currentCallMatsTrace(out, stringMatsTraceO.get());
+            examineMessage_currentCallMatsTrace(out, stringMatsTraceO.get());
         }
 
         // :: MATS TRACE!
@@ -510,6 +509,16 @@ public class ExamineMessage implements Statics {
                 + " call's \"to\", and the <i>app/host</i> and <i>DebugInfo</i> from current call -"
                 + " just to aid your intuition.<br />\n");
 
+        // .. SVG-sprite: Arrow down (slanted and colored using CSS)
+        // (from font-awesome, via https://leungwensen.github.io/svg-icon/#awesome)
+        out.append("<svg display='none'>\n"
+                + "  <symbol viewBox='0 0 1558 1483' id='arrow-down'>\n"
+                + "    <path d='M1558 704q0 53-37 90l-651 652q-39 37-91 37-53 0-90-37L38 794Q0 758 0 704q0-53"
+                + "             38-91l74-75q39-37 91-37 53 0 90 37l294 294V128q0-52 38-90t90-38h128q52 0 90 38t38"
+                + "             90v704l294-294q37-37 90-37 52 0 91 37l75 75q37 39 37 91z'/>"
+                + "  </symbol>"
+                + "</svg>");
+
         int highestStackHeight = 0;
         for (int i = 0; i < callFlow.size(); i++) {
             Call<?> currentCall = callFlow.get(i);
@@ -639,14 +648,16 @@ public class ExamineMessage implements Statics {
             String callType;
             switch (currentCall.getCallType()) {
                 case REQUEST:
-                    callType = "\u2198 this is a REQUEST";
+                    callType = "<svg class='matsmb_arrow_req'><use xlink:href=\"#arrow-down\" /></svg> this is a REQUEST";
                     break;
                 case REPLY:
-                    callType = "&nbsp;&nbsp;\u2199 this is a REPLY";
+                    callType = "<svg class='matsmb_arrow_rep'><use xlink:href=\"#arrow-down\" /></svg> this is a REPLY";
                     break;
                 case NEXT:
+                    callType = "<svg class='matsmb_arrow_next'><use xlink:href=\"#arrow-down\" /></svg> this is a " + currentCall.getCallType();
+                    break;
                 case GOTO:
-                    callType = "&nbsp;<b>\u2193</b>&nbsp; this is a " + currentCall.getCallType();
+                    callType = "<svg class='matsmb_arrow_goto'><use xlink:href=\"#arrow-down\" /></svg> this is a " + currentCall.getCallType();
                     break;
                 default:
                     callType = "this is a " + currentCall.getCallType();
@@ -727,7 +738,7 @@ public class ExamineMessage implements Statics {
         out.append("</pre>");
     }
 
-    private static void examimeMessage_currentCallMatsTrace(Appendable out, MatsTrace<String> stringMatsTrace)
+    private static void examineMessage_currentCallMatsTrace(Appendable out, MatsTrace<String> stringMatsTrace)
             throws IOException {
         if (stringMatsTrace != null) {
             Call<String> currentCall = stringMatsTrace.getCurrentCall();

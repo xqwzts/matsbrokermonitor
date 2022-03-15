@@ -310,6 +310,7 @@
 /* TABLE: MatsTrace */
 
 .matsbm_table_matstrace {
+    height: 1px;
     border-collapse: collapse;
     /*font-size: 0.9em;*/
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
@@ -326,10 +327,17 @@
     padding: 0.1em 0.5em 0.1em 0.5em;
 }
 
-.matsbm_table_matstrace .processing {
+.matsbm_table_matstrace tr {
     height: 100%;
-    background: linear-gradient(0deg, #f0f0f0 0%, darkgray 20%, darkgray 80%, #f0f0f0 100%);;
-    color: #00333f;
+}
+
+.matsbm_table_matstrace .processing {
+    background: linear-gradient(0deg, #f0f0f0 0%, #b0b0b0 20%, #b0b0b0 80%, #f0f0f0 100%);;
+    color: #002222;
+}
+
+.matsbm_table_matstrace .call {
+    background: #f0f0f0;
 }
 
 .matsmb_row_hover {
@@ -338,11 +346,6 @@
 
 .matsmb_row_active {  /* for when call-modal is active */
     background: #00D775 !important;
-}
-
-.matsbm_table_matstrace .call {
-    height: 100%;
-    background: #f0f0f0;
 }
 
 .matsbm_table_matstrace .indent {
@@ -354,8 +357,8 @@
 .matsbm_line {
     border-left: 6px solid green;
     height: 100%;
-    margin-top: -1em;
-    padding-bottom: 1em;
+    margin-top: -1.1em;
+    padding-bottom: 0;
 }
 
 .matsbm_table_matstrace tbody tr:last-of-type {
@@ -365,6 +368,36 @@
 .matsbm_from_info {
     vertical-align: top;
     font-style: italic;
+}
+
+.matsmb_arrow_req {
+    width: 1.5em;
+    height: 1.5em;
+    fill: #39a52f;
+    transform: translateY(0.4em) rotate(-40deg);
+    margin-top: -2em;
+}
+
+.matsmb_arrow_rep {
+    width: 1.5em;
+    height: 1.5em;
+    fill: #b73900;  /* #c27615 */
+    transform: translateY(0.4em) rotate(40deg);
+    margin-top: -2em;
+}
+.matsmb_arrow_next {
+    width: 1.5em;
+    height: 1.5em;
+    fill: #254cb7;
+    transform: translateY(0.4em);
+    margin-top: -2em;
+}
+.matsmb_arrow_goto {
+    width: 1.5em;
+    height: 1.5em;
+    fill: #7f15b7;
+    transform: translateY(0.4em);
+    margin-top: -2em;
 }
 
 /* CALL MODAL */
