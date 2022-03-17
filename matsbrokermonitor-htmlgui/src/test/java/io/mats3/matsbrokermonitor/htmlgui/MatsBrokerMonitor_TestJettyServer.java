@@ -133,7 +133,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             MatsBrokerMonitor matsBrokerMonitor1 = ActiveMqMatsBrokerMonitor.create(connFactory, "endre:");
             // Register a dummy listener
             matsBrokerMonitor1.registerListener(destinationUpdateEvent -> {
-                log.info("Got update! " + destinationUpdateEvent);
+                log.info("Listener at TestJettyServer: Got update! " + destinationUpdateEvent);
                 destinationUpdateEvent.getNewOrUpdatedDestinations().forEach((fqName, matsBrokerDestination) -> log
                         .info(".. new/updated: [" + fqName + "] = [" + matsBrokerDestination + "]"));
             });
@@ -142,7 +142,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             sc.setAttribute("matsBrokerMonitor1", matsBrokerMonitor1);
 
             // :: Create the MatsBrokerBrowserAndActions #1
-            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions1 = JmsMatsBrokerBrowseAndActions.create(connFactory);
+            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions1 = JmsMatsBrokerBrowseAndActions.create(connFactory, "endre:");
 
             // :: Create the MatsBrokerMonitorHtmlGui #1
             MatsBrokerMonitorHtmlGuiImpl matsBrokerMonitorHtmlGui1 = MatsBrokerMonitorHtmlGui.create(

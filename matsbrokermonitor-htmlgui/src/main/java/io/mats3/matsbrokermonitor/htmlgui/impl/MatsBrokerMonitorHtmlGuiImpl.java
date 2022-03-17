@@ -8,13 +8,14 @@ import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
@@ -28,7 +29,7 @@ import io.mats3.serial.MatsSerializer;
  *
  * @author Endre Stølsvik 2021-12-17 10:22 - http://stolsvik.com/, endre@stolsvik.com
  */
-public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
+public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, Statics {
     private final Logger log = LoggerFactory.getLogger(MatsBrokerMonitorHtmlGuiImpl.class);
 
     private final MatsBrokerMonitor _matsBrokerMonitor;
@@ -89,6 +90,12 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         if (requestParameters.containsKey("browse")) {
             String destinationId = getBrowseDestinationId(requestParameters, ac);
             // ----- Passed Access Control for browse of specific destination, render it.
+
+            // move programmatically configured json-path over to static javascript:
+            out.append("<script>window.matsmb_json_path = ").append(_jsonUrlPath != null
+                    ? "'" + _jsonUrlPath + "'"
+                    : "null").append(";</script>");
+
             BrowseQueue.gui_BrowseQueue(_matsBrokerMonitor, _matsBrokerBrowseAndActions, out, destinationId, ac);
             return;
         }
@@ -104,8 +111,14 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
                 throw new IllegalArgumentException(">1 messageSystemId args");
             }
             String messageSystemId = messageSystemIds[0];
+
+            // move programmatically configured json-path over to static javascript:
+            out.append("<script>window.matsmb_json_path = ").append(_jsonUrlPath != null
+                    ? "'" + _jsonUrlPath + "'"
+                    : "null").append(";</script>");
+
             ExamineMessage.gui_ExamineMessage(_matsBrokerMonitor, _matsBrokerBrowseAndActions, _matsSerializer,
-                    _jsonUrlPath, out, destinationId, messageSystemId);
+                    out, destinationId, messageSystemId);
             return;
         }
 
@@ -137,47 +150,45 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui {
         return destinationId;
     }
 
-    private static final Pattern __actionPattern = Pattern.compile("\"action\"\\s*:\\s*\"(.*?)\"");
-    private static final Pattern __queueIdPattern = Pattern.compile("\"queueId\"\\s*:\\s*\"(.*?)\"");
-    private static final Pattern __msgSysMsgIdPattern = Pattern.compile("\"msgSysMsgId\"\\s*:\\s*\"(.*?)\"");
-
     @Override
     public void json(Appendable out, Map<String, String[]> requestParameters, String requestBody,
             AccessControl ac) throws IOException, AccessDeniedException {
         log.info("RequestBody: " + requestBody);
-        Matcher action_Matcher = __actionPattern.matcher(requestBody);
-        if (!action_Matcher.find()) {
-            throw new IllegalArgumentException("Missing 'action'!");
+        CommandDto command = Statics.createMapper().readValue(requestBody, CommandDto.class);
+
+        if (command.action == null) {
+            throw new IllegalArgumentException("command.action is null");
         }
-        String action = action_Matcher.group(1);
 
         // --- if delete or reissue
 
-        if ("delete".equals(action) || "reissue".equals(action)) {
-
-            Matcher queueId_Matcher = __queueIdPattern.matcher(requestBody);
-            if (!queueId_Matcher.find()) {
-                throw new IllegalArgumentException("Missing 'queueId'!");
+        if ("delete".equals(command.action) || "reissue".equals(command.action)) {
+            if (command.queueId == null) {
+                throw new IllegalArgumentException("command.queueId is null");
             }
-            String queueId = queueId_Matcher.group(1);
 
-            Matcher msgSysMsgId_Matcher = __msgSysMsgIdPattern.matcher(requestBody);
-            if (!msgSysMsgId_Matcher.find()) {
-                throw new IllegalArgumentException("Missing 'msgSysMsgId'!");
+            if (command.msgSysMsgIds == null) {
+                throw new IllegalArgumentException("command.msgSysMsgIds is null");
             }
-            String msgSysMsgId = msgSysMsgId_Matcher.group(1);
 
-            log.info("action:[" + action + "], queueId: [" + queueId + "], msgSysMsgId:[" + msgSysMsgId + "]");
+            log.info("action:[" + command.action + "], queueId: [" + command.queueId
+                    + "], msgSysMsgIds:[" + command.msgSysMsgIds + "]");
 
-            if ("delete".equals(action)) {
-                _matsBrokerBrowseAndActions.deleteMessages(queueId, Collections.singleton(msgSysMsgId));
+            if ("delete".equals(command.action)) {
+                _matsBrokerBrowseAndActions.deleteMessages(command.queueId, command.msgSysMsgIds);
             }
-            else if ("reissue".equals(action)) {
-                _matsBrokerBrowseAndActions.reissueMessages(queueId, Collections.singleton(msgSysMsgId));
+            else if ("reissue".equals(command.action)) {
+                _matsBrokerBrowseAndActions.reissueMessages(command.queueId, command.msgSysMsgIds);
             }
 
             out.append("{}");
         }
+    }
+
+    private static class CommandDto {
+        String action;
+        String queueId;
+        List<String> msgSysMsgIds;
     }
 
     @Override

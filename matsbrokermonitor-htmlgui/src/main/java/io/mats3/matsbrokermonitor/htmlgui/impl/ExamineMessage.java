@@ -10,6 +10,7 @@ import java.util.Optional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
@@ -24,12 +25,11 @@ import io.mats3.serial.MatsTrace.StackState;
 /**
  * @author Endre Stølsvik 2022-03-13 23:33 - http://stolsvik.com/, endre@stolsvik.com
  */
-public class ExamineMessage implements Statics {
+public class ExamineMessage {
 
     static void gui_ExamineMessage(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, MatsSerializer<?> matsSerializer,
-            String jsonUrlPath, Appendable out,
-            String destinationId, String messageSystemId) throws IOException {
+            Appendable out, String destinationId, String messageSystemId) throws IOException {
         boolean queue = destinationId.startsWith("queue:");
         if (!queue) {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
@@ -70,22 +70,19 @@ public class ExamineMessage implements Statics {
 
         // :: ACTION BUTTONS
 
-        // move programmatically configured json-path over to static javascript:
-        out.append("<script>window.matsmb_json_path = ").append(jsonUrlPath != null
-                ? "'" + jsonUrlPath + "'"
-                : "null").append(";</script>");
-
         out.append("<div class='matsmb_button matsmb_button_reissue'"
-                + " onclick='matsmb_reissue(event, \"" + queueId + "\", \"" + messageSystemId + "\")'>"
+                + " onclick='matsmb_reissue_single(event, \"" + queueId + "\")'>"
                 + "Reissue [R]</div>");
-        out.append("<div id='matsmb_delete' class='matsmb_button matsmb_button_delete'"
-                + " onclick='matsmb_delete_propose(event)'>"
+        out.append("<div id='matsmb_delete_single' class='matsmb_button matsmb_button_delete'"
+                + " onclick='matsmb_delete_propose_single(event)'>"
                 + "Delete [D]</div>");
-        out.append("<div id='matsmb_delete_cancel' class='matsmb_button matsmb_button_delete_cancel"
-                + " matsmb_button_hidden' onclick='matsmb_delete_cancel(event)'>"
+        out.append("<div id='matsmb_delete_cancel_single'"
+                + " class='matsmb_button matsmb_button_delete_cancel matsmb_button_hidden'"
+                + "onclick='matsmb_delete_cancel_single(event)'>"
                 + "Cancel Delete [Esc]</div>");
-        out.append("<div id='matsmb_delete_confirm' class='matsmb_button matsmb_button_delete matsmb_button_hidden'"
-                + " onclick='matsmb_delete_confirmed(event, \"" + queueId + "\", \"" + messageSystemId + "\")'>"
+        out.append("<div id='matsmb_delete_confirm_single'"
+                + " class='matsmb_button matsmb_button_delete matsmb_button_hidden'"
+                + " onclick='matsmb_delete_confirmed_single(event, \"" + queueId + "\")'>"
                 + "Confirm Delete [X]</div>");
         out.append("</div>");
         out.append("<br/>");
@@ -136,7 +133,8 @@ public class ExamineMessage implements Statics {
         out.append("</div>");
     }
 
-    private static void examineMessage_FlowAndMessageProperties(Appendable out, MatsBrokerMessageRepresentation brokerMsg,
+    private static void examineMessage_FlowAndMessageProperties(Appendable out,
+            MatsBrokerMessageRepresentation brokerMsg,
             MatsTrace<?> matsTrace,
             int matsTraceDecompressedLength) throws IOException {
         out.append("<table class='matsbm_table_flow_and_message'><tr>"); // start Flow/Message table
@@ -654,10 +652,12 @@ public class ExamineMessage implements Statics {
                     callType = "<svg class='matsmb_arrow_rep'><use xlink:href=\"#arrow-down\" /></svg> this is a REPLY";
                     break;
                 case NEXT:
-                    callType = "<svg class='matsmb_arrow_next'><use xlink:href=\"#arrow-down\" /></svg> this is a " + currentCall.getCallType();
+                    callType = "<svg class='matsmb_arrow_next'><use xlink:href=\"#arrow-down\" /></svg> this is a "
+                            + currentCall.getCallType();
                     break;
                 case GOTO:
-                    callType = "<svg class='matsmb_arrow_goto'><use xlink:href=\"#arrow-down\" /></svg> this is a " + currentCall.getCallType();
+                    callType = "<svg class='matsmb_arrow_goto'><use xlink:href=\"#arrow-down\" /></svg> this is a "
+                            + currentCall.getCallType();
                     break;
                 default:
                     callType = "this is a " + currentCall.getCallType();
@@ -694,8 +694,8 @@ public class ExamineMessage implements Statics {
                     ? currentCall.getFrom()
                     : previousTo;
             String appAndVer = currentCallNumber == 1
-                    ? matsTrace.getInitializingAppName() + "; v."+matsTrace.getInitializingAppVersion()
-                    : currentCall.getCallingAppName() +"; v."+currentCall.getCallingAppVersion();
+                    ? matsTrace.getInitializingAppName() + "; v." + matsTrace.getInitializingAppVersion()
+                    : currentCall.getCallingAppName() + "; v." + currentCall.getCallingAppVersion();
             String host = currentCallNumber == 1
                     ? matsTrace.getInitializingHost()
                     : currentCall.getCallingHost();
@@ -792,7 +792,6 @@ public class ExamineMessage implements Statics {
                 .replace(";", "<br>\n");
         return "<code>" + debugInfo + "</code>";
     }
-
 
     private static Optional<MatsTrace<String>> getStringMatsTrace(MatsTrace<?> matsTrace) throws IOException {
         Object data = matsTrace.getCurrentCall().getData();

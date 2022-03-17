@@ -1,5 +1,6 @@
 package io.mats3.matsbrokermonitor.jms;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.Iterator;
@@ -12,12 +13,15 @@ import javax.jms.DeliveryMode;
 import javax.jms.JMSException;
 import javax.jms.MapMessage;
 import javax.jms.Message;
+import javax.jms.MessageConsumer;
+import javax.jms.MessageProducer;
 import javax.jms.Queue;
 import javax.jms.QueueBrowser;
 import javax.jms.Session;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 
@@ -28,18 +32,27 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
     private static final Logger log = LoggerFactory.getLogger(JmsMatsBrokerBrowseAndActions.class);
 
     private final ConnectionFactory _connectionFactory;
+    private final String _matsDestinationPrefix;
     private final String _matsTraceKey;
 
-    public static JmsMatsBrokerBrowseAndActions create(ConnectionFactory connectionFactory, String matsTraceKey) {
-        return new JmsMatsBrokerBrowseAndActions(connectionFactory, matsTraceKey);
+    public static JmsMatsBrokerBrowseAndActions create(ConnectionFactory connectionFactory,
+            String matsDestinationPrefix, String matsTraceKey) {
+        return new JmsMatsBrokerBrowseAndActions(connectionFactory, matsDestinationPrefix, matsTraceKey);
+    }
+
+    public static JmsMatsBrokerBrowseAndActions create(ConnectionFactory connectionFactory,
+            String matsDestinationPrefix) {
+        return create(connectionFactory, matsDestinationPrefix, "mats:trace");
     }
 
     public static JmsMatsBrokerBrowseAndActions create(ConnectionFactory connectionFactory) {
-        return new JmsMatsBrokerBrowseAndActions(connectionFactory, "mats:trace");
+        return create(connectionFactory, "mats.", "mats:trace");
     }
 
-    private JmsMatsBrokerBrowseAndActions(ConnectionFactory connectionFactory, String matsTraceKey) {
+    private JmsMatsBrokerBrowseAndActions(ConnectionFactory connectionFactory, String matsDestinationPrefix,
+            String matsTraceKey) {
         _connectionFactory = connectionFactory;
+        _matsDestinationPrefix = matsDestinationPrefix;
         _matsTraceKey = matsTraceKey;
     }
 
@@ -51,6 +64,136 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
     @Override
     public void close() {
         /* nothing to do */
+    }
+
+    @Override
+    public List<String> deleteMessages(String queueId, Collection<String> messageSystemIds) {
+        if (queueId == null) {
+            throw new NullPointerException("queueId");
+        }
+        if (messageSystemIds == null) {
+            throw new NullPointerException("messageSystemIds");
+        }
+
+        Connection connection = null;
+        try {
+            connection = _connectionFactory.createConnection();
+            connection.start();
+            Session session = connection.createSession(false, Session.DUPS_OK_ACKNOWLEDGE);
+            Queue queue = session.createQueue(queueId);
+
+            ArrayList<String> deletedMessageIds = new ArrayList<>();
+            for (String messageSystemId : messageSystemIds) {
+                MessageConsumer consumer = session.createConsumer(queue, "JMSMessageID = '" + messageSystemId + "'");
+                Message message = consumer.receive(150);
+                if (message != null) {
+                    log.info("DELETED MESSAGE: Received and dropping message for id [" + messageSystemId
+                            + "]! Messages Mats' TraceId:[" + message.getStringProperty(JMS_MSG_PROP_TRACE_ID) + "]");
+                    deletedMessageIds.add(message.getJMSMessageID());
+                }
+                else {
+                    log.info("DELETE NOT DONE: Did NOT receive a message for id [" + messageSystemId
+                            + "], not deleted.");
+                }
+                consumer.close();
+            }
+            session.close();
+            connection.close();
+            return deletedMessageIds;
+        }
+        catch (JMSException e) {
+            throw closeExceptionally(connection, e);
+        }
+    }
+
+    @Override
+    public List<String> reissueMessages(String deadLetterQueueId, Collection<String> messageSystemIds) {
+        if (deadLetterQueueId == null) {
+            throw new NullPointerException("deadLetterQueueId");
+        }
+        if (messageSystemIds == null) {
+            throw new NullPointerException("messageSystemIds");
+        }
+
+        Connection connection = null;
+        try {
+            connection = _connectionFactory.createConnection();
+            connection.start();
+            Session session = connection.createSession(true, Session.SESSION_TRANSACTED);
+            Queue dlq = session.createQueue(deadLetterQueueId);
+            MessageProducer genericProducer = session.createProducer(null);
+
+            // NOTICE: This is not optimal in any way, but to avoid premature optimizations and more complex code
+            // before it is needed, I'll just let it be like this: Single move, commit tx.
+            // Could have batched harder, both within transaction, and via the 'messageSelector', using an OR-construct.
+
+            ArrayList<String> reissuedMessageIds = new ArrayList<>();
+            for (String messageSystemId : messageSystemIds) {
+                MessageConsumer consumer = session.createConsumer(dlq, "JMSMessageID = '" + messageSystemId + "'");
+                Message message = consumer.receive(150);
+                try {
+                    MDC.put(MDC_MATS_MESSAGE_SYSTEM_ID, messageSystemId);
+                    if (message != null) {
+                        String originalTo = message.getStringProperty(JMS_MSG_PROP_TO);
+                        String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
+
+                        MDC.put(MDC_MATS_STAGE_ID, originalTo);
+                        MDC.put(MDC_TRACE_ID, traceId);
+                        MDC.put(MDC_MATS_MESSAGE_ID, message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID));
+                        if (originalTo != null) {
+                            String toQueueName = _matsDestinationPrefix + originalTo;
+                            Queue toQueue = session.createQueue(toQueueName);
+                            log.info("REISSUE MESSAGE: Received and reissued message from dlq [" + dlq
+                                    + "] to :[" + toQueue + "]!");
+
+                            genericProducer.send(toQueue, message);
+                            reissuedMessageIds.add(message.getJMSMessageID());
+                        }
+                        else {
+                            String matsDeadLetterQueue = _matsDestinationPrefix + MATS_DEAD_LETTER_ENDPOINT_ID;
+                            Queue matsDlq = session.createQueue(matsDeadLetterQueue);
+                            log.error("Found message without JmsMats JMS StringProperty [" + JMS_MSG_PROP_TO
+                                    + "], so don't know where it was originally destined. Sending it to a"
+                                    + " synthetic Mats \"DLQ\" endpoint [" + matsDlq + "] to handle it,"
+                                    + " and get it away from the DLQ. You may inspect it there, and either delete it,"
+                                    + " or if an actual Mats message, code up a consumer for the endpoint.");
+                            genericProducer.send(matsDlq, message);
+                        }
+                    }
+                    else {
+                        log.info("REISSUE NOT DONE: Did NOT receive a message for id [" + messageSystemId
+                                + "], not reissued.");
+                    }
+                    consumer.close();
+                }
+                finally {
+                    MDC.remove(MDC_MATS_MESSAGE_SYSTEM_ID);
+                    MDC.remove(MDC_MATS_STAGE_ID);
+                    MDC.remove(MDC_TRACE_ID);
+                    MDC.remove(MDC_MATS_MESSAGE_ID);
+                }
+                session.commit();
+            }
+            genericProducer.close();
+            session.close();
+            connection.close();
+            return reissuedMessageIds;
+        }
+        catch (JMSException e) {
+            throw closeExceptionally(connection, e);
+        }
+    }
+
+    @Override
+    public int deleteAllMessages(String destinationId) {
+        // TODO: Implement!
+        throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public int reissueAllMessages(String deadLetterQueueId) {
+        // TODO: Implement!
+        throw new IllegalStateException("Not implemented");
     }
 
     @Override
@@ -88,24 +231,29 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             QueueBrowser browser = session.createBrowser(queue, jmsMessageSelector);
             @SuppressWarnings("unchecked")
             Enumeration<Message> messageEnumeration = (Enumeration<Message>) browser.getEnumeration();
+            // The Iterator will close the connection upon close.
             return new MatsBrokerMessageIterableImpl(connection, _matsTraceKey, messageEnumeration);
         }
         catch (JMSException e) {
-            JMSException suppressed = null;
-            if (connection != null) {
-                try {
-                    connection.close();
-                }
-                catch (JMSException ex) {
-                    suppressed = ex;
-                }
-            }
-            BrokerIOException brokerIOException = new BrokerIOException("Problems talking with broker.", e);
-            if (suppressed != null) {
-                brokerIOException.addSuppressed(suppressed);
-            }
-            throw brokerIOException;
+            throw closeExceptionally(connection, e);
         }
+    }
+
+    private BrokerIOException closeExceptionally(Connection connection, JMSException e) {
+        JMSException suppressed = null;
+        if (connection != null) {
+            try {
+                connection.close();
+            }
+            catch (JMSException ex) {
+                suppressed = ex;
+            }
+        }
+        BrokerIOException brokerIOException = new BrokerIOException("Problems talking with broker.", e);
+        if (suppressed != null) {
+            brokerIOException.addSuppressed(suppressed);
+        }
+        return brokerIOException;
     }
 
     private static class MatsBrokerMessageIterableImpl implements MatsBrokerMessageIterable {
@@ -141,44 +289,11 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
 
                 @Override
                 public MatsBrokerMessageRepresentation next() {
-                    return jmsMessageToMatsRepresentation(_messageEnumeration.nextElement(), _matsTraceKey);
+                    return JmsMatsBrokerMessageRepresentationImpl.create(_messageEnumeration.nextElement(),
+                            _matsTraceKey);
                 }
             };
         }
-    }
-
-    private static MatsBrokerMessageRepresentation jmsMessageToMatsRepresentation(Message message, String matsTraceKey)
-            throws BrokerIOException {
-        try {
-            String messageSystemId = message.getJMSMessageID();
-            long timestamp = message.getJMSTimestamp();
-            String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
-            String messageType = message.getStringProperty(JMS_MSG_PROP_MESSAGE_TYPE);
-            String fromStageId = message.getStringProperty(JMS_MSG_PROP_FROM);
-            String initializingApp = message.getStringProperty(JMS_MSG_PROP_INITIALIZING_APP);
-            String initatorId = message.getStringProperty(JMS_MSG_PROP_INITIATOR_ID);
-            // Relevant for Global DLQ, where the original id is now effectively lost
-            String toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
-            boolean persistent = message.getJMSDeliveryMode() == DeliveryMode.PERSISTENT;
-            boolean interactive = message.getJMSPriority() > 4; // Mats-JMS uses 9 for "interactive"
-            long expirationTimestamp = message.getJMSExpiration();
-
-            // Handle MatsTrace
-            byte[] matsTraceBytes = null;
-            String matsTraceMeta = null;
-            if (message instanceof MapMessage) {
-                MapMessage mm = (MapMessage) message;
-                matsTraceBytes = mm.getBytes(matsTraceKey);
-                matsTraceMeta = mm.getString(matsTraceKey + ":meta");
-            }
-            return new JmsMatsBrokerMessageRepresentationImpl(message, messageSystemId, timestamp, traceId, messageType,
-                    fromStageId, initializingApp, initatorId, toStageId, persistent, interactive, expirationTimestamp,
-                    matsTraceBytes, matsTraceMeta);
-        }
-        catch (JMSException e) {
-            throw new BrokerIOException("Couldn't fetch data from JMS Message", e);
-        }
-
     }
 
     private static class JmsMatsBrokerMessageRepresentationImpl implements MatsBrokerMessageRepresentation {
@@ -198,23 +313,41 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         private final byte[] _matsTraceBytes; // nullable
         private final String _matsTraceMeta; // nullable
 
-        public JmsMatsBrokerMessageRepresentationImpl(Message jmsMessage, String messageSystemId, long timestamp,
-                String traceId, String messageType, String fromStageId, String initializingApp, String initiatorId,
-                String toStageId, boolean persistent, boolean interactive, long expirationTimestamp,
-                byte[] matsTraceBytes, String matsTraceMeta) {
-            _jmsMessage = jmsMessage;
+        private static MatsBrokerMessageRepresentation create(
+                Message message, String matsTraceKey) throws BrokerIOException {
+            try {
+                return new JmsMatsBrokerMessageRepresentationImpl(message, matsTraceKey);
+            }
+            catch (JMSException e) {
+                throw new BrokerIOException("Couldn't fetch data from JMS Message", e);
+            }
 
-            _messageSystemId = messageSystemId;
-            _timestamp = timestamp;
-            _traceId = traceId;
-            _messageType = messageType;
-            _fromStageId = fromStageId;
-            _initializingApp = initializingApp;
-            _initiatorId = initiatorId;
-            _toStageId = toStageId;
-            _persistent = persistent;
-            _interactive = interactive;
-            _expirationTimestamp = expirationTimestamp;
+        }
+
+        private JmsMatsBrokerMessageRepresentationImpl(Message message, String matsTraceKey) throws JMSException {
+            _jmsMessage = message;
+
+            _messageSystemId = message.getJMSMessageID();
+            _timestamp = message.getJMSTimestamp();
+            _traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
+            _messageType = message.getStringProperty(JMS_MSG_PROP_MESSAGE_TYPE);
+            _fromStageId = message.getStringProperty(JMS_MSG_PROP_FROM);
+            _initializingApp = message.getStringProperty(JMS_MSG_PROP_INITIALIZING_APP);
+            _initiatorId = message.getStringProperty(JMS_MSG_PROP_INITIATOR_ID);
+            // Relevant for Global DLQ, where the original id is now effectively lost
+            _toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
+            _persistent = message.getJMSDeliveryMode() == DeliveryMode.PERSISTENT;
+            _interactive = message.getJMSPriority() > 4; // Mats-JMS uses 9 for "interactive"
+            _expirationTimestamp = message.getJMSExpiration();
+
+            // Handle MatsTrace
+            byte[] matsTraceBytes = null;
+            String matsTraceMeta = null;
+            if (message instanceof MapMessage) {
+                MapMessage mm = (MapMessage) message;
+                matsTraceBytes = mm.getBytes(matsTraceKey);
+                matsTraceMeta = mm.getString(matsTraceKey + ":meta");
+            }
 
             // These are nullable
             _matsTraceBytes = matsTraceBytes;
@@ -290,30 +423,5 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         public String toString() {
             return this.getClass().getSimpleName() + "{JMS Message: " + _jmsMessage + "}";
         }
-    }
-
-    @Override
-    public List<String> deleteMessages(String queueId, Collection<String> messageSystemIds) {
-        // TODO: Implement!
-        throw new IllegalStateException("Not implemented");
-    }
-
-    @Override
-    public int deleteAllMessages(String destinationId) {
-        // TODO: Implement!
-        throw new IllegalStateException("Not implemented");
-    }
-
-    @Override
-    public List<String> reissueMessages(String deadLetterQueueId,
-            Collection<String> messageSystemIds) {
-        // TODO: Implement!
-        throw new IllegalStateException("Not implemented");
-    }
-
-    @Override
-    public int reissueAllMessages(String deadLetterQueueId) {
-        // TODO: Implement!
-        throw new IllegalStateException("Not implemented");
     }
 }

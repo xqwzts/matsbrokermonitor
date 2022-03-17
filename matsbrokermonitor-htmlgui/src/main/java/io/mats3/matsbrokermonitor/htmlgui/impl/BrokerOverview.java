@@ -17,7 +17,7 @@ import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl
 /**
  * @author Endre Stølsvik 2022-03-13 23:32 - http://stolsvik.com/, endre@stolsvik.com
  */
-class BrokerOverview implements Statics {
+class BrokerOverview {
     static void gui_BrokerOverview(MatsBrokerMonitor matsBrokerMonitor, Appendable out,
             Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException {

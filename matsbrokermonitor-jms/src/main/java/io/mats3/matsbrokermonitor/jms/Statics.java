@@ -4,7 +4,19 @@ package io.mats3.matsbrokermonitor.jms;
  * @author Endre Stølsvik 2022-01-16 23:24 - http://stolsvik.com/, endre@stolsvik.com
  */
 public interface Statics {
+
+
+    String MATS_DEAD_LETTER_ENDPOINT_ID = "MatsDeadLetterQueue";
+
+    String MDC_MATS_MESSAGE_SYSTEM_ID = "mats.MsgSysId";
+    String MDC_MATS_MESSAGE_ID = "mats.MatsMsgId";
+
     // COPIED FROM JmsMatsFactory
+
+    // MDC Keys
+    String MDC_TRACE_ID = "traceId";
+    String MDC_MATS_STAGE_ID = "mats.StageId";
+
     // JMS Properties put on the JMSMessage via set[String|Long|Boolean]Property(..)
     String JMS_MSG_PROP_TRACE_ID = "mats_TraceId"; // String
     String JMS_MSG_PROP_MATS_MESSAGE_ID = "mats_MsgId"; // String

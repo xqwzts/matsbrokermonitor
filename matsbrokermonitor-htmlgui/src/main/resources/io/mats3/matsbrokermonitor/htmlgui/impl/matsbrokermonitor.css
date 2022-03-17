@@ -40,7 +40,7 @@
     margin: 0em 0em 0.5em 0em;
 }
 
-/* common boxes */
+/* Common boxes */
 
 .matsbm_broker, .matsbm_endpoint_group, .matsbm_browse_queue, .matsbm_examine_message {
     border-radius: 3px;
@@ -49,6 +49,45 @@
     margin: 0.5em 0.5em 0.7em 0.5em;
     padding: 0.1em 0.5em 0.5em 0.5em;
 }
+
+/* Common action buttons */
+.matsmb_actionbuttons {
+    position: sticky;
+    top: 0;
+    background: #d0d0d0;
+    z-index: 1; /* Must be under modal-underlay */
+}
+
+.matsmb_button {
+    color: white;
+    padding: 0.5em 2em 0.5em 2em;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+    border-radius: 8px;
+}
+
+.matsmb_button_reissue {
+    background-color: #4CAF50;
+}
+.matsmb_button_delete {
+    background-color: #f44336;
+}
+.matsmb_button_delete_cancel {
+    background-color: #008CBA;;
+}
+.matsmb_button_disabled {
+    background-color: #e0e0e0;
+    color: dimgray;
+    cursor: not-allowed;
+}
+.matsmb_button_hidden {
+    display: none;
+}
+
 
 
 /* ============ */
@@ -172,6 +211,11 @@
     background: #f0f0f0;
 }
 
+#matsmb_checkinvert {
+    padding: 0 0.3em 0 0.3em;
+    float: left;
+}
+
 /* TABLE: Browse queue */
 
 .matsbm_table_browse_queue {
@@ -233,43 +277,6 @@
 
 .matsbm_table_flow_and_message tbody tr {
     border-bottom: thin solid #dddddd;
-}
-
-/* Action buttons */
-.matsmb_actionbuttons {
-    position: sticky;
-    top: 0;
-    background: #d0d0d0;
-    z-index: 1; /* Must be under modal-underlay */
-}
-
-.matsmb_button {
-    color: white;
-    padding: 0.5em 2em 0.5em 2em;
-    text-align: center;
-    text-decoration: none;
-    display: inline-block;
-    font-size: 16px;
-    margin: 4px 2px;
-    cursor: pointer;
-    border-radius: 8px;
-}
-
-.matsmb_button_reissue {
-    background-color: #4CAF50;
-}
-.matsmb_button_delete {
-    background-color: #f44336;
-}
-.matsmb_button_delete_cancel {
-    background-color: #008CBA;;
-}
-.matsmb_button_delete_disabled {
-    background-color: #e0e0e0;
-    color: dimgray;
-}
-.matsmb_button_hidden {
-    display: none;
 }
 
 /* TABLE: Flow and Message properties */
@@ -355,7 +362,7 @@
 }
 
 .matsbm_line {
-    border-left: 6px solid green;
+    border-left: 4px solid green;
     height: 100%;
     margin-top: -1.1em;
     padding-bottom: 0;

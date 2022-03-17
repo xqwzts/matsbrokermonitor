@@ -1,5 +1,12 @@
 package io.mats3.matsbrokermonitor.htmlgui.impl;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -57,5 +64,23 @@ public interface Statics {
         }
     }
 
+    static ObjectMapper createMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        // Read and write any access modifier fields (e.g. private)
+        mapper.setVisibility(PropertyAccessor.ALL, Visibility.NONE);
+        mapper.setVisibility(PropertyAccessor.FIELD, Visibility.ANY);
+
+        // Drop nulls
+        mapper.setSerializationInclusion(Include.NON_NULL);
+
+        // If props are in JSON that aren't in Java DTO, do not fail.
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+        // Write e.g. Dates as "1975-03-11" instead of timestamp, and instead of array-of-ints [1975, 3, 11].
+        // Uses ISO8601 with milliseconds and timezone (if present).
+        mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+        return mapper;
+
+    }
 
 }

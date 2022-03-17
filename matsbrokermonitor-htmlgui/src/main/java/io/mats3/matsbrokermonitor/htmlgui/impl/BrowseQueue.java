@@ -82,12 +82,34 @@ class BrowseQueue {
                     .append(" were in-flight.");
         }
         out.append("<br />\n");
+
+        out.append("<div id='matsmb_reissue_bulk'"
+                + " class='matsmb_button matsmb_button_reissue matsmb_button_disabled'"
+                + " onclick='matsmb_reissue_bulk(event, \"" + queueId + "\", \"" + "messageSystemId" + "\")'>"
+                + "Reissue [R]</div>");
+        out.append("<div id='matsmb_delete_bulk'"
+                + " class='matsmb_button matsmb_button_delete matsmb_button_disabled'"
+                + " onclick='matsmb_delete_propose_bulk(event)'>"
+                + "Delete [D]</div>");
+        out.append("<div id='matsmb_delete_cancel_bulk'"
+                + " class='matsmb_button matsmb_button_delete_cancel matsmb_button_hidden'"
+                + " onclick='matsmb_delete_cancel_bulk(event)'>"
+                + "Cancel Delete [Esc]</div>");
+        out.append("<div id='matsmb_delete_confirm_bulk'"
+                + " class='matsmb_button matsmb_button_delete matsmb_button_hidden'"
+                + " onclick='matsmb_delete_confirmed_bulk(event, \"" + queueId + "\", \"" + "messageSystemId\")'>"
+                + "Confirm Delete [X]</div>");
+        out.append("<br/>");
+
         out.append("<br />\n");
 
         boolean anyMessages = false;
         out.append("<table class='matsbm_table_browse_queue'>");
         out.append("<thead>");
-        out.append("<th>Sent</th>");
+        out.append("<th><input type='checkbox' id='matsmb_checkall' autocomplete='off'"
+                + " onchange='matsmb_checkall(event)'></th>");
+        out.append("<th><input type='button' value='\u2b05 Invert' id='matsmb_checkinvert'"
+                + " onclick='matsmb_checkinvert(event)'> Sent</th>");
         out.append("<th>TraceId</th>");
         out.append("<th>Init App</th>");
         out.append("<th>InitatorId</th>");
@@ -102,6 +124,11 @@ class BrowseQueue {
             for (MatsBrokerMessageRepresentation matsMsg : messages) {
                 anyMessages = true;
                 out.append("<tr>");
+
+                out.append("<td>");
+                out.append("<input type='checkbox' class='matsmb_checkmsg' autocomplete='off' data-msgid='")
+                        .append(matsMsg.getMessageSystemId()).append("' onchange='matsmb_checkmsg(event)'>");
+                out.append("</td>");
 
                 out.append("<td>");
                 out.append("<a href='?examineMessage&destinationId=").append(destinationId)
