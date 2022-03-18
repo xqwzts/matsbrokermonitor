@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import javax.jms.Connection;
@@ -107,7 +109,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
     }
 
     @Override
-    public List<String> reissueMessages(String deadLetterQueueId, Collection<String> messageSystemIds) {
+    public Map<String, String> reissueMessages(String deadLetterQueueId, Collection<String> messageSystemIds) {
         if (deadLetterQueueId == null) {
             throw new NullPointerException("deadLetterQueueId");
         }
@@ -127,7 +129,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             // before it is needed, I'll just let it be like this: Single move, commit tx.
             // Could have batched harder, both within transaction, and via the 'messageSelector', using an OR-construct.
 
-            ArrayList<String> reissuedMessageIds = new ArrayList<>();
+            Map<String, String> reissuedMessageIds = new LinkedHashMap<>(messageSystemIds.size());
             for (String messageSystemId : messageSystemIds) {
                 MessageConsumer consumer = session.createConsumer(dlq, "JMSMessageID = '" + messageSystemId + "'");
                 Message message = consumer.receive(150);
@@ -147,7 +149,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                                     + "] to :[" + toQueue + "]!");
 
                             genericProducer.send(toQueue, message);
-                            reissuedMessageIds.add(message.getJMSMessageID());
+                            reissuedMessageIds.put(messageSystemId, message.getJMSMessageID());
                         }
                         else {
                             String matsDeadLetterQueue = _matsDestinationPrefix + MATS_DEAD_LETTER_ENDPOINT_ID;

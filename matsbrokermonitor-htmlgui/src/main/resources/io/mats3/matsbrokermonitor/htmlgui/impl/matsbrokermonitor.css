@@ -51,14 +51,14 @@
 }
 
 /* Common action buttons */
-.matsmb_actionbuttons {
+.matsbm_actionbuttons {
     position: sticky;
     top: 0;
     background: #d0d0d0;
     z-index: 1; /* Must be under modal-underlay */
 }
 
-.matsmb_button {
+.matsbm_button {
     color: white;
     padding: 0.5em 2em 0.5em 2em;
     text-align: center;
@@ -70,25 +70,28 @@
     border-radius: 8px;
 }
 
-.matsmb_button_reissue {
+.matsbm_button_reissue {
     background-color: #4CAF50;
 }
-.matsmb_button_delete {
+.matsbm_button_delete {
     background-color: #f44336;
 }
-.matsmb_button_delete_cancel {
+.matsbm_button_delete_cancel {
     background-color: #008CBA;;
 }
-.matsmb_button_disabled {
+.matsbm_button_disabled {
     background-color: #e0e0e0;
     color: dimgray;
     cursor: not-allowed;
 }
-.matsmb_button_hidden {
+.matsbm_button_hidden {
     display: none;
 }
 
-
+/* Common Action message */
+#matsbm_action_message {
+    font-size: 16px;
+}
 
 /* ============ */
 /* PAGE: Broker */
@@ -211,7 +214,7 @@
     background: #f0f0f0;
 }
 
-#matsmb_checkinvert {
+#matsbm_checkinvert {
     padding: 0 0.3em 0 0.3em;
     float: left;
 }
@@ -250,6 +253,16 @@
 
 .matsbm_table_browse_queue tbody tr:last-of-type {
     border-bottom: thick solid #009879;
+}
+
+
+.matsbm_table_browse_queue .matsbm_deleted {
+    background-color: #f44336 !important;
+    transition: background-color 2s;
+}
+.matsbm_table_browse_queue .matsbm_reissued {
+    background-color: #4CAF50 !important;
+    transition: background-color 2s;
 }
 
 /* ===================== */
@@ -347,11 +360,11 @@
     background: #f0f0f0;
 }
 
-.matsmb_row_hover {
+.matsbm_row_hover {
     background: #ffff99 !important;
 }
 
-.matsmb_row_active {  /* for when call-modal is active */
+.matsbm_row_active {  /* for when call-modal is active */
     background: #00D775 !important;
 }
 
@@ -377,7 +390,7 @@
     font-style: italic;
 }
 
-.matsmb_arrow_req {
+.matsbm_arrow_req {
     width: 1.5em;
     height: 1.5em;
     fill: #39a52f;
@@ -385,21 +398,21 @@
     margin-top: -2em;
 }
 
-.matsmb_arrow_rep {
+.matsbm_arrow_rep {
     width: 1.5em;
     height: 1.5em;
     fill: #b73900;  /* #c27615 */
     transform: translateY(0.4em) rotate(40deg);
     margin-top: -2em;
 }
-.matsmb_arrow_next {
+.matsbm_arrow_next {
     width: 1.5em;
     height: 1.5em;
     fill: #254cb7;
     transform: translateY(0.4em);
     margin-top: -2em;
 }
-.matsmb_arrow_goto {
+.matsbm_arrow_goto {
     width: 1.5em;
     height: 1.5em;
     fill: #7f15b7;
@@ -410,7 +423,7 @@
 /* CALL MODAL */
 
 /* .. modal underlay ("gray out" when modal visible) */
-.matsmb_callmodalunderlay {
+.matsbm_callmodalunderlay {
     position: fixed;
     left: 0;
     top: 0;
@@ -424,7 +437,7 @@
     z-index: 2; /* Must be OVER button-row */
 }
 
-.matsmb_callmodalunderlay_visible {
+.matsbm_callmodalunderlay_visible {
     opacity: 1;
     visibility: visible;
     transform: scaleX(1.0) scaleY(1.0);

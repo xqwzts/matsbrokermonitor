@@ -83,22 +83,23 @@ class BrowseQueue {
         }
         out.append("<br />\n");
 
-        out.append("<div id='matsmb_reissue_bulk'"
-                + " class='matsmb_button matsmb_button_reissue matsmb_button_disabled'"
-                + " onclick='matsmb_reissue_bulk(event, \"" + queueId + "\", \"" + "messageSystemId" + "\")'>"
+        out.append("<div id='matsbm_reissue_bulk'"
+                + " class='matsbm_button matsbm_button_reissue matsbm_button_disabled'"
+                + " onclick='matsbm_reissue_bulk(event, \"" + queueId + "\")'>"
                 + "Reissue [R]</div>");
-        out.append("<div id='matsmb_delete_bulk'"
-                + " class='matsmb_button matsmb_button_delete matsmb_button_disabled'"
-                + " onclick='matsmb_delete_propose_bulk(event)'>"
+        out.append("<div id='matsbm_delete_bulk'"
+                + " class='matsbm_button matsbm_button_delete matsbm_button_disabled'"
+                + " onclick='matsbm_delete_propose_bulk(event)'>"
                 + "Delete [D]</div>");
-        out.append("<div id='matsmb_delete_cancel_bulk'"
-                + " class='matsmb_button matsmb_button_delete_cancel matsmb_button_hidden'"
-                + " onclick='matsmb_delete_cancel_bulk(event)'>"
+        out.append("<div id='matsbm_delete_cancel_bulk'"
+                + " class='matsbm_button matsbm_button_delete_cancel matsbm_button_hidden'"
+                + " onclick='matsbm_delete_cancel_bulk(event)'>"
                 + "Cancel Delete [Esc]</div>");
-        out.append("<div id='matsmb_delete_confirm_bulk'"
-                + " class='matsmb_button matsmb_button_delete matsmb_button_hidden'"
-                + " onclick='matsmb_delete_confirmed_bulk(event, \"" + queueId + "\", \"" + "messageSystemId\")'>"
+        out.append("<div id='matsbm_delete_confirm_bulk'"
+                + " class='matsbm_button matsbm_button_delete matsbm_button_hidden'"
+                + " onclick='matsbm_delete_confirmed_bulk(event, \"" + queueId + "\")'>"
                 + "Confirm Delete [X]</div>");
+        out.append("<span id='matsbm_action_message'></span>");
         out.append("<br/>");
 
         out.append("<br />\n");
@@ -106,10 +107,10 @@ class BrowseQueue {
         boolean anyMessages = false;
         out.append("<table class='matsbm_table_browse_queue'>");
         out.append("<thead>");
-        out.append("<th><input type='checkbox' id='matsmb_checkall' autocomplete='off'"
-                + " onchange='matsmb_checkall(event)'></th>");
-        out.append("<th><input type='button' value='\u2b05 Invert' id='matsmb_checkinvert'"
-                + " onclick='matsmb_checkinvert(event)'> Sent</th>");
+        out.append("<th><input type='checkbox' id='matsbm_checkall' autocomplete='off'"
+                + " onchange='matsbm_checkall(event)'></th>");
+        out.append("<th><input type='button' value='\u2b05 Invert' id='matsbm_checkinvert'"
+                + " onclick='matsbm_checkinvert(event)'> Sent</th>");
         out.append("<th>TraceId</th>");
         out.append("<th>Init App</th>");
         out.append("<th>InitatorId</th>");
@@ -123,11 +124,11 @@ class BrowseQueue {
         try (MatsBrokerMessageIterable messages = matsBrokerBrowseAndActions.browseQueue(queueId)) {
             for (MatsBrokerMessageRepresentation matsMsg : messages) {
                 anyMessages = true;
-                out.append("<tr>");
+                out.append("<tr id='matsbm_msgid_").append(matsMsg.getMessageSystemId()).append("'>");
 
                 out.append("<td>");
-                out.append("<input type='checkbox' class='matsmb_checkmsg' autocomplete='off' data-msgid='")
-                        .append(matsMsg.getMessageSystemId()).append("' onchange='matsmb_checkmsg(event)'>");
+                out.append("<input type='checkbox' class='matsbm_checkmsg' autocomplete='off' data-msgid='")
+                        .append(matsMsg.getMessageSystemId()).append("' onchange='matsbm_checkmsg(event)'>");
                 out.append("</td>");
 
                 out.append("<td>");

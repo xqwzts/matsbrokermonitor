@@ -7,7 +7,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -92,7 +92,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             // ----- Passed Access Control for browse of specific destination, render it.
 
             // move programmatically configured json-path over to static javascript:
-            out.append("<script>window.matsmb_json_path = ").append(_jsonUrlPath != null
+            out.append("<script>window.matsbm_json_path = ").append(_jsonUrlPath != null
                     ? "'" + _jsonUrlPath + "'"
                     : "null").append(";</script>");
 
@@ -113,7 +113,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             String messageSystemId = messageSystemIds[0];
 
             // move programmatically configured json-path over to static javascript:
-            out.append("<script>window.matsmb_json_path = ").append(_jsonUrlPath != null
+            out.append("<script>window.matsbm_json_path = ").append(_jsonUrlPath != null
                     ? "'" + _jsonUrlPath + "'"
                     : "null").append(";</script>");
 
@@ -150,38 +150,53 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
         return destinationId;
     }
 
+    private static final ObjectMapper MAPPER = Statics.createMapper();
+
     @Override
     public void json(Appendable out, Map<String, String[]> requestParameters, String requestBody,
             AccessControl ac) throws IOException, AccessDeniedException {
         log.info("RequestBody: " + requestBody);
-        CommandDto command = Statics.createMapper().readValue(requestBody, CommandDto.class);
+        CommandDto command = MAPPER.readValue(requestBody, CommandDto.class);
 
         if (command.action == null) {
-            throw new IllegalArgumentException("command.action is null");
+            throw new IllegalArgumentException("command.action is null.");
         }
 
         // --- if delete or reissue
 
         if ("delete".equals(command.action) || "reissue".equals(command.action)) {
             if (command.queueId == null) {
-                throw new IllegalArgumentException("command.queueId is null");
+                throw new IllegalArgumentException("command.queueId is null.");
             }
 
             if (command.msgSysMsgIds == null) {
-                throw new IllegalArgumentException("command.msgSysMsgIds is null");
+                throw new IllegalArgumentException("command.msgSysMsgIds is null.");
             }
 
             log.info("action:[" + command.action + "], queueId: [" + command.queueId
                     + "], msgSysMsgIds:[" + command.msgSysMsgIds + "]");
 
+            List<String> affectedMsgSysMsgIds;
+            Map<String, String> reissuedMsgSysMsgIds = null;
             if ("delete".equals(command.action)) {
-                _matsBrokerBrowseAndActions.deleteMessages(command.queueId, command.msgSysMsgIds);
+                affectedMsgSysMsgIds = _matsBrokerBrowseAndActions.deleteMessages(command.queueId,
+                        command.msgSysMsgIds);
             }
             else if ("reissue".equals(command.action)) {
-                _matsBrokerBrowseAndActions.reissueMessages(command.queueId, command.msgSysMsgIds);
+                reissuedMsgSysMsgIds = _matsBrokerBrowseAndActions.reissueMessages(command.queueId,
+                        command.msgSysMsgIds);
+                affectedMsgSysMsgIds = new ArrayList<>(reissuedMsgSysMsgIds.keySet());
+            }
+            else {
+                throw new IllegalArgumentException("Unknown command.action.");
             }
 
-            out.append("{}");
+            ResultDto result = new ResultDto();
+            result.result = "ok";
+            result.numberOfAffectedMessages = affectedMsgSysMsgIds.size();
+            result.msgSysMsgIds = affectedMsgSysMsgIds;
+            result.reissuedMsgSysMsgIds = reissuedMsgSysMsgIds;
+            out.append(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(result));
         }
     }
 
@@ -189,6 +204,13 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
         String action;
         String queueId;
         List<String> msgSysMsgIds;
+    }
+
+    private static class ResultDto {
+        String result;
+        int numberOfAffectedMessages;
+        List<String> msgSysMsgIds;
+        Map<String, String> reissuedMsgSysMsgIds;
     }
 
     @Override

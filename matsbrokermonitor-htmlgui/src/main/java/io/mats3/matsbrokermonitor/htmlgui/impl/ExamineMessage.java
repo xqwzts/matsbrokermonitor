@@ -35,7 +35,7 @@ public class ExamineMessage {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
         out.append("<div class='matsbm_report matsbm_examine_message'>\n");
-        out.append("<div class='matsmb_actionbuttons'>\n");
+        out.append("<div class='matsbm_actionbuttons'>\n");
         out.append("<a href='?'>Back to Broker Overview</a><br />\n");
         out.append("<a href='?browse&destinationId=").append(destinationId)
                 .append("'>Back to Queue</a> - ");
@@ -70,19 +70,19 @@ public class ExamineMessage {
 
         // :: ACTION BUTTONS
 
-        out.append("<div class='matsmb_button matsmb_button_reissue'"
-                + " onclick='matsmb_reissue_single(event, \"" + queueId + "\")'>"
+        out.append("<div class='matsbm_button matsbm_button_reissue'"
+                + " onclick='matsbm_reissue_single(event, \"" + queueId + "\", \"" + messageSystemId + "\")'>"
                 + "Reissue [R]</div>");
-        out.append("<div id='matsmb_delete_single' class='matsmb_button matsmb_button_delete'"
-                + " onclick='matsmb_delete_propose_single(event)'>"
+        out.append("<div id='matsbm_delete_single' class='matsbm_button matsbm_button_delete'"
+                + " onclick='matsbm_delete_propose_single(event)'>"
                 + "Delete [D]</div>");
-        out.append("<div id='matsmb_delete_cancel_single'"
-                + " class='matsmb_button matsmb_button_delete_cancel matsmb_button_hidden'"
-                + "onclick='matsmb_delete_cancel_single(event)'>"
+        out.append("<div id='matsbm_delete_cancel_single'"
+                + " class='matsbm_button matsbm_button_delete_cancel matsbm_button_hidden'"
+                + "onclick='matsbm_delete_cancel_single(event)'>"
                 + "Cancel Delete [Esc]</div>");
-        out.append("<div id='matsmb_delete_confirm_single'"
-                + " class='matsmb_button matsmb_button_delete matsmb_button_hidden'"
-                + " onclick='matsmb_delete_confirmed_single(event, \"" + queueId + "\")'>"
+        out.append("<div id='matsbm_delete_confirm_single'"
+                + " class='matsbm_button matsbm_button_delete matsbm_button_hidden'"
+                + " onclick='matsbm_delete_confirmed_single(event, \"" + queueId + "\", \"" + messageSystemId + "\")'>"
                 + "Confirm Delete [X]</div>");
         out.append("</div>");
         out.append("<br/>");
@@ -583,7 +583,7 @@ public class ExamineMessage {
 
             // :: PROCESSING row
             out.append("<tr class='processing' id='matsbm_processrow_" + currentCallNumber + "'"
-                    + " onmouseover='matsmb_hover_call(event)' onmouseout='matsmb_hover_call_out(event)' data-callno='"
+                    + " onmouseover='matsbm_hover_call(event)' onmouseout='matsbm_hover_call_out(event)' data-callno='"
                     + currentCallNumber + "'>");
             out.append("<td></td>");
             out.append("<td></td>");
@@ -629,7 +629,7 @@ public class ExamineMessage {
 
             // :: CALL row
             out.append("<tr class='call' id='matsbm_callrow_" + currentCallNumber + "'"
-                    + " onmouseover='matsmb_hover_call(event)' onmouseout='matsmb_hover_call_out(event)' data-callno='"
+                    + " onmouseover='matsbm_hover_call(event)' onmouseout='matsbm_hover_call_out(event)' data-callno='"
                     + currentCallNumber + "'>");
             out.append("<td>#");
             out.append(Integer.toString(currentCallNumber));
@@ -646,17 +646,17 @@ public class ExamineMessage {
             String callType;
             switch (currentCall.getCallType()) {
                 case REQUEST:
-                    callType = "<svg class='matsmb_arrow_req'><use xlink:href=\"#arrow-down\" /></svg> this is a REQUEST";
+                    callType = "<svg class='matsbm_arrow_req'><use xlink:href=\"#arrow-down\" /></svg> this is a REQUEST";
                     break;
                 case REPLY:
-                    callType = "<svg class='matsmb_arrow_rep'><use xlink:href=\"#arrow-down\" /></svg> this is a REPLY";
+                    callType = "<svg class='matsbm_arrow_rep'><use xlink:href=\"#arrow-down\" /></svg> this is a REPLY";
                     break;
                 case NEXT:
-                    callType = "<svg class='matsmb_arrow_next'><use xlink:href=\"#arrow-down\" /></svg> this is a "
+                    callType = "<svg class='matsbm_arrow_next'><use xlink:href=\"#arrow-down\" /></svg> this is a "
                             + currentCall.getCallType();
                     break;
                 case GOTO:
-                    callType = "<svg class='matsmb_arrow_goto'><use xlink:href=\"#arrow-down\" /></svg> this is a "
+                    callType = "<svg class='matsbm_arrow_goto'><use xlink:href=\"#arrow-down\" /></svg> this is a "
                             + currentCall.getCallType();
                     break;
                 default:
@@ -680,8 +680,8 @@ public class ExamineMessage {
         // :: MODALS: Calls and optionally also state
 
         // The "modal underlay", i.e. "gray out" - starts out 'display: none', visible if modal is showing.
-        out.append("<div id='matsmb_callmodalunderlay' class='matsmb_callmodalunderlay'"
-                + " onclick='matsmb_clearcallmodal(event)'>");
+        out.append("<div id='matsbm_callmodalunderlay' class='matsbm_callmodalunderlay'"
+                + " onclick='matsbm_clearcallmodal(event)'>");
 
         String previousTo = "Initiation";
         for (int i = 0; i < callFlow.size(); i++) {

@@ -306,7 +306,9 @@ public class MatsBrokerMonitor_TestJettyServer {
                 res.setContentType("application/json; charset=utf-8");
                 PrintWriter out = res.getWriter();
                 brokerMonitorHtmlGui.json(out, req.getParameterMap(), body, accessControl);
+                return;
             }
+            throw new IllegalArgumentException("Unknown path.");
         }
 
         @Override

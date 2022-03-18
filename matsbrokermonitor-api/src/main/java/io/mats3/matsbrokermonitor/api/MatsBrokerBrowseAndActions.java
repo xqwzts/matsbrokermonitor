@@ -3,6 +3,7 @@ package io.mats3.matsbrokermonitor.api;
 import java.io.Closeable;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -45,7 +46,7 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
 
     int deleteAllMessages(String queueId) throws BrokerIOException;
 
-    List<String> reissueMessages(String deadLetterQueueId, Collection<String> messageSystemIds)
+    Map<String, String> reissueMessages(String deadLetterQueueId, Collection<String> messageSystemIds)
             throws BrokerIOException;
 
     int reissueAllMessages(String deadLetterQueueId) throws BrokerIOException;
