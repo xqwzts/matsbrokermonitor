@@ -85,16 +85,17 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
     }
 
     @Override
-    public void gui(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
+    public void gui(Appendable appendable, Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException {
+        Outputter out = new Outputter(appendable);
         if (requestParameters.containsKey("browse")) {
             String destinationId = getBrowseDestinationId(requestParameters, ac);
             // ----- Passed Access Control for browse of specific destination, render it.
 
             // move programmatically configured json-path over to static javascript:
-            out.append("<script>window.matsbm_json_path = ").append(_jsonUrlPath != null
+            out.html("<script>window.matsbm_json_path = ").DATA(_jsonUrlPath != null
                     ? "'" + _jsonUrlPath + "'"
-                    : "null").append(";</script>");
+                    : "null").html(";</script>");
 
             BrowseQueue.gui_BrowseQueue(_matsBrokerMonitor, _matsBrokerBrowseAndActions, out, destinationId, ac);
             return;
@@ -113,9 +114,9 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             String messageSystemId = messageSystemIds[0];
 
             // move programmatically configured json-path over to static javascript:
-            out.append("<script>window.matsbm_json_path = ").append(_jsonUrlPath != null
+            out.html("<script>window.matsbm_json_path = ").DATA(_jsonUrlPath != null
                     ? "'" + _jsonUrlPath + "'"
-                    : "null").append(";</script>");
+                    : "null").html(";</script>");
 
             ExamineMessage.gui_ExamineMessage(_matsBrokerMonitor, _matsBrokerBrowseAndActions, _matsSerializer,
                     out, destinationId, messageSystemId);

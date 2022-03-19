@@ -24,14 +24,14 @@ class BrowseQueue {
     private static final int MAX_MESSAGES_BROWSER = 2000;
 
     static void gui_BrowseQueue(MatsBrokerMonitor matsBrokerMonitor,
-            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, Appendable out, String destinationId,
+            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, Outputter out, String destinationId,
             AccessControl ac) throws IOException {
         boolean queue = destinationId.startsWith("queue:");
         if (!queue) {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
-        out.append("<div id='matsbm_page_browse_queue' class='matsbm_report'>\n");
-        out.append("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview [Esc]</a><br />\n");
+        out.html("<div id='matsbm_page_browse_queue' class='matsbm_report'>\n");
+        out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview [Esc]</a><br />\n");
 
         String queueId = destinationId.substring("queue:".length());
 
@@ -48,138 +48,127 @@ class BrowseQueue {
             throw new IllegalArgumentException("Unknown destination!");
         }
 
-        out.append("Broker Queue '").append(queueId).append("'");
+        out.html("Broker Queue '").DATA(queueId).html("'");
         // ?: Is this the Global DLQ?
         if (matsBrokerDestination.isGlobalDlq()) {
             // -> Yes, global DLQ
-            out.append(" is the Global DLQ, fully qualified name: [")
-                    .append(matsBrokerDestination.getFqDestinationName())
-                    .append("]<br />\n");
+            out.html(" is the Global DLQ, fully qualified name: [")
+                    .DATA(matsBrokerDestination.getFqDestinationName())
+                    .html("]<br />\n");
         }
         else {
             // -> No, not the Global DLQ
             // ?: Is this a MatsStage Queue or DLQ?
             if (matsBrokerDestination.getMatsStageId().isPresent()) {
                 // -> Mats stage queue.
-                out.append(" is the ");
-                out.append(matsBrokerDestination.isDlq() ? "DLQ" : "incoming Queue");
-                out.append(" for Mats Stage '")
-                        .append(matsBrokerDestination.getMatsStageId().get()).append("'");
+                out.html(" is the ");
+                out.DATA(matsBrokerDestination.isDlq() ? "DLQ" : "incoming Queue");
+                out.html(" for Mats Stage '")
+                        .DATA(matsBrokerDestination.getMatsStageId().get()).html("'");
             }
             else {
                 // -> Non-Mats Queue. Not really supported, but just to handle it.
-                out.append(" is a ");
-                out.append(matsBrokerDestination.isDlq() ? "DLQ" : "Queue");
+                out.html(" is a ");
+                out.DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Queue");
             }
-            out.append("<br />\n");
+            out.html("<br />\n");
         }
 
         long lastUpdate = matsBrokerDestination.getLastUpdateBrokerMillis()
                 .orElse(matsBrokerDestination.getLastUpdateLocalMillis());
         LocalDateTime lastUpdateDt = LocalDateTime.ofInstant(Instant.ofEpochMilli(lastUpdate), ZoneId.systemDefault());
 
-        out.append("At ").append(lastUpdateDt.toString()).append(" it had ")
-                .append(Long.toString(matsBrokerDestination.getNumberOfQueuedMessages()))
-                .append(" messages");
+        out.html("At ").DATA(lastUpdateDt.toString()).html(" it had ")
+                .DATA(matsBrokerDestination.getNumberOfQueuedMessages())
+                .html(" messages");
         if (matsBrokerDestination.getNumberOfInflightMessages().isPresent()) {
-            out.append(" of which ")
-                    .append(Long.toString(matsBrokerDestination.getNumberOfInflightMessages().getAsLong()))
-                    .append(" were in-flight.");
+            out.html(" of which ")
+                    .DATA(matsBrokerDestination.getNumberOfInflightMessages().getAsLong())
+                    .html(" were in-flight.");
         }
-        out.append("<br />\n");
+        out.html("<br />\n");
 
-        out.append("<input type='button' id='matsbm_reissue_bulk' value='Reissue [R]'"
+        out.html("<input type='button' id='matsbm_reissue_bulk' value='Reissue [R]'"
                 + " class='matsbm_button matsbm_button_reissue matsbm_button_disabled'"
-                + " onclick='matsbm_reissue_bulk(event, \"" + queueId + "\")'>");
-        out.append("<input type='button' id='matsbm_delete_bulk' value='Delete [D]'"
+                + " onclick='matsbm_reissue_bulk(event, \"").DATA(queueId).html("\")'>");
+        out.html("<input type='button' id='matsbm_delete_bulk' value='Delete [D]'"
                 + " class='matsbm_button matsbm_button_delete matsbm_button_disabled'"
                 + " onclick='matsbm_delete_propose_bulk(event)'>");
-        out.append("<input type='button' id='matsbm_delete_cancel_bulk' value='Cancel Delete [Esc]'"
+        out.html("<input type='button' id='matsbm_delete_cancel_bulk' value='Cancel Delete [Esc]'"
                 + " class='matsbm_button matsbm_button_delete_cancel matsbm_button_hidden'"
                 + " onclick='matsbm_delete_cancel_bulk(event)'>");
-        out.append("<input type='button' id='matsbm_delete_confirm_bulk' value='Confirm Delete [X]'"
+        out.html("<input type='button' id='matsbm_delete_confirm_bulk' value='Confirm Delete [X]'"
                 + " class='matsbm_button matsbm_button_delete matsbm_button_hidden'"
-                + " onclick='matsbm_delete_confirmed_bulk(event, \"" + queueId + "\")'>");
-        out.append("<span id='matsbm_action_message'></span>");
-        out.append("<br/>");
+                + " onclick='matsbm_delete_confirmed_bulk(event, \"").DATA(queueId).html("\")'>");
+        out.html("<span id='matsbm_action_message'></span>");
+        out.html("<br/>");
 
-        out.append("<br />\n");
+        out.html("<br />\n");
 
         boolean anyMessages = false;
-        out.append("<div class='matsbm_table_container'>"); // For
-        out.append("<table class='matsbm_table_browse_queue'>");
-        out.append("<thead>");
-        out.append("<th><input type='checkbox' id='matsbm_checkall' autocomplete='off'"
+        out.html("<div class='matsbm_table_container'>"); // For
+        out.html("<table class='matsbm_table_browse_queue'>");
+        out.html("<thead>");
+        out.html("<th><input type='checkbox' id='matsbm_checkall' autocomplete='off'"
                 + " onchange='matsbm_checkall(event)'></th>");
-        out.append("<th><input type='button' value='\u2b05 Invert' id='matsbm_checkinvert'"
+        out.html("<th><input type='button' value='\u2b05 Invert' id='matsbm_checkinvert'"
                 + " onclick='matsbm_checkinvert(event)'> Sent</th>");
-        out.append("<th>TraceId</th>");
-        out.append("<th>Init App</th>");
-        out.append("<th>InitatorId</th>");
-        out.append("<th>Type</th>");
-        out.append("<th>From Id</th>");
-        out.append("<th>Persistent</th>");
-        out.append("<th>Interactive</th>");
-        out.append("<th>Expires</th>");
-        out.append("</thead>");
-        out.append("<tbody>");
+        out.html("<th>TraceId</th>");
+        out.html("<th>Init App</th>");
+        out.html("<th>InitatorId</th>");
+        out.html("<th>Type</th>");
+        out.html("<th>From Id</th>");
+        out.html("<th>Persistent</th>");
+        out.html("<th>Interactive</th>");
+        out.html("<th>Expires</th>");
+        out.html("</thead>");
+        out.html("<tbody>");
         int count = 0;
         try (MatsBrokerMessageIterable messages = matsBrokerBrowseAndActions.browseQueue(queueId)) {
             for (MatsBrokerMessageRepresentation matsMsg : messages) {
                 anyMessages = true;
-                out.append("<tr id='matsbm_msgid_").append(matsMsg.getMessageSystemId()).append("'>");
+                out.html("<tr id='matsbm_msgid_").DATA(matsMsg.getMessageSystemId()).html("'>");
 
-                out.append("<td>");
-                out.append("<input type='checkbox' class='matsbm_checkmsg' autocomplete='off' data-msgid='")
-                        .append(matsMsg.getMessageSystemId()).append("' onchange='matsbm_checkmsg(event)'>");
-                out.append("</td>");
+                out.html("<td>");
+                out.html("<input type='checkbox' class='matsbm_checkmsg' autocomplete='off' data-msgid='")
+                        .DATA(matsMsg.getMessageSystemId()).html("' onchange='matsbm_checkmsg(event)'>");
+                out.html("</td>");
 
-                out.append("<td>");
-                out.append("<a href='?examineMessage&destinationId=").append(destinationId)
-                        .append("&messageSystemId=").append(matsMsg.getMessageSystemId()).append("'>");
+                out.html("<td>");
+                out.html("<a href='?examineMessage&destinationId=").DATA(destinationId)
+                        .html("&messageSystemId=").DATA(matsMsg.getMessageSystemId()).html("'>");
                 Instant instant = Instant.ofEpochMilli(matsMsg.getTimestamp());
-                out.append(Statics.formatTimestamp(instant));
-                out.append("</a>");
-                out.append("</td>");
+                out.html(Statics.formatTimestamp(instant));
+                out.html("</a>");
+                out.html("</td>");
 
                 // Found MessageSystemId to be pretty irrelevant in this overview.
 
-                out.append("<td>");
-                out.append(matsMsg.getTraceId());
-                out.append("</td>");
+                out.html("<td>").DATA(matsMsg.getTraceId()).html("</td>");
 
-                out.append("<td>");
-                out.append(matsMsg.getInitializingApp() != null ? matsMsg.getInitializingApp() : "{missing init app}");
-                out.append("</td>");
+                out.html("<td>");
+                out.DATA(matsMsg.getInitializingApp() != null ? matsMsg.getInitializingApp() : "{missing init app}");
+                out.html("</td>");
 
-                out.append("<td>");
-                out.append(matsMsg.getInitiatorId() != null ? matsMsg.getInitiatorId() : "{missing init id}");
-                out.append("</td>");
+                out.html("<td>");
+                out.DATA(matsMsg.getInitiatorId() != null ? matsMsg.getInitiatorId() : "{missing init id}");
+                out.html("</td>");
 
-                out.append("<td>");
-                out.append(matsMsg.getMessageType());
-                out.append(" from");
-                out.append("</td>");
+                out.html("<td>").DATA(matsMsg.getMessageType()).html(" from").html("</td>");
 
-                out.append("<td>");
-                out.append(matsMsg.getFromStageId());
-                out.append("</td>");
+                out.html("<td>").DATA(matsMsg.getFromStageId()).html("</td>");
 
-                out.append("<td>");
-                out.append(matsMsg.isPersistent() ? "Persistent" : "Non-Persistent");
-                out.append("</td>");
+                out.html("<td>").DATA(matsMsg.isPersistent() ? "Persistent" : "Non-Persistent").html("</td>");
 
-                out.append("<td>");
-                out.append(matsMsg.isInteractive() ? "Interactive" : "Non-Interactive");
-                out.append("</td>");
+                out.html("<td>").DATA(matsMsg.isInteractive() ? "Interactive" : "Non-Interactive").html("</td>");
 
-                out.append("<td>");
-                out.append(matsMsg.getExpirationTimestamp() == 0
+                out.html("<td>");
+                out.DATA(matsMsg.getExpirationTimestamp() == 0
                         ? "Never expires"
                         : Statics.formatTimestamp(matsMsg.getExpirationTimestamp()));
-                out.append("</td>");
+                out.html("</td>");
 
-                out.append("</tr>\n");
+                out.html("</tr>\n");
 
                 // Max out
                 if (++count >= MAX_MESSAGES_BROWSER) {
@@ -191,17 +180,17 @@ class BrowseQueue {
         catch (BrokerIOException e) {
             throw new IOException("Can't talk with broker.", e);
         }
-        out.append("</tbody>");
-        out.append("</table>");
-        out.append("<div id='matsbm_num_messages_shown'>Browsing " + count + " messages directly from queue.");
+        out.html("</tbody>");
+        out.html("</table>");
+        out.html("<div id='matsbm_num_messages_shown'>Browsing ").DATA(count).html(" messages directly from queue.");
         if (count > 200) {
-            out.append(" <i>(Note: Our max is " + MAX_MESSAGES_BROWSER + ", but the message broker might have a smaller"
-                    + " max browse. ActiveMQ default is 400)</i>\n");
+            out.html(" <i>(Note: Our max is ").DATA(MAX_MESSAGES_BROWSER).html(
+                    ", but the message broker might have a smaller max browse. ActiveMQ default is 400)</i>\n");
         }
-        out.append("</div></div>");
+        out.html("</div></div>");
         if (!anyMessages) {
-            out.append("<h1>No messages!</h1>");
+            out.html("<h1>No messages!</h1>");
         }
-        out.append("</div>");
+        out.html("</div>");
     }
 }

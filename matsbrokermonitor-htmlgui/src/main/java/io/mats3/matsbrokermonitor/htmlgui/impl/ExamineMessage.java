@@ -29,28 +29,28 @@ public class ExamineMessage {
 
     static void gui_ExamineMessage(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, MatsSerializer<?> matsSerializer,
-            Appendable out, String destinationId, String messageSystemId) throws IOException {
+            Outputter out, String destinationId, String messageSystemId) throws IOException {
         boolean queue = destinationId.startsWith("queue:");
         if (!queue) {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
-        out.append("<div id='matsbm_page_examine_message' class='matsbm_report'>\n");
-        out.append("<div class='matsbm_actionbuttons'>\n");
-        out.append("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview</a><br />\n");
-        out.append("<a id='matsbm_back_browse_queue' href='?browse&destinationId=").append(destinationId)
-                .append("'>Back to Queue [Esc]</a> - ");
+        out.html("<div id='matsbm_page_examine_message' class='matsbm_report'>\n");
+        out.html("<div class='matsbm_actionbuttons'>\n");
+        out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview</a><br />\n");
+        out.html("<a id='matsbm_back_browse_queue' href='?browse&destinationId=").DATA(destinationId)
+                .html("'>Back to Queue [Esc]</a> - ");
 
         String queueId = destinationId.substring("queue:".length());
-        out.append(queueId).append("<br />\n");
+        out.DATA(queueId).html("<br />\n");
 
         Optional<MatsBrokerMessageRepresentation> matsBrokerMessageRepresentationO = matsBrokerBrowseAndActions
                 .examineMessage(queueId, messageSystemId);
         if (!matsBrokerMessageRepresentationO.isPresent()) {
-            out.append("<h1>No such message!</h1><br/>\n");
-            out.append("MessageSystemId: [" + messageSystemId + "].<br/>\n");
-            out.append("Queue:[" + queueId + "]<br/>\n");
-            out.append("</div>");
-            out.append("</div>");
+            out.html("<h1>No such message!</h1><br/>\n");
+            out.html("MessageSystemId: [").DATA(messageSystemId).html("].<br/>\n");
+            out.html("Queue:[").DATA(queueId).html("]<br/>\n");
+            out.html("</div>");
+            out.html("</div>");
             return;
         }
 
@@ -70,21 +70,23 @@ public class ExamineMessage {
 
         // :: ACTION BUTTONS
 
-        out.append("<input type='button' id='matsbm_reissue_single' value='Reissue [R]'"
+        out.html("<input type='button' id='matsbm_reissue_single' value='Reissue [R]'"
                 + " class='matsbm_button matsbm_button_reissue'"
-                + " onclick='matsbm_reissue_single(event,\"" + queueId + "\",\"" + messageSystemId + "\")'>");
-        out.append("<input type='button' id='matsbm_delete_single' value='Delete [D]'"
+                + " onclick='matsbm_reissue_single(event,\"")
+                .DATA(queueId).html("\",\"").DATA(messageSystemId).html("\")'>");
+        out.html("<input type='button' id='matsbm_delete_single' value='Delete [D]'"
                 + " class='matsbm_button matsbm_button_delete'"
                 + " onclick='matsbm_delete_propose_single(event)'>");
-        out.append("<input type='button' id='matsbm_delete_cancel_single' value='Cancel Delete [Esc]'"
+        out.html("<input type='button' id='matsbm_delete_cancel_single' value='Cancel Delete [Esc]'"
                 + " class='matsbm_button matsbm_button_delete_cancel matsbm_button_hidden'"
                 + " onclick='matsbm_delete_cancel_single(event)'>");
-        out.append("<input type='button' id='matsbm_delete_confirm_single' value='Confirm Delete [X]'"
+        out.html("<input type='button' id='matsbm_delete_confirm_single' value='Confirm Delete [X]'"
                 + " class='matsbm_button matsbm_button_delete matsbm_button_hidden'"
-                + " onclick='matsbm_delete_confirmed_single(event,\"" + queueId + "\",\"" + messageSystemId + "\")'>");
-        out.append("<span id='matsbm_action_message'></span>");
-        out.append("</div>");
-        out.append("<br/>");
+                + " onclick='matsbm_delete_confirmed_single(event,\"")
+                .DATA(queueId).html("\",\"").DATA(messageSystemId).html("\")'>");
+        out.html("<span id='matsbm_action_message'></span>");
+        out.html("</div>");
+        out.html("<br/>");
 
         // :: FLOW AND MESSAGE PROPERTIES
 
@@ -96,12 +98,12 @@ public class ExamineMessage {
             // -> No MatsTrace, why?
             if (matsMsg.getMatsTraceBytes().isPresent()) {
                 // -> Seemingly because we don't have a MatsSerializer, and thus cannot deserialize the present bytes.
-                out.append("<br/><h2>NOTICE! There is a serialized MatsTrace byte array in the message, but I am"
+                out.html("<br/><h2>NOTICE! There is a serialized MatsTrace byte array in the message, but I am"
                         + " constructed without a MatsSerializer, so I can't decipher it!</h2><br />\n");
             }
             else {
                 // -> Evidently because there was no MatsTrace in the message.
-                out.append("<br/><h2>NOTICE! Missing MatsTrace information from the message, so cannot show"
+                out.html("<br/><h2>NOTICE! Missing MatsTrace information from the message, so cannot show"
                         + " call trace information!</h2><br />\n");
             }
         }
@@ -118,44 +120,44 @@ public class ExamineMessage {
 
             // ?: Is this not a MatsTrace<String>? Okay then, toString() it.
             if (!(matsTrace.getCurrentCall().getData() instanceof String)) {
-                out.append("<h2>NOTICE: couldn't resolve MatsTrace to MatsTrace&lt;String&gt;!</h2>");
-                out.append("Here's matsTrace.toString() of the MatsTrace present:");
-                out.append("<pre>");
-                out.append(matsTrace.toString().replace('<', '{').replace('>', '}'));
-                out.append("</pre>");
+                out.html("<h2>NOTICE: couldn't resolve MatsTrace to MatsTrace&lt;String&gt;!</h2>");
+                out.html("Here's matsTrace.toString() of the MatsTrace present:");
+                out.html("<pre>");
+                out.html(matsTrace.toString().replace("<", "&lt;").replace(">", "&gt;"));
+                out.html("</pre>");
             }
         }
 
-        out.append("Here's matsMessage.toString(), which should include the raw info from the broker:<br/>\n");
-        out.append(matsMsg.toString());
+        out.html("Here's matsMessage.toString(), which should include the raw info from the broker:<br/>\n");
+        out.html(matsMsg.toString().replace("<", "&lt;").replace(">", "&gt;"));
 
-        out.append("</div>");
+        out.html("</div>");
     }
 
-    private static void part_FlowAndMessageProperties(Appendable out,
+    private static void part_FlowAndMessageProperties(Outputter out,
             MatsBrokerMessageRepresentation brokerMsg,
             MatsTrace<?> matsTrace,
             int matsTraceDecompressedLength) throws IOException {
-        out.append("<div id='matsbm_part_flow_and_message_props'>");
+        out.html("<div id='matsbm_part_flow_and_message_props'>");
 
-        out.append("<table class='matsbm_table_flow_and_message'><tr>"); // start Flow/Message table
-        out.append("<td>\n"); // start Flow information cell
-        out.append("<h2>Flow information</h2>\n");
+        out.html("<table class='matsbm_table_flow_and_message'><tr>"); // start Flow/Message table
+        out.html("<td>\n"); // start Flow information cell
+        out.html("<h2>Flow information</h2>\n");
 
         // :: FLOW PROPERTIES
-        out.append("<table class='matsbm_table_message_props'>");
-        out.append("<thead>");
-        out.append("<tr>");
-        out.append("<th>Property</th>");
-        out.append("<th>Value</th>");
-        out.append("</tr>\n");
-        out.append("</thead>");
-        out.append("<tbody>");
+        out.html("<table class='matsbm_table_message_props'>");
+        out.html("<thead>");
+        out.html("<tr>");
+        out.html("<th>Property</th>");
+        out.html("<th>Value</th>");
+        out.html("</tr>\n");
+        out.html("</thead>");
+        out.html("<tbody>");
 
-        out.append("<tr>");
-        out.append("<td>TraceId</td>");
-        out.append("<td>").append(brokerMsg.getTraceId()).append("</td>");
-        out.append("</tr>\n");
+        out.html("<tr>");
+        out.html("<td>TraceId</td>");
+        out.html("<td>").DATA(brokerMsg.getTraceId()).html("</td>");
+        out.html("</tr>\n");
 
         String initializingApp = "{no info present}";
         String initiatorId = "{no info present}";
@@ -170,205 +172,204 @@ public class ExamineMessage {
             initiatorId = brokerMsg.getInitiatorId();
         }
 
-        out.append("<tr>");
-        out.append("<td>Initializing App @ Host</td>");
-        out.append("<td>").append(initializingApp);
+        out.html("<tr>");
+        out.html("<td>Initializing App @ Host</td>");
+        out.html("<td>").DATA(initializingApp);
         if (matsTrace != null) {
-            out.append(" @ ").append(matsTrace.getInitializingHost());
+            out.html(" @ ").DATA(matsTrace.getInitializingHost());
         }
-        out.append("</td></tr>\n");
+        out.html("</td></tr>\n");
 
-        out.append("<tr>");
-        out.append("<td>Initiator Id</td>");
-        out.append("<td>").append(initiatorId).append("</td>");
-        out.append("</tr>\n");
+        out.html("<tr>");
+        out.html("<td>Initiator Id</td>");
+        out.html("<td>").DATA(initiatorId).html("</td>");
+        out.html("</tr>\n");
 
         if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>Init debug info</td>");
+            out.html("<tr>");
+            out.html("<td>Init debug info</td>");
             String debugInfo = matsTrace.getDebugInfo();
             if ((debugInfo == null) || (debugInfo.isEmpty())) {
                 debugInfo = "{none present}";
             }
-            out.append("<td>").append(debugInfoToHtml(debugInfo)).append("</td>");
-            out.append("</tr>\n");
+            out.html("<td>").html(debugInfoToHtml(debugInfo)).html("</td>");
+            out.html("</tr>\n");
         }
 
         if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>Mats Flow Id</td>");
-            out.append("<td>").append(matsTrace.getFlowId()).append("</td>");
-            out.append("</tr>\n");
+            out.html("<tr>");
+            out.html("<td>Mats Flow Id</td>");
+            out.html("<td>").DATA(matsTrace.getFlowId()).html("</td>");
+            out.html("</tr>\n");
         }
 
         if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>Mats Flow Initialized Timestamp</td>");
-            out.append("<td>").append(Statics.formatTimestamp(matsTrace.getInitializedTimestamp())).append("</td>");
-            out.append("</tr>\n");
+            out.html("<tr>");
+            out.html("<td>Mats Flow Initialized Timestamp</td>");
+            out.html("<td>").DATA(Statics.formatTimestamp(matsTrace.getInitializedTimestamp())).html("</td>");
+            out.html("</tr>\n");
         }
 
         if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>Parent Mats Message Id</td>");
-            out.append("<td>").append(matsTrace.getParentMatsMessageId() != null
+            out.html("<tr>");
+            out.html("<td>Parent Mats Message Id</td>");
+            out.html("<td>").DATA(matsTrace.getParentMatsMessageId() != null
                     ? matsTrace.getParentMatsMessageId()
-                    : "<i>-no parent-</i>").append("</td>");
-            out.append("</tr>\n");
+                    : "<i>-no parent-</i>").html("</td>");
+            out.html("</tr>\n");
         }
 
         // .. MatsTrace props
         if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>&nbsp;&nbsp;KeepMatsTrace</td>");
-            out.append("<td>").append(matsTrace.getKeepTrace().toString()).append(" MatsTrace").append("</td>");
-            out.append("</tr>\n");
-            out.append("<tr>");
+            out.html("<tr>");
+            out.html("<td>&nbsp;&nbsp;KeepMatsTrace</td>");
+            out.html("<td>").DATA(matsTrace.getKeepTrace().toString()).html(" MatsTrace</td>");
+            out.html("</tr>\n");
+            out.html("<tr>");
         }
 
-        out.append("<tr>");
-        out.append("<td>&nbsp;&nbsp;Persistent</td>");
-        out.append("<td>").append(brokerMsg.isPersistent() ? "Persistent" : "Non-Persistent").append("</td>");
-        out.append("</tr>\n");
+        out.html("<tr>");
+        out.html("<td>&nbsp;&nbsp;Persistent</td>");
+        out.html("<td>").DATA(brokerMsg.isPersistent() ? "Persistent" : "Non-Persistent").html("</td>");
+        out.html("</tr>\n");
 
-        out.append("<tr>");
-        out.append("<td>&nbsp;&nbsp;Interactive</td>");
-        out.append("<td>").append(brokerMsg.isInteractive() ? "Interactive" : "Non-Interactive").append("</td>");
-        out.append("</tr>\n");
+        out.html("<tr>");
+        out.html("<td>&nbsp;&nbsp;Interactive</td>");
+        out.html("<td>").DATA(brokerMsg.isInteractive() ? "Interactive" : "Non-Interactive").html("</td>");
+        out.html("</tr>\n");
 
         if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>&nbsp;&nbsp;TimeToLive</td>");
-            out.append("<td>").append(matsTrace.getTimeToLive() == 0 ? "Live Forever"
-                    : matsTrace.getTimeToLive() + " ms").append("</td>");
-            out.append("</tr>\n");
-            out.append("<tr>");
+            out.html("<tr>");
+            out.html("<td>&nbsp;&nbsp;TimeToLive</td>");
+            out.html("<td>").DATA(matsTrace.getTimeToLive() == 0 ? "Live Forever"
+                    : matsTrace.getTimeToLive() + " ms").html("</td>");
+            out.html("</tr>\n");
+            out.html("<tr>");
         }
 
         if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>&nbsp;&nbsp;Audit</td>");
-            out.append("<td>").append(matsTrace.isNoAudit() ? "No audit" : "Audit").append("</td>");
-            out.append("</tr>\n");
+            out.html("<tr>");
+            out.html("<td>&nbsp;&nbsp;Audit</td>");
+            out.html("<td>").DATA(matsTrace.isNoAudit() ? "No audit" : "Audit").html("</td>");
+            out.html("</tr>\n");
         }
 
-        out.append("</tbody>");
-        out.append("</table>");
+        out.html("</tbody>");
+        out.html("</table>");
 
-        out.append("</td>\n"); // end Flow information cell
+        out.html("</td>\n"); // end Flow information cell
 
         // :: MESSAGE PROPERTIES
-        out.append("<td>\n"); // start Message information cell
-        out.append("<h2>Message information (\"Current call\")</h2>");
-        out.append("<table class=\"matsbm_table_message_props\">");
-        out.append("<thead>");
-        out.append("<tr>");
-        out.append("<th>Property</th>");
-        out.append("<th>Value</th>");
-        out.append("</tr>\n");
-        out.append("</thead>");
-        out.append("<tbody>");
+        out.html("<td>\n"); // start Message information cell
+        out.html("<h2>Message information (\"Current call\")</h2>");
+        out.html("<table class=\"matsbm_table_message_props\">");
+        out.html("<thead>");
+        out.html("<tr>");
+        out.html("<th>Property</th>");
+        out.html("<th>Value</th>");
+        out.html("</tr>\n");
+        out.html("</thead>");
+        out.html("<tbody>");
 
-        out.append("<tr>");
-        out.append("<td>Type</td>");
-        out.append("<td>").append(brokerMsg.getMessageType()).append("</td>");
-        out.append("</tr>\n");
+        out.html("<tr>");
+        out.html("<td>Type</td>");
+        out.html("<td>").DATA(brokerMsg.getMessageType()).html("</td>");
+        out.html("</tr>\n");
 
         if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>From App @ Host</td>");
-            out.append("<td>").append(matsTrace.getCurrentCall().getCallingAppName()
+            out.html("<tr>");
+            out.html("<td>From App @ Host</td>");
+            out.html("<td>").DATA(matsTrace.getCurrentCall().getCallingAppName()
                     + "; v." + matsTrace.getCurrentCall().getCallingAppVersion())
-                    .append(" @ ").append(matsTrace.getCurrentCall().getCallingHost())
-                    .append("</td>");
-            out.append("</tr>\n");
+                    .html(" @ ").DATA(matsTrace.getCurrentCall().getCallingHost())
+                    .html("</td>");
+            out.html("</tr>\n");
         }
 
-        out.append("<tr>");
-        out.append("<td>From</td>");
-        out.append("<td>").append(brokerMsg.getFromStageId()).append("</td>");
-        out.append("</tr>\n");
+        out.html("<tr>");
+        out.html("<td>From</td>");
+        out.html("<td>").DATA(brokerMsg.getFromStageId()).html("</td>");
+        out.html("</tr>\n");
 
         if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>Call debug info</td>");
+            out.html("<tr>");
+            out.html("<td>Call debug info</td>");
             String debugInfo = matsTrace.getCurrentCall().getDebugInfo();
             if ((debugInfo == null) || (debugInfo.trim().isEmpty())) {
                 debugInfo = "{none present}";
             }
-            debugInfo = debugInfoToHtml(debugInfo);
-            out.append("<td>").append(debugInfo.replace(";", "<br>\n")).append("</td>");
-            out.append("</tr>\n");
+            out.html("<td>").html(debugInfoToHtml(debugInfo)).html("</td>");
+            out.html("</tr>\n");
         }
 
         if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>Mats Message Id</td>");
-            out.append("<td>").append(matsTrace.getCurrentCall().getMatsMessageId()).append("</td>");
-            out.append("</tr>\n");
+            out.html("<tr>");
+            out.html("<td>Mats Message Id</td>");
+            out.html("<td>").DATA(matsTrace.getCurrentCall().getMatsMessageId()).html("</td>");
+            out.html("</tr>\n");
         }
 
         if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>Mats Message Timestamp</td>");
-            out.append("<td>").append(Statics.formatTimestamp(matsTrace.getCurrentCall().getCalledTimestamp()))
-                    .append("</td>");
-            out.append("</tr>\n");
+            out.html("<tr>");
+            out.html("<td>Mats Message Timestamp</td>");
+            out.html("<td>").DATA(Statics.formatTimestamp(matsTrace.getCurrentCall().getCalledTimestamp()))
+                    .html("</td>");
+            out.html("</tr>\n");
         }
 
-        out.append("<tr>");
-        out.append("<td>To (this)</td>");
-        out.append("<td>").append(brokerMsg.getToStageId()).append("</td>");
-        out.append("</tr>\n");
+        out.html("<tr>");
+        out.html("<td>To (this)</td>");
+        out.html("<td>").DATA(brokerMsg.getToStageId()).html("</td>");
+        out.html("</tr>\n");
 
         if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>Call number</td>");
-            out.append("<td>#").append(Integer.toString(matsTrace.getCallNumber())).append(" in this flow, #")
-                    .append(Integer.toString(matsTrace.getTotalCallNumber())).append(" counting parent flows")
-                    .append("</td>");
-            out.append("</tr>\n");
+            out.html("<tr>");
+            out.html("<td>Call number</td>");
+            out.html("<td>#").DATA(Integer.toString(matsTrace.getCallNumber())).html(" in this flow, #")
+                    .DATA(Integer.toString(matsTrace.getTotalCallNumber())).html(" counting parent flows")
+                    .html("</td>");
+            out.html("</tr>\n");
         }
 
         if (matsTrace != null) {
-            out.append("<tr>");
-            out.append("<td>MatsTrace Size</td>");
+            out.html("<tr>");
+            out.html("<td>MatsTrace Size</td>");
             String size = brokerMsg.getMatsTraceBytes().get().length == matsTraceDecompressedLength
                     ? matsTraceDecompressedLength + " bytes uncompressed"
                     : brokerMsg.getMatsTraceBytes().get().length + " bytes compressed, "
                             + matsTraceDecompressedLength + " bytes decompressed";
-            out.append("<td>").append(size).append("</td>");
-            out.append("</tr>\n");
+            out.html("<td>").DATA(size).html("</td>");
+            out.html("</tr>\n");
         }
 
-        out.append("<tr>");
-        out.append("<td>MsgSys Message Timestamp</td>");
-        out.append("<td>").append(Statics.formatTimestamp(brokerMsg.getTimestamp())).append("</td>");
-        out.append("</tr>\n");
+        out.html("<tr>");
+        out.html("<td>MsgSys Message Timestamp</td>");
+        out.html("<td>").DATA(Statics.formatTimestamp(brokerMsg.getTimestamp())).html("</td>");
+        out.html("</tr>\n");
 
-        out.append("<tr>");
-        out.append("<td>MsgSys Message Id</td>");
-        out.append("<td>").append(brokerMsg.getMessageSystemId()).append("</td>");
-        out.append("</tr>\n");
+        out.html("<tr>");
+        out.html("<td>MsgSys Message Id</td>");
+        out.html("<td>").DATA(brokerMsg.getMessageSystemId()).html("</td>");
+        out.html("</tr>\n");
 
-        out.append("<tr>");
-        out.append("<td>MsgSys Expires</td>");
-        out.append("<td>").append(brokerMsg.getExpirationTimestamp() == 0
+        out.html("<tr>");
+        out.html("<td>MsgSys Expires</td>");
+        out.html("<td>").DATA(brokerMsg.getExpirationTimestamp() == 0
                 ? "Never expires"
                 : Statics.formatTimestamp(brokerMsg.getExpirationTimestamp()))
-                .append("</td>");
-        out.append("</tr>");
+                .html("</td>");
+        out.html("</tr>");
 
-        out.append("</tbody>");
-        out.append("</table>");
+        out.html("</tbody>");
+        out.html("</table>");
 
-        out.append("</td>\n"); // end Message information cell
-        out.append("</tr></table>"); // end Flow/Message table
+        out.html("</td>\n"); // end Message information cell
+        out.html("</tr></table>"); // end Flow/Message table
 
-        out.append("</div>");
+        out.html("</div>");
     }
 
-    private static void part_MatsTrace(Appendable out, MatsTrace<?> matsTrace) throws IOException {
+    private static void part_MatsTrace(Outputter out, MatsTrace<?> matsTrace) throws IOException {
 
         // TODO: ONLY DO IF KeepMatsTrace.FULL
 
@@ -501,20 +502,20 @@ public class ExamineMessage {
 
         // :: CALLS TABLE
 
-        out.append("<div id='matsbm_part_matstrace'>");
+        out.html("<div id='matsbm_part_matstrace'>");
 
-        out.append("<h2>MatsTrace</h2><br/>\n");
-        out.append("<b>Remember that the MatsTrace, and the rows in this table, refers to the <i>calls, i.e. the"
+        out.html("<h2>MatsTrace</h2><br/>\n");
+        out.html("<b>Remember that the MatsTrace, and the rows in this table, refers to the <i>calls, i.e. the"
                 + " messages from one stage to the next in a flow</i>, not the processing on the stages"
                 + " themselves.</b><br/>\n");
-        out.append("Thus, it is the REQUEST, REPLY and NEXT rows (the calls) in the table that are the real info"
+        out.html("Thus, it is the REQUEST, REPLY and NEXT rows (the calls) in the table that are the real info"
                 + " carriers - the <i>\"Processed on\"</i> rows are synthesized with stageId taken from the previous"
                 + " call's \"to\", and the <i>app/host</i> and <i>DebugInfo</i> from current call -"
                 + " just to aid your intuition.<br />\n");
 
         // .. SVG-sprite: Arrow down (slanted and colored using CSS)
         // (from font-awesome, via https://leungwensen.github.io/svg-icon/#awesome)
-        out.append("<svg display='none'>\n"
+        out.html("<svg display='none'>\n"
                 + "  <symbol viewBox='0 0 1558 1483' id='arrow-down'>\n"
                 + "    <path d='M1558 704q0 53-37 90l-651 652q-39 37-91 37-53 0-90-37L38 794Q0 758 0 704q0-53"
                 + "             38-91l74-75q39-37 91-37 53 0 90 37l294 294V128q0-52 38-90t90-38h128q52 0 90 38t38"
@@ -528,37 +529,37 @@ public class ExamineMessage {
             highestStackHeight = Math.max(highestStackHeight, currentCall.getReplyStackHeight());
         }
 
-        out.append("<table class='matsbm_table_matstrace' id='matsbm_table_matstrace'>");
-        out.append("<thead>");
-        out.append("<tr>");
-        out.append("<th>Call#</th>");
-        out.append("<th>time</th>");
-        out.append("<th>diff</th>");
-        out.append("<th colspan='" + (highestStackHeight + 1) + "'>Call/Processing</th>");
-        out.append("<th>Application</th>");
-        out.append("<th>Host</th>");
-        out.append("<th>DebugInfo</th>");
-        out.append("</tr>");
-        out.append("</thead>");
+        out.html("<table class='matsbm_table_matstrace' id='matsbm_table_matstrace'>");
+        out.html("<thead>");
+        out.html("<tr>");
+        out.html("<th>Call#</th>");
+        out.html("<th>time</th>");
+        out.html("<th>diff</th>");
+        out.html("<th colspan='" + (highestStackHeight + 1) + "'>Call/Processing</th>");
+        out.html("<th>Application</th>");
+        out.html("<th>Host</th>");
+        out.html("<th>DebugInfo</th>");
+        out.html("</tr>");
+        out.html("</thead>");
 
         // :: Flow
-        out.append("<tbody>");
+        out.html("<tbody>");
 
         // :: MatsTrace's Initiation
-        out.append("<tr class='call'>");
-        out.append("<td>#0</td>");
-        out.append("<td>0 ms</td>");
-        out.append("<td></td>");
-        out.append("<td colspan=100>");
-        out.append("INIT<br />from: ").append(matsTrace.getInitiatorId());
-        out.append("</td>");
-        out.append("</tr>\n");
+        out.html("<tr class='call'>");
+        out.html("<td>#0</td>");
+        out.html("<td>0 ms</td>");
+        out.html("<td></td>");
+        out.html("<td colspan=100>");
+        out.html("INIT<br />from: ").DATA(matsTrace.getInitiatorId());
+        out.html("</td>");
+        out.html("</tr>\n");
 
         // :: IF we're in MINIMAL mode, output empty rows to represent the missing calls.
         if (matsTrace.getKeepTrace() == KeepMatsTrace.MINIMAL) {
             int currentCallNumber = matsTrace.getCallNumber();
             for (int i = 0; i < currentCallNumber - 1; i++) {
-                out.append("<tr><td colspan=100></td></tr>");
+                out.html("<tr><td colspan=100></td></tr>");
             }
         }
 
@@ -584,70 +585,69 @@ public class ExamineMessage {
                 indentBuf.append("<td class='indent'><div class='matsbm_line'></div></td>");
             }
             String indent = indentBuf.toString();
-            int reverseIndent = highestStackHeight - indentLevel;
 
             // :: PROCESSING row
-            out.append("<tr class='processing' id='matsbm_processrow_" + currentCallNumber + "'"
-                    + " onmouseover='matsbm_hover_call(event)' onmouseout='matsbm_hover_call_out(event)' data-callno='"
-                    + currentCallNumber + "'>");
-            out.append("<td></td>");
-            out.append("<td></td>");
-            out.append("<td></td>");
-            out.append(prevIndent).append("<td onclick='matsbm_callmodal(event)' colspan='" + (highestStackHeight
-                    - prevIndentLevel + 1) + "'>")
-                    .append("<i>Processed&nbsp;on&nbsp;</i>");
+            out.html("<tr class='processing' id='matsbm_processrow_").DATA(currentCallNumber).html("'"
+                    + " onmouseover='matsbm_hover_call(event)' onmouseout='matsbm_hover_call_out(event)' data-callno='")
+                    .DATA(currentCallNumber).html("'>");
+            out.html("<td></td>");
+            out.html("<td></td>");
+            out.html("<td></td>");
+            out.html(prevIndent).html("<td onclick='matsbm_callmodal(event)' colspan='").DATA(highestStackHeight
+                    - prevIndentLevel + 1).html("'>");
+            out.html("<i>Processed&nbsp;on&nbsp;</i>");
             prevIndent = indent;
             prevIndentLevel = indentLevel;
             if (prevCall != null) {
-                out.append(prevCall.getTo().getId());
+                out.html(prevCall.getTo().getId());
             }
             else {
-                out.append("Initiation");
+                out.html("Initiation");
             }
-            out.append("<br />\n");
-            out.append("</td>");
-            out.append("<td>@");
+            out.html("<br />\n");
+            out.html("</td>");
+            out.html("<td>@");
             if (prevCall != null) {
-                out.append(currentCall.getCallingAppName())
-                        .append("; v.").append(currentCall.getCallingAppVersion());
+                out.DATA(currentCall.getCallingAppName())
+                        .html("; v.").DATA(currentCall.getCallingAppVersion());
             }
             else {
-                out.append(matsTrace.getInitializingAppName())
-                        .append("; v.").append(matsTrace.getInitializingAppVersion());
+                out.DATA(matsTrace.getInitializingAppName())
+                        .html("; v.").DATA(matsTrace.getInitializingAppVersion());
             }
-            out.append("</td><td>@");
+            out.html("</td><td>@");
             if (prevCall != null) {
-                out.append(currentCall.getCallingHost());
+                out.DATA(currentCall.getCallingHost());
             }
             else {
-                out.append(matsTrace.getInitializingHost());
+                out.DATA(matsTrace.getInitializingHost());
             }
-            out.append("</td><td class='matsbm_from_info'>");
+            out.html("</td><td class='matsbm_from_info'>");
             if (prevCall != null) {
-                out.append(debugInfoToHtml(currentCall.getDebugInfo()));
+                out.html(debugInfoToHtml(currentCall.getDebugInfo()));
             }
             else {
-                out.append(debugInfoToHtml(matsTrace.getDebugInfo()));
+                out.html(debugInfoToHtml(matsTrace.getDebugInfo()));
             }
-            out.append("</td>");
-            out.append("</tr>");
+            out.html("</td>");
+            out.html("</tr>");
 
             // :: CALL row
-            out.append("<tr class='call' id='matsbm_callrow_" + currentCallNumber + "'"
-                    + " onmouseover='matsbm_hover_call(event)' onmouseout='matsbm_hover_call_out(event)' data-callno='"
-                    + currentCallNumber + "'>");
-            out.append("<td>#");
-            out.append(Integer.toString(currentCallNumber));
-            out.append("</td>");
+            out.html("<tr class='call' id='matsbm_callrow_").DATA(currentCallNumber).html("'"
+                    + " onmouseover='matsbm_hover_call(event)' onmouseout='matsbm_hover_call_out(event)' data-callno='")
+                    .DATA(currentCallNumber).html("'>");
+            out.html("<td>#");
+            out.html(Integer.toString(currentCallNumber));
+            out.html("</td>");
             long currentCallTimestamp = currentCall.getCalledTimestamp();
-            out.append("<td>").append(Long.toString(currentCallTimestamp - initializedTimestamp))
-                    .append("&nbsp;ms</td>");
+            out.html("<td>").DATA(currentCallTimestamp - initializedTimestamp)
+                    .html("&nbsp;ms</td>");
             long diffBetweenLast = currentCallTimestamp - previousCalledTimestamp;
             previousCalledTimestamp = currentCallTimestamp;
-            out.append("<td>").append(Long.toString(diffBetweenLast)).append("&nbsp;ms</td>"); // Proc
+            out.html("<td>").DATA(diffBetweenLast).html("&nbsp;ms</td>"); // Proc
 
-            out.append(indent).append("<td onclick='matsbm_callmodal(event)'"
-                    + " colspan='" + (highestStackHeight - indentLevel + 5) + "'>");
+            out.html(indent).html("<td onclick='matsbm_callmodal(event)' colspan='")
+                    .DATA(highestStackHeight - indentLevel + 5).html("'>");
             String callType;
             switch (currentCall.getCallType()) {
                 case REQUEST:
@@ -667,25 +667,25 @@ public class ExamineMessage {
                 default:
                     callType = "this is a " + currentCall.getCallType();
             }
-            out.append(callType).append(" call");
+            out.html(callType).html(" call");
             StackState<?> stackState = callToState.get(currentCall);
             if (stackState != null) {
-                out.append(i == 0 ? " w/ initial state" : " w/ state");
+                out.html(i == 0 ? " w/ initial state" : " w/ state");
             }
-            out.append(" - <a href='//show call' onclick='matsbm_noclick(event)'>show</a>");
-            out.append("<br/>");
+            out.html(" - <a href='//show call' onclick='matsbm_noclick(event)'>show</a>");
+            out.html("<br/>");
 
-            out.append("<i>to:</i>&nbsp;").append(currentCall.getTo().getId());
-            out.append("</td>");
+            out.html("<i>to:</i>&nbsp;").DATA(currentCall.getTo().getId());
+            out.html("</td>");
 
-            out.append("</tr>");
+            out.html("</tr>");
         }
-        out.append("</table>");
+        out.html("</table>");
 
         // :: MODALS: Calls and optionally also state
 
         // The "modal underlay", i.e. "gray out" - starts out 'display: none', visible if modal is showing.
-        out.append("<div id='matsbm_callmodalunderlay' class='matsbm_callmodalunderlay'"
+        out.html("<div id='matsbm_callmodalunderlay' class='matsbm_callmodalunderlay'"
                 + " onclick='matsbm_clearcallmodal(event)'>");
 
         String previousTo = "Initiation";
@@ -693,8 +693,8 @@ public class ExamineMessage {
             Call<?> currentCall = callFlow.get(i);
             // If there is only one call, then it is either first, or MINIMAL and last.
             int currentCallNumber = callFlow.size() == 1 ? matsTrace.getCallNumber() : i + 1;
-            out.append("<div class='matsbm_box_call_and_state_modal' id='matsbm_callmodal_" + currentCallNumber
-                    + "'>\n");
+            out.html("<div class='matsbm_box_call_and_state_modal' id='matsbm_callmodal_")
+                    .DATA(currentCallNumber).html("'>\n");
             String from = matsTrace.getKeepTrace() == KeepMatsTrace.MINIMAL
                     ? currentCall.getFrom()
                     : previousTo;
@@ -705,90 +705,90 @@ public class ExamineMessage {
                     ? matsTrace.getInitializingHost()
                     : currentCall.getCallingHost();
 
-            out.append("This is a message from <b>").append(from)
-                    .append("</b><br/>on application <b>").append(appAndVer)
-                    .append("</b><br/>running on node <b>").append(host)
-                    .append("</b><br/>.. and it is a<br />\n");
-            out.append("<h3>").append(currentCall.getCallType().toString())
-                    .append(" call to <b>").append(currentCall.getTo().getId())
-                    .append("</b></h3><br/>\n");
+            out.html("This is a message from <b>").DATA(from)
+                    .html("</b><br/>on application <b>").DATA(appAndVer)
+                    .html("</b><br/>running on node <b>").DATA(host)
+                    .html("</b><br/>.. and it is a<br />\n");
+            out.html("<h3>").DATA(currentCall.getCallType())
+                    .html(" call to <b>").DATA(currentCall.getTo().getId())
+                    .html("</b></h3><br/>\n");
             previousTo = currentCall.getTo().getId();
             // State:
-            out.append("<div class='matsbm_box_call_or_state'>\n");
+            out.html("<div class='matsbm_box_call_or_state'>\n");
             StackState<?> stackState = callToState.get(currentCall);
             if (stackState != null) {
-                out.append("Incoming state: ");
+                out.html("Incoming state: ");
                 out_displaySerializedRepresentation(out, stackState.getState());
             }
             else {
-                out.append("<i>-no incoming state-</i>");
+                out.html("<i>-no incoming state-</i>");
             }
-            out.append("</div><br/>\n");
+            out.html("</div><br/>\n");
 
             // Message:
-            out.append("<div class='matsbm_box_call_or_state'>\n");
-            out.append("Incoming message: ");
+            out.html("<div class='matsbm_box_call_or_state'>\n");
+            out.html("Incoming message: ");
             out_displaySerializedRepresentation(out, currentCall.getData());
-            out.append("</div><br />\n");
+            out.html("</div><br />\n");
 
-            out.append("</div><br/>\n");
+            out.html("</div><br/>\n");
         }
-        out.append("</div>");
+        out.html("</div>");
 
         // TEMP:
-        out.append("<br /><br /><br /><br />");
-        out.append("Temporary! MatsTrace.toString()");
-        out.append("<pre>");
-        out.append(matsTrace.toString());
-        out.append("</pre>");
+        out.html("<br /><br /><br /><br />");
+        out.html("Temporary! MatsTrace.toString()");
+        out.html("<pre>");
+        out.html(matsTrace.toString());
+        out.html("</pre>");
 
-        out.append("</div>");
+        out.html("</div>");
     }
 
-    private static void part_StateAndMessage(Appendable out, MatsTrace<?> matsTrace)
+    private static void part_StateAndMessage(Outputter out, MatsTrace<?> matsTrace)
             throws IOException {
-        out.append("<div id='matsbm_part_state_and_message'>\n");
-        out.append("<h2>Incoming State and Message</h2><br/>\n");
+        out.html("<div id='matsbm_part_state_and_message'>\n");
+        out.html("<h2>Incoming State and Message</h2><br/>\n");
         // State:
-        out.append("<div class='matsbm_box_call_or_state'>\n");
+        out.html("<div class='matsbm_box_call_or_state'>\n");
         Optional<? extends StackState<?>> currentStateO = matsTrace.getCurrentState();
         if (currentStateO.isPresent()) {
-            out.append("Incoming state: ");
+            out.html("Incoming state: ");
             out_displaySerializedRepresentation(out, currentStateO.get().getState());
         }
         else {
-            out.append("<i>-no incoming state-</i>");
+            out.html("<i>-no incoming state-</i>");
         }
-        out.append("</div><br/>\n");
+        out.html("</div><br/>\n");
 
         // Message:
-        out.append("<div class='matsbm_box_call_or_state'>\n");
-        out.append("Incoming message: ");
+        out.html("<div class='matsbm_box_call_or_state'>\n");
+        out.html("Incoming message: ");
         out_displaySerializedRepresentation(out, matsTrace.getCurrentCall().getData());
-        out.append("</div></div>\n");
+        out.html("</div></div>\n");
     }
 
     /**
      * If String, try to display as JSON, if not just raw. If byte, just display array size.
      */
-    private static void out_displaySerializedRepresentation(Appendable out, Object data) throws IOException {
+    private static void out_displaySerializedRepresentation(Outputter out, Object data) throws IOException {
         if (data instanceof String) {
             String stringData = (String) data;
-            out.append("String[").append(Integer.toString(stringData.length())).append(" chars]<br/>\n");
+            out.html("String[").DATA(stringData.length()).html(" chars]<br/>\n");
 
             try {
                 String jsonData = new ObjectMapper().readTree(stringData).toPrettyString();
-                out.append("<div class='matsbm_box_call_or_state_div'>").append(jsonData).append("</div>");
+                out.html("<div class='matsbm_box_call_or_state_div'>").DATA(jsonData).html("</div>");
             }
             catch (JsonProcessingException e) {
-                out.append(
-                        "Couldn't parse incoming String as json (thus no pretty printing), so here it is unparsed.<br/>");
-                out.append(stringData);
+                out.html("Couldn't parse incoming String as json (thus no pretty printing),"
+                        + " so here it is unparsed.<br/>");
+                out.DATA(stringData);
             }
         }
         if (data instanceof byte[]) {
             byte[] byteData = (byte[]) data;
-            out.append("byte[").append(Integer.toString(byteData.length)).append(" bytes]<br/>\n");
+            out.html("byte[").DATA(byteData.length).html(" bytes]<br/>\n");
         }
     }
 
@@ -796,8 +796,7 @@ public class ExamineMessage {
         if ((debugInfo == null) || (debugInfo.trim().isEmpty())) {
             debugInfo = "{none present}";
         }
-        debugInfo = debugInfo.replace("<", "&lt;").replace(">", "&gt;")
-                .replace(";", "<br>\n");
+        debugInfo = Outputter.ESCAPE(debugInfo).replace(";", "<br>\n");
         return "<code>" + debugInfo + "</code>";
     }
 }

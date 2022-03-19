@@ -6,14 +6,20 @@ function matsbm_noclick(event) {
 
 // Global key listener, dispatching to relevant "sub-listener"
 document.addEventListener('keydown', (event) => {
-    if (matsbm_is_call_modal_active()) {
-        modalActiveKeyListener(event);
+    // ?: We only care about the "pure" letters, not with any modifiers (e.g. Ctrl+R shall be reload, not reissue!)
+    if (event.ctrlKey || event.altKey || event.metaKey) {
+        // -> Modifiers present, ignore
+        return;
     }
-    else if (document.getElementById("matsbm_page_browse_queue")) {
+
+    if (document.getElementById("matsbm_page_browse_queue")) {
         browseQueueKeyListener(event);
-    }
-    else if (document.getElementById("matsbm_page_examine_message")) {
-        examineMessageKeyListener(event);
+    } else if (document.getElementById("matsbm_page_examine_message")) {
+        if (matsbm_is_call_modal_active()) {
+            modalActiveKeyListener(event);
+        } else {
+            examineMessageKeyListener(event);
+        }
     }
 }, false);
 
@@ -28,8 +34,7 @@ function browseQueueKeyListener(event) {
         if (matsbm_is_delete_confirm_bulk_active()) {
             // -> Yes it is active - then it is this we'll escape
             matsbm_delete_cancel_bulk();
-        }
-        else {
+        } else {
             setTimeout(() => {
                 document.getElementById("matsbm_back_broker_overview").click();
             }, 10);
@@ -239,8 +244,7 @@ function examineMessageKeyListener(event) {
         if (matsbm_is_delete_confirm_single_active()) {
             // -> Yes it is active - then it is this we'll escape
             matsbm_delete_cancel_single();
-        }
-        else {
+        } else {
             setTimeout(() => {
                 document.getElementById("matsbm_back_browse_queue").click();
             }, 10);
