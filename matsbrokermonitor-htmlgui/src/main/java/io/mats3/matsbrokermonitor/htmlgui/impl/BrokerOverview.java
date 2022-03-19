@@ -120,17 +120,17 @@ class BrokerOverview {
     }
 
     private static void out_queueCount(Appendable out, MatsBrokerDestination destination) throws IOException {
-        String style = destination.isDlq()
-                ? "dlq"
-                : destination.getNumberOfQueuedMessages() == 0 ? "incoming_zero" : "incoming";
         if (destination.getDestinationType() == DestinationType.QUEUE) {
+            String style = destination.isDlq()
+                    ? destination.getNumberOfQueuedMessages() == 0 ? "dlq_zero" : "dlq"
+                    : destination.getNumberOfQueuedMessages() == 0 ? "queue_zero" : "queue";
             out.append("<a class='").append(style).append("' href='?browse&destinationId=")
-                    .append(destination.getDestinationType() == DestinationType.QUEUE ? "queue:" : "topic:")
+                    .append("queue:")
                     .append(destination.getDestinationName())
                     .append("'>");
         }
         else {
-            out.append("<div class='matsbm_topic'>");
+            out.append("<div class='topic'>");
         }
         out.append(destination.isDlq() ? "DLQ:" : "")
                 .append(Long.toString(destination.getNumberOfQueuedMessages()));

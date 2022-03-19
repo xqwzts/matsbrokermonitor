@@ -135,7 +135,7 @@
     background-color: rgba(0, 255, 255, 0.2);
 }
 
-.matsbm_report .incoming_zero, .incoming, .dlq {
+.matsbm_report .queue_zero, .queue, .dlq, .dlq_zero, .topic, .topic_zero {
     text-decoration: none;
     background-color: initial;
     background-image: linear-gradient(#00D775, #00BD68);
@@ -150,27 +150,22 @@
     transition: box-shadow 0.4s;
 }
 
-.matsbm_report .incoming_zero:hover {
-    text-decoration: underline;
-    box-shadow: rgba(13, 112, 234, 0.9) 0 3px 8px;
-}
-
-.matsbm_report .incoming_zero {
-    background-image: linear-gradient(#00D775, #00BD68);
-}
-
-.matsbm_report .incoming_zero:hover {
-    text-decoration: underline;
-    box-shadow: rgba(13, 112, 234, 0.9) 0 3px 8px;
-}
-
-.matsbm_report .incoming {
+.matsbm_report .queue {
     background-image: linear-gradient(#0dccea, #0d70ea);
 }
 
-.matsbm_report .incoming:hover {
+.matsbm_report .queue:hover {
     text-decoration: underline;
     box-shadow: rgba(13, 112, 234, 0.9) 0 3px 8px;
+}
+
+.matsbm_report .queue_zero {
+    background-image: linear-gradient(#00D775, #00BD68);
+}
+
+.matsbm_report .queue_zero:hover {
+    text-decoration: underline;
+    box-shadow: #027d1a 0 3px 8px;
 }
 
 .matsbm_report .dlq {
@@ -181,6 +176,20 @@
     text-decoration: underline;
     box-shadow: rgba(253, 76, 0, 0.9) 0 3px 8px;
 }
+
+.matsbm_report .dlq_zero {
+    background-image: linear-gradient(#60D775, #50BD68);
+}
+
+.matsbm_report .dlq_zero:hover {
+    text-decoration: underline;
+    box-shadow: #027d1a 0 3px 8px;
+}
+
+.matsbm_report .topic {
+    background-image: linear-gradient(#00e0c0, #00d0d0);
+}
+
 
 .matsbm_info {
     margin: 0 0 0 0.5em;
