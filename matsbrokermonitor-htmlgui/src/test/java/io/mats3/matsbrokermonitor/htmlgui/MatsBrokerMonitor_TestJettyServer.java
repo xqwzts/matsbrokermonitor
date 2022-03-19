@@ -142,7 +142,8 @@ public class MatsBrokerMonitor_TestJettyServer {
             sc.setAttribute("matsBrokerMonitor1", matsBrokerMonitor1);
 
             // :: Create the MatsBrokerBrowserAndActions #1
-            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions1 = JmsMatsBrokerBrowseAndActions.create(connFactory, "endre:");
+            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions1 = JmsMatsBrokerBrowseAndActions.create(connFactory,
+                    "endre:");
 
             // :: Create the MatsBrokerMonitorHtmlGui #1
             MatsBrokerMonitorHtmlGuiImpl matsBrokerMonitorHtmlGui1 = MatsBrokerMonitorHtmlGui.create(
@@ -294,21 +295,27 @@ public class MatsBrokerMonitor_TestJettyServer {
     public static class MatsBrokerMonitorServlet extends HttpServlet {
 
         @Override
-        protected void doPost(HttpServletRequest req, HttpServletResponse res) throws IOException {
+        protected void doPut(HttpServletRequest req, HttpServletResponse res) throws IOException {
+            doJson(req, res);
+        }
+
+        @Override
+        protected void doDelete(HttpServletRequest req, HttpServletResponse res) throws IOException {
+            doJson(req, res);
+        }
+
+        protected void doJson(HttpServletRequest req, HttpServletResponse res) throws IOException {
             // :: MatsBrokerMonitorHtmlGUI instance
             MatsBrokerMonitorHtmlGui brokerMonitorHtmlGui = (MatsBrokerMonitorHtmlGui) req.getServletContext()
                     .getAttribute("matsBrokerMonitorHtmlGui1");
 
             AllowAllAccessControl accessControl = new AllowAllAccessControl();
 
-            if ((req.getPathInfo() != null) && req.getPathInfo().startsWith("/json")) {
-                String body = req.getReader().lines().collect(Collectors.joining("\n"));
-                res.setContentType("application/json; charset=utf-8");
-                PrintWriter out = res.getWriter();
-                brokerMonitorHtmlGui.json(out, req.getParameterMap(), body, accessControl);
-                return;
-            }
-            throw new IllegalArgumentException("Unknown path.");
+            String body = req.getReader().lines().collect(Collectors.joining("\n"));
+            res.setContentType("application/json; charset=utf-8");
+            PrintWriter out = res.getWriter();
+            brokerMonitorHtmlGui.json(out, req.getParameterMap(), body, accessControl);
+            return;
         }
 
         @Override
@@ -392,8 +399,8 @@ public class MatsBrokerMonitor_TestJettyServer {
             }
 
             // Localinspect
-            out.write("<h1>LocalHtmlInspectForMatsFactory</h1>\n");
-            localInspect.createFactoryReport(out, true, true, true);
+//            out.write("<h1>LocalHtmlInspectForMatsFactory</h1>\n");
+//            localInspect.createFactoryReport(out, true, true, true);
 
             out.println("  </body>");
             out.println("</html>");

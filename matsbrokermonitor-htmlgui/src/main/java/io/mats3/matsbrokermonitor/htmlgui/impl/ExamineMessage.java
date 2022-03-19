@@ -70,34 +70,25 @@ public class ExamineMessage {
 
         // :: ACTION BUTTONS
 
-        out.append("<div class='matsbm_button matsbm_button_reissue'"
-                + " onclick='matsbm_reissue_single(event, \"" + queueId + "\", \"" + messageSystemId + "\")'>"
-                + "Reissue [R]</div>");
-        out.append("<div id='matsbm_delete_single' class='matsbm_button matsbm_button_delete'"
-                + " onclick='matsbm_delete_propose_single(event)'>"
-                + "Delete [D]</div>");
-        out.append("<div id='matsbm_delete_cancel_single'"
+        out.append("<input type='button' id='matsbm_reissue_single' value='Reissue [R]'"
+                + " class='matsbm_button matsbm_button_reissue'"
+                + " onclick='matsbm_reissue_single(event,\"" + queueId + "\",\"" + messageSystemId + "\")'>");
+        out.append("<input type='button' id='matsbm_delete_single' value='Delete [D]'"
+                + " class='matsbm_button matsbm_button_delete'"
+                + " onclick='matsbm_delete_propose_single(event)'>");
+        out.append("<input type='button' id='matsbm_delete_cancel_single' value='Cancel Delete [Esc]'"
                 + " class='matsbm_button matsbm_button_delete_cancel matsbm_button_hidden'"
-                + "onclick='matsbm_delete_cancel_single(event)'>"
-                + "Cancel Delete [Esc]</div>");
-        out.append("<div id='matsbm_delete_confirm_single'"
+                + " onclick='matsbm_delete_cancel_single(event)'>");
+        out.append("<input type='button' id='matsbm_delete_confirm_single' value='Confirm Delete [X]'"
                 + " class='matsbm_button matsbm_button_delete matsbm_button_hidden'"
-                + " onclick='matsbm_delete_confirmed_single(event, \"" + queueId + "\", \"" + messageSystemId + "\")'>"
-                + "Confirm Delete [X]</div>");
+                + " onclick='matsbm_delete_confirmed_single(event,\"" + queueId + "\",\"" + messageSystemId + "\")'>");
+        out.append("<span id='matsbm_action_message'></span>");
         out.append("</div>");
         out.append("<br/>");
 
         // :: FLOW AND MESSAGE PROPERTIES
 
-        examineMessage_FlowAndMessageProperties(out, matsMsg, matsTrace, matsTraceDecompressedLength);
-
-        // :: Incoming message and state
-
-        Optional<MatsTrace<String>> stringMatsTraceO = getStringMatsTrace(matsTrace);
-
-        if (stringMatsTraceO.isPresent()) {
-            examineMessage_currentCallMatsTrace(out, stringMatsTraceO.get());
-        }
+        part_FlowAndMessageProperties(out, matsMsg, matsTrace, matsTraceDecompressedLength);
 
         // :: MATS TRACE!
 
@@ -116,15 +107,23 @@ public class ExamineMessage {
         }
         else {
             // -> We do have a MatsTrace, output what we can
-            examineMessage_MatsTrace(out, matsTrace);
-        }
 
-        if (!stringMatsTraceO.isPresent()) {
-            out.append("<h2>NOTICE: couldn't resolve MatsTrace to MatsTrace&lt;String&gt;!</h2>");
-            out.append("Here's matsTrace.toString() of the MatsTrace present:");
-            out.append("<pre>");
-            out.append(matsTrace.toString().replace('<', '{').replace('>', '}'));
-            out.append("</pre>");
+            // :: INCOMING STATE AND MESSAGE
+
+            part_StateAndMessage(out, matsTrace);
+
+            // :: MATSTRACE ITSELF (all calls)
+
+            part_MatsTrace(out, matsTrace);
+
+            // ?: Is this not a MatsTrace<String>? Okay then, toString() it.
+            if (!(matsTrace.getCurrentCall().getData() instanceof String)) {
+                out.append("<h2>NOTICE: couldn't resolve MatsTrace to MatsTrace&lt;String&gt;!</h2>");
+                out.append("Here's matsTrace.toString() of the MatsTrace present:");
+                out.append("<pre>");
+                out.append(matsTrace.toString().replace('<', '{').replace('>', '}'));
+                out.append("</pre>");
+            }
         }
 
         out.append("Here's matsMessage.toString(), which should include the raw info from the broker:<br/>\n");
@@ -133,10 +132,12 @@ public class ExamineMessage {
         out.append("</div>");
     }
 
-    private static void examineMessage_FlowAndMessageProperties(Appendable out,
+    private static void part_FlowAndMessageProperties(Appendable out,
             MatsBrokerMessageRepresentation brokerMsg,
             MatsTrace<?> matsTrace,
             int matsTraceDecompressedLength) throws IOException {
+        out.append("<div id='matsbm_part_flow_and_message_props'>");
+
         out.append("<table class='matsbm_table_flow_and_message'><tr>"); // start Flow/Message table
         out.append("<td>\n"); // start Flow information cell
         out.append("<h2>Flow information</h2>\n");
@@ -363,9 +364,11 @@ public class ExamineMessage {
 
         out.append("</td>\n"); // end Message information cell
         out.append("</tr></table>"); // end Flow/Message table
+
+        out.append("</div>");
     }
 
-    private static void examineMessage_MatsTrace(Appendable out, MatsTrace<?> matsTrace) throws IOException {
+    private static void part_MatsTrace(Appendable out, MatsTrace<?> matsTrace) throws IOException {
 
         // TODO: ONLY DO IF KeepMatsTrace.FULL
 
@@ -497,6 +500,8 @@ public class ExamineMessage {
         }
 
         // :: CALLS TABLE
+
+        out.append("<div id='matsbm_part_matstrace'>");
 
         out.append("<h2>MatsTrace</h2><br/>\n");
         out.append("<b>Remember that the MatsTrace, and the rows in this table, refers to the <i>calls, i.e. the"
@@ -736,28 +741,31 @@ public class ExamineMessage {
         out.append("<pre>");
         out.append(matsTrace.toString());
         out.append("</pre>");
+
+        out.append("</div>");
     }
 
-    private static void examineMessage_currentCallMatsTrace(Appendable out, MatsTrace<String> stringMatsTrace)
+    private static void part_StateAndMessage(Appendable out, MatsTrace<?> matsTrace)
             throws IOException {
-        if (stringMatsTrace != null) {
-            Call<String> currentCall = stringMatsTrace.getCurrentCall();
-            String data = currentCall.getData();
-            String jsonData = new ObjectMapper().readTree(data).toPrettyString();
-            out.append("Incoming message:<br />");
-            out.append("<pre>").append(jsonData).append("</pre>");
-
-            Optional<StackState<String>> currentStateO = stringMatsTrace.getCurrentState();
-            if (!currentStateO.isPresent()) {
-                out.append("No incoming state.<br />");
-            }
-            else {
-                String state = currentStateO.get().getState();
-                String jsonState = new ObjectMapper().readTree(state).toPrettyString();
-                out.append("Incoming state:<br />");
-                out.append("<pre>").append(jsonState).append("</pre>");
-            }
+        out.append("<div id='matsbm_part_state_and_message'>\n");
+        out.append("<h2>Incoming State and Message</h2><br/>\n");
+        // State:
+        out.append("<div class='matsbm_box_call_or_state'>\n");
+        Optional<? extends StackState<?>> currentStateO = matsTrace.getCurrentState();
+        if (currentStateO.isPresent()) {
+            out.append("Incoming state: ");
+            out_displaySerializedRepresentation(out, currentStateO.get().getState());
         }
+        else {
+            out.append("<i>-no incoming state-</i>");
+        }
+        out.append("</div><br/>\n");
+
+        // Message:
+        out.append("<div class='matsbm_box_call_or_state'>\n");
+        out.append("Incoming message: ");
+        out_displaySerializedRepresentation(out, matsTrace.getCurrentCall().getData());
+        out.append("</div></div>\n");
     }
 
     /**
@@ -791,15 +799,5 @@ public class ExamineMessage {
         debugInfo = debugInfo.replace("<", "&lt;").replace(">", "&gt;")
                 .replace(";", "<br>\n");
         return "<code>" + debugInfo + "</code>";
-    }
-
-    private static Optional<MatsTrace<String>> getStringMatsTrace(MatsTrace<?> matsTrace) throws IOException {
-        Object data = matsTrace.getCurrentCall().getData();
-        if (data instanceof String) {
-            @SuppressWarnings("unchecked")
-            MatsTrace<String> casted = (MatsTrace<String>) matsTrace;
-            return Optional.of(casted);
-        }
-        return Optional.empty();
     }
 }

@@ -72,9 +72,11 @@
 
 .matsbm_button_reissue {
     background-color: #4CAF50;
+    transition: background-color 0.3s, color  0.3s;
 }
 .matsbm_button_delete {
     background-color: #f44336;
+    transition: background-color 0.3s, color  0.3s;
 }
 .matsbm_button_delete_cancel {
     background-color: #008CBA;;
@@ -83,6 +85,7 @@
     background-color: #e0e0e0;
     color: dimgray;
     cursor: not-allowed;
+    transition: background-color 0.3s, color  0.3s;
 }
 .matsbm_button_hidden {
     display: none;
@@ -255,6 +258,7 @@
     border-bottom: thick solid #009879;
 }
 
+/* .. when messages have been reissued or deleted */
 
 .matsbm_table_browse_queue .matsbm_deleted {
     background-color: #f44336 !important;
@@ -265,9 +269,34 @@
     transition: background-color 2s;
 }
 
+/* .. displaying the actual number of messages shown */
+.matsbm_table_container {
+    position: relative;
+    padding-top: 2em;
+}
+#matsbm_num_messages_shown {
+    position: absolute;
+    font-size: 1.1em;
+    top: 0;
+}
+
 /* ===================== */
 /* PAGE: Examine Message */
 /* ===================== */
+
+/* PARTS */
+#matsbm_part_flow_and_message_props, #matsbm_part_state_and_message, #matsbm_part_matstrace {
+    padding: 1em;
+    margin-bottom: 1.5em;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
+}
+
+.matsbm_part_hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: scaleX(0.8) scaleY(0.8);
+    transition: visibility 0s linear 1s, opacity 1s 0s, transform 1s;
+}
 
 /* boxes */
 
@@ -279,17 +308,11 @@
 
 .matsbm_table_flow_and_message {
     border-collapse: collapse;
-    /*font-size: 0.9em;*/
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
 }
 
 .matsbm_table_flow_and_message td {
     vertical-align: top;
-    padding: 1em;
-}
-
-.matsbm_table_flow_and_message tbody tr {
-    border-bottom: thin solid #dddddd;
+    padding-right: 2em;
 }
 
 /* TABLE: Flow and Message properties */

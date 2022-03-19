@@ -19,6 +19,10 @@ import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl
  * @author Endre Stølsvik 2022-03-13 23:33 - http://stolsvik.com/, endre@stolsvik.com
  */
 class BrowseQueue {
+
+    // Note: The queue-browser of ActiveMQ has a default max, from the server side, of 400.
+    private static final int MAX_MESSAGES_BROWSER = 2000;
+
     static void gui_BrowseQueue(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, Appendable out, String destinationId,
             AccessControl ac) throws IOException {
@@ -40,6 +44,7 @@ class BrowseQueue {
             }
         }
         if (matsBrokerDestination == null) {
+            // TODO: Write something sane here instead!
             throw new IllegalArgumentException("Unknown destination!");
         }
 
@@ -58,8 +63,8 @@ class BrowseQueue {
                 // -> Mats stage queue.
                 out.append(" is the ");
                 out.append(matsBrokerDestination.isDlq() ? "DLQ" : "incoming Queue");
-                out.append(" for Mats Stage [")
-                        .append(matsBrokerDestination.getMatsStageId().get());
+                out.append(" for Mats Stage '")
+                        .append(matsBrokerDestination.getMatsStageId().get()).append("'");
             }
             else {
                 // -> Non-Mats Queue. Not really supported, but just to handle it.
@@ -83,28 +88,25 @@ class BrowseQueue {
         }
         out.append("<br />\n");
 
-        out.append("<div id='matsbm_reissue_bulk'"
+        out.append("<input type='button' id='matsbm_reissue_bulk' value='Reissue [R]'"
                 + " class='matsbm_button matsbm_button_reissue matsbm_button_disabled'"
-                + " onclick='matsbm_reissue_bulk(event, \"" + queueId + "\")'>"
-                + "Reissue [R]</div>");
-        out.append("<div id='matsbm_delete_bulk'"
+                + " onclick='matsbm_reissue_bulk(event, \"" + queueId + "\")'>");
+        out.append("<input type='button' id='matsbm_delete_bulk' value='Delete [D]'"
                 + " class='matsbm_button matsbm_button_delete matsbm_button_disabled'"
-                + " onclick='matsbm_delete_propose_bulk(event)'>"
-                + "Delete [D]</div>");
-        out.append("<div id='matsbm_delete_cancel_bulk'"
+                + " onclick='matsbm_delete_propose_bulk(event)'>");
+        out.append("<input type='button' id='matsbm_delete_cancel_bulk' value='Cancel Delete [Esc]'"
                 + " class='matsbm_button matsbm_button_delete_cancel matsbm_button_hidden'"
-                + " onclick='matsbm_delete_cancel_bulk(event)'>"
-                + "Cancel Delete [Esc]</div>");
-        out.append("<div id='matsbm_delete_confirm_bulk'"
+                + " onclick='matsbm_delete_cancel_bulk(event)'>");
+        out.append("<input type='button' id='matsbm_delete_confirm_bulk' value='Confirm Delete [X]'"
                 + " class='matsbm_button matsbm_button_delete matsbm_button_hidden'"
-                + " onclick='matsbm_delete_confirmed_bulk(event, \"" + queueId + "\")'>"
-                + "Confirm Delete [X]</div>");
+                + " onclick='matsbm_delete_confirmed_bulk(event, \"" + queueId + "\")'>");
         out.append("<span id='matsbm_action_message'></span>");
         out.append("<br/>");
 
         out.append("<br />\n");
 
         boolean anyMessages = false;
+        out.append("<div class='matsbm_table_container'>"); // For
         out.append("<table class='matsbm_table_browse_queue'>");
         out.append("<thead>");
         out.append("<th><input type='checkbox' id='matsbm_checkall' autocomplete='off'"
@@ -121,6 +123,7 @@ class BrowseQueue {
         out.append("<th>Expires</th>");
         out.append("</thead>");
         out.append("<tbody>");
+        int count = 0;
         try (MatsBrokerMessageIterable messages = matsBrokerBrowseAndActions.browseQueue(queueId)) {
             for (MatsBrokerMessageRepresentation matsMsg : messages) {
                 anyMessages = true;
@@ -177,6 +180,12 @@ class BrowseQueue {
                 out.append("</td>");
 
                 out.append("</tr>\n");
+
+                // Max out
+                if (++count >= MAX_MESSAGES_BROWSER) {
+                    break;
+                }
+
             }
         }
         catch (BrokerIOException e) {
@@ -184,6 +193,12 @@ class BrowseQueue {
         }
         out.append("</tbody>");
         out.append("</table>");
+        out.append("<div id='matsbm_num_messages_shown'>Browsing " + count + " messages directly from queue.");
+        if (count > 200) {
+            out.append(" <i>(Note: Our max is " + MAX_MESSAGES_BROWSER + ", but the message broker might have a smaller"
+                    + " max browse. ActiveMQ default is 400)</i>\n");
+        }
+        out.append("</div></div>");
         if (!anyMessages) {
             out.append("<h1>No messages!</h1>");
         }

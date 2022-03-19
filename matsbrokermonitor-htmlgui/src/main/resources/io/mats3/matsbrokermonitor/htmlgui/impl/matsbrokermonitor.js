@@ -62,25 +62,25 @@ function matsbm_checkinvert(event) {
 
 function matsbm_evaluate_checkall_and_buttons() {
     // :: Handle "check all" based on whether checkboxes are checked.
-    let anychecked = false;
-    let anyunchecked = false;
+    let numchecked = 0;
+    let numunchecked = 0;
     let allchecked = true;
     let allunchecked = true;
     for (const checkbox of document.body.querySelectorAll(".matsbm_checkmsg")) {
         if (checkbox.checked) {
             // -> checked
-            anychecked = true;
+            numchecked++;
             allunchecked = false;
         } else {
             // -> unchecked
-            anyunchecked = true;
+            numunchecked++;
             allchecked = false;
         }
     }
     const checkall = document.getElementById('matsbm_checkall');
 
     // ?? Handle all checked, none checked, or anything between
-    if (anychecked && anyunchecked) {
+    if (numchecked && numunchecked) {
         // -> Some of both
         checkall.indeterminate = true;
     } else if (allchecked) {
@@ -99,13 +99,27 @@ function matsbm_evaluate_checkall_and_buttons() {
     // Activate or deactivate Reissue/Delete based on whether any is selected.
     const reissueBtn = document.getElementById('matsbm_reissue_bulk');
     const deleteBtn = document.getElementById('matsbm_delete_bulk');
-    if (anychecked) {
+    if (numchecked) {
         reissueBtn.classList.remove('matsbm_button_disabled')
         deleteBtn.classList.remove('matsbm_button_disabled')
     } else {
         reissueBtn.classList.add('matsbm_button_disabled')
         deleteBtn.classList.add('matsbm_button_disabled')
     }
+
+    // Update selection text
+    let selectionText = "Messages in list: " + (numchecked + numunchecked);
+    if (allunchecked) {
+        selectionText += ", no selected messages";
+    } else if (allchecked) {
+        selectionText += ", ALL messages selected";
+    } else {
+        selectionText += ". Selected: " + numchecked + ", not selected:" + numunchecked;
+    }
+
+
+    document.getElementById("matsbm_num_messages_shown").textContent = selectionText;
+
 }
 
 function matsbm_reissue_or_delete_bulk(event, queueId, action) {
@@ -125,18 +139,19 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
     }
     const actionPresent = action === "reissue" ? "Reissuing" : "Deleting";
     const actionPast = action === "reissue" ? "reissued" : "deleted";
+    const operation = action === "reissue" ? "PUT" : "DELETE";
 
     document.getElementById('matsbm_action_message').textContent
         = actionPresent + " " + msgSysMsgIds.length + " message" + (msgSysMsgIds.length > 1 ? "s" : "") + ".";
 
-    let jsonPath = window.matsbm_json_path ? window.matsbm_json_path : window.location.pathname + "/json";
+    let jsonPath = window.matsbm_json_path ? window.matsbm_json_path : window.location.pathname;
     let requestBody = {
         action: action,
         queueId: queueId,
         msgSysMsgIds: msgSysMsgIds
     };
     fetch(jsonPath, {
-        method: 'POST',
+        method: operation,
         headers: {
             'Content-Type': 'application/json'
         },
@@ -149,10 +164,10 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
                     = "Error! HTTP Status: " + response.status;
                 return;
             }
-            return response.json().then(result => {
+            response.json().then(result => {
                 document.getElementById('matsbm_action_message').textContent
                     = "Done, " + result.numberOfAffectedMessages
-                    + " message" + (msgSysMsgIds.length > 1 ? "s" : "") + " " + actionPast
+                    + " message" + (result.numberOfAffectedMessages > 1 ? "s" : "") + " " + actionPast
                     + (action === 'reissue' ? " (Check console for new message ids)." : ".");
                 for (const msgSysMsgId of result.msgSysMsgIds) {
                     const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
@@ -207,23 +222,68 @@ function matsbm_delete_confirmed_single(event, queueId, msgSysMsgId) {
 
 
 function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
-    console.log(msgSysMsgId);
-    let jsonPath = window.matsbm_json_path ? window.matsbm_json_path : window.location.pathname + "/json";
+    // hide Cancel Delete and Confirm Delete
+    document.getElementById("matsbm_delete_confirm_single").classList.add("matsbm_button_hidden");
+    document.getElementById("matsbm_delete_cancel_single").classList.add("matsbm_button_hidden");
+    // Disable Reissue and Delete buttons
+    document.getElementById('matsbm_reissue_single').classList.add('matsbm_button_disabled');
+    document.getElementById('matsbm_delete_single').classList.add('matsbm_button_disabled');
+
+    const actionPresent = action === "reissue" ? "Reissuing" : "Deleting";
+    const actionPast = action === "reissue" ? "reissued" : "deleted";
+    const operation = action === "reissue" ? "PUT" : "DELETE";
+
+    document.getElementById('matsbm_action_message').textContent
+        = actionPresent + " message [" + msgSysMsgId + "].";
+
+    let jsonPath = window.matsbm_json_path ? window.matsbm_json_path : window.location.pathname;
     let requestBody = {
         action: action,
         queueId: queueId,
         msgSysMsgIds: [msgSysMsgId]
     };
     fetch(jsonPath, {
-        method: 'POST',
+        method: operation,
         headers: {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify(requestBody)
     })
-        .then(response => response.json())
-        .then(data => console.log(data))
-        .catch(error => console.log(error));
+        .then(response => {
+            if (!response.ok) {
+                console.error("Response not OK", response);
+                document.getElementById('matsbm_action_message').textContent
+                    = "Error! HTTP Status: " + response.status;
+                return;
+            }
+            response.json().then(result => {
+                let actionMessage;
+                if (result.numberOfAffectedMessages !== 1) {
+                    actionMessage = "Message wasn't " + actionPast + "! Already " + actionPast + "?"
+                } else {
+                    const msgSysMsgId = result.msgSysMsgIds[0];
+                    actionMessage = "Message " + actionPast + "!"
+                }
+                document.getElementById('matsbm_action_message').textContent
+                    = actionMessage
+                    + (action === 'reissue' ? " (Check console for new message id)." : "");
+                if (action === "reissue") {
+                    console.log("Reissued MsgSysMsgIds:", result.reissuedMsgSysMsgIds);
+                }
+                setTimeout(() => {
+                    document.getElementById('matsbm_part_flow_and_message_props').classList.add('matsbm_part_hidden');
+                    document.getElementById('matsbm_part_state_and_message').classList.add('matsbm_part_hidden');
+                    document.getElementById('matsbm_part_matstrace').classList.add('matsbm_part_hidden');
+                    setTimeout(() => window.location = window.location.pathname
+                        + "?browse&destinationId=queue:" + queueId, 2000);
+                }, 750);
+            });
+        })
+        .catch(error => {
+            console.error("Fetch error", error);
+            document.getElementById('matsbm_action_message').textContent
+                = "Error! " + error;
+        });
 }
 
 

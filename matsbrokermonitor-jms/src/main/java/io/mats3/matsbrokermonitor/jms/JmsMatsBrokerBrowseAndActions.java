@@ -423,7 +423,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
 
         @Override
         public String toString() {
-            return this.getClass().getSimpleName() + "{JMS Message: " + _jmsMessage + "}";
+            return this.getClass().getSimpleName() + "{JMS_Message = " + _jmsMessage + "}";
         }
     }
 }
