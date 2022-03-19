@@ -6,15 +6,13 @@ function matsbm_noclick(event) {
 
 // Global key listener, dispatching to relevant "sub-listener"
 document.addEventListener('keydown', (event) => {
-    console.log("keydown", event);
     if (matsbm_is_call_modal_active()) {
         modalActiveKeyListener(event);
-        return;
     }
-    if (document.getElementById("matsbm_page_browse_queue")) {
+    else if (document.getElementById("matsbm_page_browse_queue")) {
         browseQueueKeyListener(event);
     }
-    if (document.getElementById("matsbm_page_examine_message")) {
+    else if (document.getElementById("matsbm_page_examine_message")) {
         examineMessageKeyListener(event);
     }
 }, false);
@@ -32,7 +30,9 @@ function browseQueueKeyListener(event) {
             matsbm_delete_cancel_bulk();
         }
         else {
-            document.getElementById("matsbm_back_broker_overview").click();
+            setTimeout(() => {
+                document.getElementById("matsbm_back_broker_overview").click();
+            }, 10);
         }
         return;
     }
@@ -241,7 +241,9 @@ function examineMessageKeyListener(event) {
             matsbm_delete_cancel_single();
         }
         else {
-            document.getElementById("matsbm_back_browse_queue").click();
+            setTimeout(() => {
+                document.getElementById("matsbm_back_browse_queue").click();
+            }, 10);
         }
         return;
     }
