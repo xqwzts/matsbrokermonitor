@@ -4,8 +4,50 @@ function matsbm_noclick(event) {
     return false;
 }
 
+// Global key listener, dispatching to relevant "sub-listener"
+document.addEventListener('keydown', (event) => {
+    console.log("keydown", event);
+    if (matsbm_is_call_modal_active()) {
+        modalActiveKeyListener(event);
+        return;
+    }
+    if (document.getElementById("matsbm_page_browse_queue")) {
+        browseQueueKeyListener(event);
+    }
+    if (document.getElementById("matsbm_page_examine_message")) {
+        examineMessageKeyListener(event);
+    }
+}, false);
+
 
 // ::: BROWSE QUEUE
+
+// Key Listener for Browse Queue
+function browseQueueKeyListener(event) {
+    const name = event.key;
+    if (name === "Escape") {
+        // ?: Is the "Confirm Delete" button active (non-hidden)?
+        if (matsbm_is_delete_confirm_bulk_active()) {
+            // -> Yes it is active - then it is this we'll escape
+            matsbm_delete_cancel_bulk();
+        }
+        else {
+            document.getElementById("matsbm_back_broker_overview").click();
+        }
+        return;
+    }
+
+    if (name.toLowerCase() === "r") {
+        document.getElementById("matsbm_reissue_bulk").click();
+    }
+    if (name.toLowerCase() === "d") {
+        document.getElementById("matsbm_delete_bulk").click();
+    }
+    if ((name.toLowerCase() === "x") && matsbm_is_delete_confirm_bulk_active()) {
+        document.getElementById("matsbm_delete_confirm_bulk").click();
+    }
+
+}
 
 function matsbm_reissue_bulk(event, queueId) {
     // ?: Is it disabled?
@@ -14,6 +56,12 @@ function matsbm_reissue_bulk(event, queueId) {
         return;
     }
     matsbm_reissue_or_delete_bulk(event, queueId, "reissue")
+}
+
+function matsbm_is_delete_confirm_bulk_active() {
+    // Return whether the "Confirm Delete" button is non-hidden
+    return !document.getElementById("matsbm_delete_confirm_bulk")
+        .classList.contains('matsbm_button_hidden');
 }
 
 function matsbm_delete_propose_bulk(event) {
@@ -141,34 +189,25 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
     const actionPast = action === "reissue" ? "reissued" : "deleted";
     const operation = action === "reissue" ? "PUT" : "DELETE";
 
-    document.getElementById('matsbm_action_message').textContent
-        = actionPresent + " " + msgSysMsgIds.length + " message" + (msgSysMsgIds.length > 1 ? "s" : "") + ".";
+    document.getElementById('matsbm_action_message').textContent = actionPresent + " " + msgSysMsgIds.length + " message" + (msgSysMsgIds.length > 1 ? "s" : "") + ".";
 
     let jsonPath = window.matsbm_json_path ? window.matsbm_json_path : window.location.pathname;
     let requestBody = {
-        action: action,
-        queueId: queueId,
-        msgSysMsgIds: msgSysMsgIds
+        action: action, queueId: queueId, msgSysMsgIds: msgSysMsgIds
     };
     fetch(jsonPath, {
-        method: operation,
-        headers: {
+        method: operation, headers: {
             'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
+        }, body: JSON.stringify(requestBody)
     })
         .then(response => {
             if (!response.ok) {
                 console.error("Response not OK", response);
-                document.getElementById('matsbm_action_message').textContent
-                    = "Error! HTTP Status: " + response.status;
+                document.getElementById('matsbm_action_message').textContent = "Error! HTTP Status: " + response.status;
                 return;
             }
             response.json().then(result => {
-                document.getElementById('matsbm_action_message').textContent
-                    = "Done, " + result.numberOfAffectedMessages
-                    + " message" + (result.numberOfAffectedMessages > 1 ? "s" : "") + " " + actionPast
-                    + (action === 'reissue' ? " (Check console for new message ids)." : ".");
+                document.getElementById('matsbm_action_message').textContent = "Done, " + result.numberOfAffectedMessages + " message" + (result.numberOfAffectedMessages > 1 ? "s" : "") + " " + actionPast + (action === 'reissue' ? " (Check console for new message ids)." : ".");
                 for (const msgSysMsgId of result.msgSysMsgIds) {
                     const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
                     if (row) {
@@ -185,13 +224,39 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
         })
         .catch(error => {
             console.error("Fetch error", error);
-            document.getElementById('matsbm_action_message').textContent
-                = "Error! " + error;
+            document.getElementById('matsbm_action_message').textContent = "Error! " + error;
         });
 }
 
-
 // ::: EXAMINE MESSAGE
+
+// Key Listener for Examine Message
+
+function examineMessageKeyListener(event) {
+    const name = event.key;
+    if (name === "Escape") {
+        // ?: Is the "Confirm Delete" button active (non-hidden)?
+        if (matsbm_is_delete_confirm_single_active()) {
+            // -> Yes it is active - then it is this we'll escape
+            matsbm_delete_cancel_single();
+        }
+        else {
+            document.getElementById("matsbm_back_browse_queue").click();
+        }
+        return;
+    }
+
+
+    if (name.toLowerCase() === "r") {
+        document.getElementById("matsbm_reissue_single").click();
+    }
+    if (name.toLowerCase() === "d") {
+        document.getElementById("matsbm_delete_single").click();
+    }
+    if ((name.toLowerCase() === "x") && matsbm_is_delete_confirm_single_active()) {
+        document.getElementById("matsbm_delete_confirm_single").click();
+    }
+}
 
 // :: REISSUE / DELETE
 
@@ -220,6 +285,11 @@ function matsbm_delete_confirmed_single(event, queueId, msgSysMsgId) {
     matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, "delete")
 }
 
+function matsbm_is_delete_confirm_single_active() {
+    // Return whether the "Confirm Delete" button is non-hidden
+    return !document.getElementById("matsbm_delete_confirm_single")
+        .classList.contains('matsbm_button_hidden');
+}
 
 function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
     // hide Cancel Delete and Confirm Delete
@@ -233,27 +303,21 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
     const actionPast = action === "reissue" ? "reissued" : "deleted";
     const operation = action === "reissue" ? "PUT" : "DELETE";
 
-    document.getElementById('matsbm_action_message').textContent
-        = actionPresent + " message [" + msgSysMsgId + "].";
+    document.getElementById('matsbm_action_message').textContent = actionPresent + " message [" + msgSysMsgId + "].";
 
     let jsonPath = window.matsbm_json_path ? window.matsbm_json_path : window.location.pathname;
     let requestBody = {
-        action: action,
-        queueId: queueId,
-        msgSysMsgIds: [msgSysMsgId]
+        action: action, queueId: queueId, msgSysMsgIds: [msgSysMsgId]
     };
     fetch(jsonPath, {
-        method: operation,
-        headers: {
+        method: operation, headers: {
             'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
+        }, body: JSON.stringify(requestBody)
     })
         .then(response => {
             if (!response.ok) {
                 console.error("Response not OK", response);
-                document.getElementById('matsbm_action_message').textContent
-                    = "Error! HTTP Status: " + response.status;
+                document.getElementById('matsbm_action_message').textContent = "Error! HTTP Status: " + response.status;
                 return;
             }
             response.json().then(result => {
@@ -264,9 +328,7 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
                     const msgSysMsgId = result.msgSysMsgIds[0];
                     actionMessage = "Message " + actionPast + "!"
                 }
-                document.getElementById('matsbm_action_message').textContent
-                    = actionMessage
-                    + (action === 'reissue' ? " (Check console for new message id)." : "");
+                document.getElementById('matsbm_action_message').textContent = actionMessage + (action === 'reissue' ? " (Check console for new message id)." : "");
                 if (action === "reissue") {
                     console.log("Reissued MsgSysMsgIds:", result.reissuedMsgSysMsgIds);
                 }
@@ -274,15 +336,13 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
                     document.getElementById('matsbm_part_flow_and_message_props').classList.add('matsbm_part_hidden');
                     document.getElementById('matsbm_part_state_and_message').classList.add('matsbm_part_hidden');
                     document.getElementById('matsbm_part_matstrace').classList.add('matsbm_part_hidden');
-                    setTimeout(() => window.location = window.location.pathname
-                        + "?browse&destinationId=queue:" + queueId, 2000);
+                    setTimeout(() => window.location = window.location.pathname + "?browse&destinationId=queue:" + queueId, 2000);
                 }, 750);
             });
         })
         .catch(error => {
             console.error("Fetch error", error);
-            document.getElementById('matsbm_action_message').textContent
-                = "Error! " + error;
+            document.getElementById('matsbm_action_message').textContent = "Error! " + error;
         });
 }
 
@@ -291,20 +351,20 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
 
 let matsbm_activecallmodal = -1;
 
+function matsbm_is_call_modal_active() {
+    // Return whether the active call modal is not -1.
+    return matsbm_activecallmodal !== -1;
+}
+
 function matsbm_clearcallmodal(event) {
     // Clear the "underlay" for the modal
-    console.log("Clear modal");
-    console.log(event)
-    console.log(event.target)
     let modalunderlay = document.getElementById("matsbm_callmodalunderlay");
     // Don't clear if the target is the modal, to enable interaction with it.
     if (event.target !== modalunderlay) {
         return;
     }
-    console.log(modalunderlay);
 
     matsbm_clearcallmodal_noncond()
-
     return true;
 }
 
@@ -325,6 +385,9 @@ function matsbm_clearcallmodal_noncond() {
 }
 
 function matsbm_callmodal(event) {
+    // Clear the "Confirm Delete" if active
+    matsbm_delete_cancel_single();
+
     // Un-hide on the specific call modal
     let tr = event.target.closest("tr");
     let callno = tr.getAttribute("data-callno");
@@ -350,24 +413,24 @@ function matsbm_callmodal(event) {
 }
 
 // Modal Key listener: when modal is active.
-document.addEventListener('keydown', (event) => {
-    if (matsbm_activecallmodal < 0) {
-        return;
-    }
-    var name = event.key;
-    var code = event.code;
+function modalActiveKeyListener(event) {
+    const name = event.key;
+    const code = event.code;
     console.log(`Key pressed ${name} \r\n Key code value: ${code}`);
 
+    // ?: Was the Escape?
     if (name === "Escape") {
+        // -> Yes, and call modal is active - cancel it.
         matsbm_clearcallmodal_noncond();
+        return;
     }
 
-    let currentCallModal = document.getElementById("matsbm_callmodal_" + matsbm_activecallmodal);
-    let currentCallRow = document.getElementById("matsbm_callrow_" + matsbm_activecallmodal);
-    let currentProcessRow = document.getElementById("matsbm_processrow_" + matsbm_activecallmodal);
+    const currentCallModal = document.getElementById("matsbm_callmodal_" + matsbm_activecallmodal);
+    const currentCallRow = document.getElementById("matsbm_callrow_" + matsbm_activecallmodal);
+    const currentProcessRow = document.getElementById("matsbm_processrow_" + matsbm_activecallmodal);
     if (name === "ArrowUp") {
         matsbm_activecallmodal--;
-        let nextCallModal = document.getElementById("matsbm_callmodal_" + matsbm_activecallmodal);
+        const nextCallModal = document.getElementById("matsbm_callmodal_" + matsbm_activecallmodal);
         if (nextCallModal) {
             // Call modal
             currentCallModal.classList.remove("matsbm_box_call_and_state_modal_visible");
@@ -375,13 +438,13 @@ document.addEventListener('keydown', (event) => {
             // Call row
             currentCallRow.classList.remove("matsbm_row_active")
             currentProcessRow.classList.remove("matsbm_row_active")
-            let nextCallRow = document.getElementById("matsbm_callrow_" + matsbm_activecallmodal);
-            let nextProcessRow = document.getElementById("matsbm_processrow_" + matsbm_activecallmodal);
+            const nextCallRow = document.getElementById("matsbm_callrow_" + matsbm_activecallmodal);
+            const nextProcessRow = document.getElementById("matsbm_processrow_" + matsbm_activecallmodal);
             nextCallRow.classList.add("matsbm_row_active")
             nextProcessRow.classList.add("matsbm_row_active")
             // Handle the sticky header, so scroll above it
             if (matsbm_activecallmodal === 1) {
-                let top = document.body.querySelector("#matsbm_table_matstrace thead");
+                const top = document.body.querySelector("#matsbm_table_matstrace thead");
                 top.scrollIntoView({behavior: "smooth", block: "nearest"});
             } else {
                 document.getElementById("matsbm_callrow_" + (matsbm_activecallmodal - 1))
@@ -395,7 +458,7 @@ document.addEventListener('keydown', (event) => {
     }
     if (name === "ArrowDown") {
         matsbm_activecallmodal++;
-        let nextCallModal = document.getElementById("matsbm_callmodal_" + matsbm_activecallmodal);
+        const nextCallModal = document.getElementById("matsbm_callmodal_" + matsbm_activecallmodal);
         if (nextCallModal) {
             // Call modal
             currentCallModal.classList.remove("matsbm_box_call_and_state_modal_visible");
@@ -403,8 +466,8 @@ document.addEventListener('keydown', (event) => {
             // Call row
             currentCallRow.classList.remove("matsbm_row_active")
             currentProcessRow.classList.remove("matsbm_row_active")
-            let nextCallRow = document.getElementById("matsbm_callrow_" + matsbm_activecallmodal);
-            let nextProcessRow = document.getElementById("matsbm_processrow_" + matsbm_activecallmodal);
+            const nextCallRow = document.getElementById("matsbm_callrow_" + matsbm_activecallmodal);
+            const nextProcessRow = document.getElementById("matsbm_processrow_" + matsbm_activecallmodal);
             nextCallRow.classList.add("matsbm_row_active")
             nextProcessRow.classList.add("matsbm_row_active")
             nextCallRow.scrollIntoView({behavior: "smooth", block: "nearest"});
@@ -414,7 +477,7 @@ document.addEventListener('keydown', (event) => {
         }
         event.preventDefault();
     }
-}, false);
+}
 
 
 // :: MATSTRACE HOVER

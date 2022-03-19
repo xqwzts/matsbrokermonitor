@@ -42,12 +42,13 @@
 
 /* Common boxes */
 
-.matsbm_broker, .matsbm_endpoint_group, .matsbm_browse_queue, .matsbm_examine_message {
+#matsbm_page_broker_overview, #matsbm_page_browse_queue, #matsbm_page_examine_message {
     border-radius: 3px;
     box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
     border: thin solid #a0a0a0;
     margin: 0.5em 0.5em 0.7em 0.5em;
     padding: 0.1em 0.5em 0.5em 0.5em;
+    background: #f0f0f0;
 }
 
 /* Common action buttons */
@@ -99,7 +100,6 @@
 /* ============ */
 /* PAGE: Broker */
 /* ============ */
-
 
 .matsbm_age {
     display: inline;
@@ -188,11 +188,12 @@
 
 /* boxes */
 
-.matsbm_broker {
-    background: #f0f0f0;
-}
 
 .matsbm_endpoint_group {
+    border-radius: 3px;
+    box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
+    border: thin solid #a0a0a0;
+    padding: 0.1em 0.5em 0.5em 0.5em;
     background: #e8f0e8;
     margin: 0.5em 0.5em 1em 0.5em;
 }
@@ -212,10 +213,6 @@
 /* ===================== */
 
 /* boxes */
-
-.matsbm_browse_queue {
-    background: #f0f0f0;
-}
 
 #matsbm_checkinvert {
     padding: 0 0.3em 0 0.3em;
@@ -296,12 +293,6 @@
     visibility: hidden;
     transform: scaleX(0.8) scaleY(0.8);
     transition: visibility 0s linear 1s, opacity 1s 0s, transform 1s;
-}
-
-/* boxes */
-
-.matsbm_examine_message {
-    background: #f0f0f0;
 }
 
 /* TABLE: Two columns: Flow and Message properties */

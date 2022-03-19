@@ -34,11 +34,11 @@ public class ExamineMessage {
         if (!queue) {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
-        out.append("<div class='matsbm_report matsbm_examine_message'>\n");
+        out.append("<div id='matsbm_page_examine_message' class='matsbm_report'>\n");
         out.append("<div class='matsbm_actionbuttons'>\n");
-        out.append("<a href='?'>Back to Broker Overview</a><br />\n");
-        out.append("<a href='?browse&destinationId=").append(destinationId)
-                .append("'>Back to Queue</a> - ");
+        out.append("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview</a><br />\n");
+        out.append("<a id='matsbm_back_browse_queue' href='?browse&destinationId=").append(destinationId)
+                .append("'>Back to Queue [Esc]</a> - ");
 
         String queueId = destinationId.substring("queue:".length());
         out.append(queueId).append("<br />\n");

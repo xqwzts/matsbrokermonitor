@@ -21,7 +21,7 @@ class BrokerOverview {
     static void gui_BrokerOverview(MatsBrokerMonitor matsBrokerMonitor, Appendable out,
             Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException {
-        out.append("<div class='matsbm_report matsbm_broker'>\n");
+        out.append("<div id='matsbm_page_broker_overview' class='matsbm_report'>\n");
         out.append("  <div class='matsbm_heading'>");
         Optional<BrokerInfo> brokerInfoO = matsBrokerMonitor.getBrokerInfo();
         if (brokerInfoO.isPresent()) {
