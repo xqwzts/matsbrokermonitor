@@ -704,7 +704,7 @@ public class ExamineMessage {
             String host = currentCallNumber == 1
                     ? matsTrace.getInitializingHost()
                     : currentCall.getCallingHost();
-
+            out.html("<i>(Arrows \u2b06 and \u2b07 to navigate, Esc to exit)</i><br>\n");
             out.html("This is a message from <b>").DATA(from)
                     .html("</b><br/>on application <b>").DATA(appAndVer)
                     .html("</b><br/>running on node <b>").DATA(host)
