@@ -125,12 +125,12 @@ public final class MatsFabricArranger {
         }
 
         @Override
-        public Map<String, MatsEndpointBrokerRepresentation> getMatsEndpointBrokerRepresentations() {
+        public Map<String, MatsEndpointBrokerRepresentation> getEndpoints() {
             return Collections.unmodifiableMap(_matsEndpointBrokerRepresentations);
         }
 
         @Override
-        public Map<String, MatsEndpointGroupBrokerRepresentation> getMatsEndpointGroupBrokerRepresentations() {
+        public Map<String, MatsEndpointGroupBrokerRepresentation> getEndpointGroups() {
             return Collections.unmodifiableMap(_matsServiceBrokerRepresentations);
         }
     }
@@ -185,7 +185,7 @@ public final class MatsFabricArranger {
         }
 
         @Override
-        public Map<String, MatsEndpointBrokerRepresentation> getMatsEndpointBrokerRepresentations() {
+        public Map<String, MatsEndpointBrokerRepresentation> getEndpoints() {
             return Collections.unmodifiableMap(_matsEndpointBrokerRepresentations);
         }
     }

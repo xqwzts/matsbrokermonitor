@@ -39,7 +39,7 @@ class BrokerOverview {
 
         // :: ToC
         out.html("<b>EndpointGroups ToC</b><br>\n");
-        for (MatsEndpointGroupBrokerRepresentation service : stack.getMatsEndpointGroupBrokerRepresentations()
+        for (MatsEndpointGroupBrokerRepresentation service : stack.getEndpointGroups()
                 .values()) {
             String endpointGroupId = service.getEndpointGroup().trim().isEmpty()
                     ? "{empty string}"
@@ -68,7 +68,7 @@ class BrokerOverview {
         }
 
         // :: Foreach EndpointGroup
-        for (MatsEndpointGroupBrokerRepresentation service : stack.getMatsEndpointGroupBrokerRepresentations()
+        for (MatsEndpointGroupBrokerRepresentation service : stack.getEndpointGroups()
                 .values()) {
             // :: EndpointGroup
             String endpointGroupId = service.getEndpointGroup().trim().isEmpty()
@@ -79,7 +79,7 @@ class BrokerOverview {
             out.html("<h2>").DATA(endpointGroupId).html("</h2></a><br>\n");
 
             // :: Foreach Endpoint
-            for (MatsEndpointBrokerRepresentation endpoint : service.getMatsEndpointBrokerRepresentations().values()) {
+            for (MatsEndpointBrokerRepresentation endpoint : service.getEndpoints().values()) {
                 String endpointId = endpoint.getEndpointId();
                 Map<Integer, MatsStageBrokerRepresentation> stages = endpoint.getStages();
 
