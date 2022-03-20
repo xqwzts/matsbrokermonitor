@@ -121,6 +121,7 @@
     margin: 0 0 0 1.5em;
     font-size: 1.1em;
     background-color: rgba(0, 0, 255, 0.04);
+    min-width: 40em;
 }
 
 .matsbm_queue {

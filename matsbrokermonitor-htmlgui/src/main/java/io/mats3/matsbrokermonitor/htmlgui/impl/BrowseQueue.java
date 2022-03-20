@@ -31,7 +31,7 @@ class BrowseQueue {
             throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
         out.html("<div id='matsbm_page_browse_queue' class='matsbm_report'>\n");
-        out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview [Esc]</a><br />\n");
+        out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview [Esc]</a><br>\n");
 
         String queueId = destinationId.substring("queue:".length());
 
@@ -54,7 +54,7 @@ class BrowseQueue {
             // -> Yes, global DLQ
             out.html(" is the Global DLQ, fully qualified name: [")
                     .DATA(matsBrokerDestination.getFqDestinationName())
-                    .html("]<br />\n");
+                    .html("]<br>\n");
         }
         else {
             // -> No, not the Global DLQ
@@ -71,7 +71,7 @@ class BrowseQueue {
                 out.html(" is a ");
                 out.DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Queue");
             }
-            out.html("<br />\n");
+            out.html("<br>\n");
         }
 
         long lastUpdate = matsBrokerDestination.getLastUpdateBrokerMillis()
@@ -86,7 +86,7 @@ class BrowseQueue {
                     .DATA(matsBrokerDestination.getNumberOfInflightMessages().getAsLong())
                     .html(" were in-flight.");
         }
-        out.html("<br />\n");
+        out.html("<br>\n");
 
         out.html("<input type='button' id='matsbm_reissue_bulk' value='Reissue [R]'"
                 + " class='matsbm_button matsbm_button_reissue matsbm_button_disabled'"
@@ -101,9 +101,9 @@ class BrowseQueue {
                 + " class='matsbm_button matsbm_button_delete matsbm_button_hidden'"
                 + " onclick='matsbm_delete_confirmed_bulk(event, \"").DATA(queueId).html("\")'>");
         out.html("<span id='matsbm_action_message'></span>");
-        out.html("<br/>");
+        out.html("<br>");
 
-        out.html("<br />\n");
+        out.html("<br>\n");
 
         boolean anyMessages = false;
         out.html("<div class='matsbm_table_container'>"); // For

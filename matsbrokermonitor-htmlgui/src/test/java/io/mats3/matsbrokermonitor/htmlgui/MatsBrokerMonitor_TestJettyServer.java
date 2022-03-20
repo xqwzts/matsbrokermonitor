@@ -180,9 +180,9 @@ public class MatsBrokerMonitor_TestJettyServer {
             res.setContentType("text/html; charset=utf-8");
             PrintWriter out = res.getWriter();
             out.println("<h1>Menu</h1>");
-            out.println("<a href=\"./matsbrokermonitor\">MatsBrokerMonitor HTML GUI</a><br />");
-            out.println("<a href=\"./sendRequest\">Send Mats requests</a><br />");
-            out.println("<a href=\"./shutdown\">Shutdown</a><br />");
+            out.println("<a href=\"./matsbrokermonitor\">MatsBrokerMonitor HTML GUI</a><br>");
+            out.println("<a href=\"./sendRequest\">Send Mats requests</a><br>");
+            out.println("<a href=\"./shutdown\">Shutdown</a><br>");
         }
     }
 
@@ -384,7 +384,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             localInspect.getJavaScript(out);
             out.println("    </script>");
             out.println(" <a href=\"sendRequest\">Send request</a> - to initialize Initiator"
-                    + " and get some traffic.<br /><br />");
+                    + " and get some traffic.<br><br>");
 
             // :: Bootstrap3 sets the body's font size to 14px.
             // We scale all the affected rem-using elements back up to check consistency.

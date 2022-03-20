@@ -36,19 +36,19 @@ public class ExamineMessage {
         }
         out.html("<div id='matsbm_page_examine_message' class='matsbm_report'>\n");
         out.html("<div class='matsbm_actionbuttons'>\n");
-        out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview</a><br />\n");
+        out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview</a><br>\n");
         out.html("<a id='matsbm_back_browse_queue' href='?browse&destinationId=").DATA(destinationId)
                 .html("'>Back to Queue [Esc]</a> - ");
 
         String queueId = destinationId.substring("queue:".length());
-        out.DATA(queueId).html("<br />\n");
+        out.DATA(queueId).html("<br>\n");
 
         Optional<MatsBrokerMessageRepresentation> matsBrokerMessageRepresentationO = matsBrokerBrowseAndActions
                 .examineMessage(queueId, messageSystemId);
         if (!matsBrokerMessageRepresentationO.isPresent()) {
-            out.html("<h1>No such message!</h1><br/>\n");
-            out.html("MessageSystemId: [").DATA(messageSystemId).html("].<br/>\n");
-            out.html("Queue:[").DATA(queueId).html("]<br/>\n");
+            out.html("<h1>No such message!</h1><br>\n");
+            out.html("MessageSystemId: [").DATA(messageSystemId).html("].<br>\n");
+            out.html("Queue:[").DATA(queueId).html("]<br>\n");
             out.html("</div>");
             out.html("</div>");
             return;
@@ -86,7 +86,7 @@ public class ExamineMessage {
                 .DATA(queueId).html("\",\"").DATA(messageSystemId).html("\")'>");
         out.html("<span id='matsbm_action_message'></span>");
         out.html("</div>");
-        out.html("<br/>");
+        out.html("<br>");
 
         // :: FLOW AND MESSAGE PROPERTIES
 
@@ -98,13 +98,13 @@ public class ExamineMessage {
             // -> No MatsTrace, why?
             if (matsMsg.getMatsTraceBytes().isPresent()) {
                 // -> Seemingly because we don't have a MatsSerializer, and thus cannot deserialize the present bytes.
-                out.html("<br/><h2>NOTICE! There is a serialized MatsTrace byte array in the message, but I am"
-                        + " constructed without a MatsSerializer, so I can't decipher it!</h2><br />\n");
+                out.html("<br><h2>NOTICE! There is a serialized MatsTrace byte array in the message, but I am"
+                        + " constructed without a MatsSerializer, so I can't decipher it!</h2><br>\n");
             }
             else {
                 // -> Evidently because there was no MatsTrace in the message.
-                out.html("<br/><h2>NOTICE! Missing MatsTrace information from the message, so cannot show"
-                        + " call trace information!</h2><br />\n");
+                out.html("<br><h2>NOTICE! Missing MatsTrace information from the message, so cannot show"
+                        + " call trace information!</h2><br>\n");
             }
         }
         else {
@@ -128,7 +128,7 @@ public class ExamineMessage {
             }
         }
 
-        out.html("Here's matsMessage.toString(), which should include the raw info from the broker:<br/>\n");
+        out.html("Here's matsMessage.toString(), which should include the raw info from the broker:<br>\n");
         out.html(matsMsg.toString().replace("<", "&lt;").replace(">", "&gt;"));
 
         out.html("</div>");
@@ -504,14 +504,14 @@ public class ExamineMessage {
 
         out.html("<div id='matsbm_part_matstrace'>");
 
-        out.html("<h2>MatsTrace</h2><br/>\n");
+        out.html("<h2>MatsTrace</h2><br>\n");
         out.html("<b>Remember that the MatsTrace, and the rows in this table, refers to the <i>calls, i.e. the"
                 + " messages from one stage to the next in a flow</i>, not the processing on the stages"
-                + " themselves.</b><br/>\n");
+                + " themselves.</b><br>\n");
         out.html("Thus, it is the REQUEST, REPLY and NEXT rows (the calls) in the table that are the real info"
                 + " carriers - the <i>\"Processed on\"</i> rows are synthesized with stageId taken from the previous"
                 + " call's \"to\", and the <i>app/host</i> and <i>DebugInfo</i> from current call -"
-                + " just to aid your intuition.<br />\n");
+                + " just to aid your intuition.<br>\n");
 
         // .. SVG-sprite: Arrow down (slanted and colored using CSS)
         // (from font-awesome, via https://leungwensen.github.io/svg-icon/#awesome)
@@ -551,7 +551,7 @@ public class ExamineMessage {
         out.html("<td>0 ms</td>");
         out.html("<td></td>");
         out.html("<td colspan=100>");
-        out.html("INIT<br />from: ").DATA(matsTrace.getInitiatorId());
+        out.html("INIT<br>from: ").DATA(matsTrace.getInitiatorId());
         out.html("</td>");
         out.html("</tr>\n");
 
@@ -604,7 +604,7 @@ public class ExamineMessage {
             else {
                 out.html("Initiation");
             }
-            out.html("<br />\n");
+            out.html("<br>\n");
             out.html("</td>");
             out.html("<td>@");
             if (prevCall != null) {
@@ -673,7 +673,7 @@ public class ExamineMessage {
                 out.html(i == 0 ? " w/ initial state" : " w/ state");
             }
             out.html(" - <a href='//show call' onclick='matsbm_noclick(event)'>show</a>");
-            out.html("<br/>");
+            out.html("<br>");
 
             out.html("<i>to:</i>&nbsp;").DATA(currentCall.getTo().getId());
             out.html("</td>");
@@ -706,12 +706,12 @@ public class ExamineMessage {
                     : currentCall.getCallingHost();
             out.html("<i>(Arrows \u2b06 and \u2b07 to navigate, Esc to exit)</i><br>\n");
             out.html("This is a message from <b>").DATA(from)
-                    .html("</b><br/>on application <b>").DATA(appAndVer)
-                    .html("</b><br/>running on node <b>").DATA(host)
-                    .html("</b><br/>.. and it is a<br />\n");
+                    .html("</b><br>on application <b>").DATA(appAndVer)
+                    .html("</b><br>running on node <b>").DATA(host)
+                    .html("</b><br>.. and it is a<br>\n");
             out.html("<h3>").DATA(currentCall.getCallType())
                     .html(" call to <b>").DATA(currentCall.getTo().getId())
-                    .html("</b></h3><br/>\n");
+                    .html("</b></h3><br>\n");
             previousTo = currentCall.getTo().getId();
             // State:
             out.html("<div class='matsbm_box_call_or_state'>\n");
@@ -723,20 +723,20 @@ public class ExamineMessage {
             else {
                 out.html("<i>-no incoming state-</i>");
             }
-            out.html("</div><br/>\n");
+            out.html("</div><br>\n");
 
             // Message:
             out.html("<div class='matsbm_box_call_or_state'>\n");
             out.html("Incoming message: ");
             out_displaySerializedRepresentation(out, currentCall.getData());
-            out.html("</div><br />\n");
+            out.html("</div><br>\n");
 
-            out.html("</div><br/>\n");
+            out.html("</div><br>\n");
         }
         out.html("</div>");
 
         // TEMP:
-        out.html("<br /><br /><br /><br />");
+        out.html("<br><br><br><br>");
         out.html("Temporary! MatsTrace.toString()");
         out.html("<pre>");
         out.html(matsTrace.toString());
@@ -748,7 +748,7 @@ public class ExamineMessage {
     private static void part_StateAndMessage(Outputter out, MatsTrace<?> matsTrace)
             throws IOException {
         out.html("<div id='matsbm_part_state_and_message'>\n");
-        out.html("<h2>Incoming State and Message</h2><br/>\n");
+        out.html("<h2>Incoming State and Message</h2><br>\n");
         // State:
         out.html("<div class='matsbm_box_call_or_state'>\n");
         Optional<? extends StackState<?>> currentStateO = matsTrace.getCurrentState();
@@ -759,7 +759,7 @@ public class ExamineMessage {
         else {
             out.html("<i>-no incoming state-</i>");
         }
-        out.html("</div><br/>\n");
+        out.html("</div><br>\n");
 
         // Message:
         out.html("<div class='matsbm_box_call_or_state'>\n");
@@ -774,7 +774,7 @@ public class ExamineMessage {
     private static void out_displaySerializedRepresentation(Outputter out, Object data) throws IOException {
         if (data instanceof String) {
             String stringData = (String) data;
-            out.html("String[").DATA(stringData.length()).html(" chars]<br/>\n");
+            out.html("String[").DATA(stringData.length()).html(" chars]<br>\n");
 
             try {
                 String jsonData = new ObjectMapper().readTree(stringData).toPrettyString();
@@ -782,13 +782,13 @@ public class ExamineMessage {
             }
             catch (JsonProcessingException e) {
                 out.html("Couldn't parse incoming String as json (thus no pretty printing),"
-                        + " so here it is unparsed.<br/>");
+                        + " so here it is unparsed.<br>");
                 out.DATA(stringData);
             }
         }
         if (data instanceof byte[]) {
             byte[] byteData = (byte[]) data;
-            out.html("byte[").DATA(byteData.length).html(" bytes]<br/>\n");
+            out.html("byte[").DATA(byteData.length).html(" bytes]<br>\n");
         }
     }
 

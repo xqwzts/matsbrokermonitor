@@ -22,7 +22,7 @@ class BrokerOverview {
             Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException {
         out.html("<div id='matsbm_page_broker_overview' class='matsbm_report'>\n");
-        out.html("  <div class='matsbm_heading'>");
+        out.html("<div class='matsbm_heading'>");
         Optional<BrokerInfo> brokerInfoO = matsBrokerMonitor.getBrokerInfo();
         if (brokerInfoO.isPresent()) {
             BrokerInfo brokerInfo = brokerInfoO.get();
@@ -32,13 +32,13 @@ class BrokerOverview {
         else {
             out.html("<h2>Unknown broker</h2>");
         }
-        out.html("  </div>\n");
+        out.html("</div>\n");
 
         Map<String, MatsBrokerDestination> matsDestinations = matsBrokerMonitor.getMatsDestinations();
         MatsFabricBrokerRepresentation stack = MatsFabricBrokerRepresentation.stack(matsDestinations.values());
 
         // :: ToC
-        out.html("<b>EndpointGroups ToC</b><br />\n");
+        out.html("<b>EndpointGroups ToC</b><br>\n");
         for (MatsEndpointGroupBrokerRepresentation service : stack.getMatsEndpointGroupBrokerRepresentations()
                 .values()) {
             String endpointGroupId = service.getEndpointGroup().trim().isEmpty()
@@ -46,24 +46,24 @@ class BrokerOverview {
                     : service.getEndpointGroup();
             out.html("&nbsp;&nbsp;<b><a href='#").DATA(endpointGroupId).html("'>")
                     .DATA(endpointGroupId)
-                    .html("</a></b><br />\n");
+                    .html("</a></b><br>\n");
         }
-        out.html("<br />\n");
+        out.html("<br>\n");
 
         // :: Global DLQ
         if (stack.getGlobalDlq().isPresent()) {
             out.html("<div class='matsbm_endpoint_group'>\n");
-            out.html("<h2>Global DLQ</h2><br />");
+            out.html("<h2>Global DLQ</h2><br>");
             MatsBrokerDestination globalDlq = stack.getGlobalDlq().get();
             out.html("<div class='matsbm_epid'>")
                     .DATA(globalDlq.getDestinationName())
                     .html("</div>");
+
             out.html("<div class='matsbm_stage'>")
                     .DATA(globalDlq.getFqDestinationName());
-
             out_queueCount(out, globalDlq);
-
             out.html("</div>");
+
             out.html("</div>");
         }
 
@@ -76,20 +76,22 @@ class BrokerOverview {
                     : service.getEndpointGroup();
             out.html("<div class='matsbm_endpoint_group' id='").DATA(endpointGroupId).html("'>\n");
             out.html("<a href='#").DATA(endpointGroupId).html("'>");
-            out.html("<h2>").DATA(endpointGroupId).html("</h2></a><br />\n");
+            out.html("<h2>").DATA(endpointGroupId).html("</h2></a><br>\n");
 
             // :: Foreach Endpoint
             for (MatsEndpointBrokerRepresentation endpoint : service.getMatsEndpointBrokerRepresentations().values()) {
                 String endpointId = endpoint.getEndpointId();
                 Map<Integer, MatsStageBrokerRepresentation> stages = endpoint.getStages();
 
+                // :: Find whether endpoint is a queue or topic.
                 // There will always be at least one stage, otherwise the endpoint wouldn't be defined.
                 MatsStageBrokerRepresentation first = stages.values().iterator().next();
-                // There will either be an incoming, or a DLQ, otherwise the endpoint wouldn't be defined.
-                MatsBrokerDestination firstIncomingOrDlq = first.getIncomingDestination()
+                // There will either be an incoming, or a DLQ, otherwise the stage wouldn't be defined.
+                MatsBrokerDestination firstDestinationOrDlq = first.getIncomingDestination()
                         .orElseGet(() -> first.getDlqDestination()
                                 .orElseThrow(() -> new AssertionError("Missing both Incoming and DLQ destinations!")));
-                String endpointType = firstIncomingOrDlq.getDestinationType() == DestinationType.QUEUE
+
+                String endpointType = firstDestinationOrDlq.getDestinationType() == DestinationType.QUEUE
                         ? "<div class='matsbm_queue'>Queue</div>"
                         : "<div class='matsbm_topic'>Topic</div>";
 
@@ -112,7 +114,7 @@ class BrokerOverview {
                     }
                     out.html("</div>"); // /matsbm_stage
                 }
-                out.html("<br />\n");
+                out.html("<br>\n");
             }
             out.html("</div>\n");
         }
