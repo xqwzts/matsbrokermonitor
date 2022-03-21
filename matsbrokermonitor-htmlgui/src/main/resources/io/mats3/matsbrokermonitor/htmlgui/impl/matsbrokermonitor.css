@@ -73,21 +73,25 @@
 
 .matsbm_button_reissue {
     background-color: #4CAF50;
-    transition: background-color 0.3s, color  0.3s;
+    transition: background-color 0.3s, color 0.3s;
 }
+
 .matsbm_button_delete {
     background-color: #f44336;
-    transition: background-color 0.3s, color  0.3s;
+    transition: background-color 0.3s, color 0.3s;
 }
+
 .matsbm_button_delete_cancel {
     background-color: #008CBA;;
 }
+
 .matsbm_button_disabled {
     background-color: #e0e0e0;
     color: dimgray;
     cursor: not-allowed;
-    transition: background-color 0.3s, color  0.3s;
+    transition: background-color 0.3s, color 0.3s;
 }
+
 .matsbm_button_hidden {
     display: none;
 }
@@ -97,46 +101,96 @@
     font-size: 16px;
 }
 
-/* ============ */
-/* PAGE: Broker */
-/* ============ */
+/* ===================== */
+/* PAGE: Broker Overview */
+/* ===================== */
 
-.matsbm_age {
-    display: inline;
-    font-size: 75%;
-    font-style: italic;
-    margin: 0 0 0 0.2em;
+/* boxes */
+
+
+.matsbm_endpoint_group {
+    border-radius: 3px;
+    box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
+    border: thin solid #a0a0a0;
+    padding: 0.1em 0.5em 0.5em 0.5em;
+    background: #e8f0e8;
+    margin: 0.5em 0.5em 1em 0.5em;
 }
 
-.matsbm_epid, .matsbm_queue, .matsbm_topic {
-    display: inline-block;
+.matsbm_table_endpointgroup {
+    border-collapse: collapse;
+    margin: 0 0 0 1em;
+    /*padding: 0;*/
+}
+
+.matsbm_table_endpointgroup tr {
+}
+
+.matsbm_table_endpointgroup td {
+    padding: 0 0.4em 0 0;
+}
+
+/* epids and markers */
+
+.matsbm_epid, .matsbm_marker {
     font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;;
     font-size: 1em;
-    margin: 0 0 0 0.5em;
-    padding: 2px 4px 1px 4px;
+    padding: 0.25em 0.5em 0.25em 0.5em;
+    border-radius: 5px;
+}
+
+/* epid */
+.matsbm_epid_queue, .matsbm_epid_queue_private, .matsbm_epid_topic, .matsbm_epid_topic_private {
+    min-width: 550px;
+}
+.matsbm_epid_queue {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+.matsbm_epid_queue_private {
+    font-size: 0.85em;
+    font-style: italic;
+    background-color: rgba(0, 0, 0, 0.05);
+    color: #313539;
+}
+.matsbm_epid_topic {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+.matsbm_epid_topic_private {
+    font-size: 0.85em;
+    font-style: italic;
+    background-color: rgba(0, 0, 0, 0.05);
+    color: #313539;
+}
+
+/* marker */
+.matsbm_marker_queue, .matsbm_marker_queue_private, .matsbm_marker_topic, .matsbm_marker_topic_private {
+    font-size: 0.9em;
+}
+.matsbm_marker_queue {
+    background-color: rgb(187, 238, 187);
+}
+.matsbm_marker_queue_private {
+    background-color: rgb(187, 238, 187);
+}
+.matsbm_marker_topic {
+    background-color: rgb(171, 238, 238);
+}
+.matsbm_marker_topic_private {
+    background-color: rgb(171, 238, 238);
+}
+
+/* Stage with contents */
+.matsbm_stage {
+    background: #f0f0f0;
+    display: inline-block;
     border-radius: 3px;
+    box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
+    border: thin solid #a0a0a0;
+    margin: 0.1em 0.5em 0.2em 0;
+    padding: 0.2em 0.2em 0.2em 0.2em;
 }
 
-.matsbm_epid {
-    margin: 0 0 0 1.5em;
-    font-size: 1.1em;
-    background-color: rgba(0, 0, 255, 0.04);
-    min-width: 40em;
-}
-
-.matsbm_queue {
-    font-size: 0.9em;
-    font-style: italic;
-    background-color: rgba(0, 255, 0, 0.15);
-}
-
-.matsbm_topic {
-    font-size: 0.9em;
-    font-style: italic;
-    background-color: rgba(0, 255, 255, 0.2);
-}
-
-.matsbm_report .queue_zero, .queue, .dlq, .dlq_zero, .topic, .topic_zero {
+.matsbm_report .queue, .queue_zero, .dlq, .dlq_zero, .topic, .topic_zero {
     text-decoration: none;
     background-color: initial;
     background-image: linear-gradient(#00D775, #00BD68);
@@ -191,32 +245,13 @@
     background-image: linear-gradient(#00e0c0, #00d0d0);
 }
 
-
-.matsbm_info {
-    margin: 0 0 0 0.5em;
+.matsbm_age {
+    display: inline;
+    font-size: 75%;
+    font-style: italic;
+    margin: 0 0 0 0.2em;
 }
 
-/* boxes */
-
-
-.matsbm_endpoint_group {
-    border-radius: 3px;
-    box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
-    border: thin solid #a0a0a0;
-    padding: 0.1em 0.5em 0.5em 0.5em;
-    background: #e8f0e8;
-    margin: 0.5em 0.5em 1em 0.5em;
-}
-
-.matsbm_stage {
-    background: #f0f0f0;
-    display: inline-block;
-    border-radius: 3px;
-    box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
-    border: thin solid #a0a0a0;
-    margin: 0.2em 0 0.2em 0.5em;
-    padding: 0.2em 0.2em 0.2em 0.2em;
-}
 
 /* ===================== */
 /* PAGE: Browse queue */
@@ -271,6 +306,7 @@
     background-color: #f44336 !important;
     transition: background-color 2s;
 }
+
 .matsbm_table_browse_queue .matsbm_reissued {
     background-color: #4CAF50 !important;
     transition: background-color 2s;
@@ -281,6 +317,7 @@
     position: relative;
     padding-top: 2em;
 }
+
 #matsbm_num_messages_shown {
     position: absolute;
     font-size: 1.1em;
@@ -388,7 +425,7 @@
     background: #ffff99 !important;
 }
 
-.matsbm_row_active {  /* for when call-modal is active */
+.matsbm_row_active { /* for when call-modal is active */
     background: #00D775 !important;
 }
 
@@ -425,10 +462,11 @@
 .matsbm_arrow_rep {
     width: 1.5em;
     height: 1.5em;
-    fill: #b73900;  /* #c27615 */
+    fill: #b73900; /* #c27615 */
     transform: translateY(0.4em) rotate(40deg);
     margin-top: -2em;
 }
+
 .matsbm_arrow_next {
     width: 1.5em;
     height: 1.5em;
@@ -436,6 +474,7 @@
     transform: translateY(0.4em);
     margin-top: -2em;
 }
+
 .matsbm_arrow_goto {
     width: 1.5em;
     height: 1.5em;
@@ -486,6 +525,7 @@
 .matsbm_box_call_and_state_modal_visible {
     visibility: visible;
 }
+
 /* .. the JSON box for DTO and STO */
 .matsbm_box_call_or_state {
     background: #f0f0f0;

@@ -79,7 +79,9 @@ class BrokerOverview {
             out.html("<h2>").DATA(endpointGroupId).html("</h2></a><br>\n");
 
             // :: Foreach Endpoint
+            out.html("<table class='matsbm_table_endpointgroup'>");
             for (MatsEndpointBrokerRepresentation endpoint : service.getEndpoints().values()) {
+                out.html("<tr>");
                 String endpointId = endpoint.getEndpointId();
                 Map<Integer, MatsStageBrokerRepresentation> stages = endpoint.getStages();
 
@@ -91,14 +93,23 @@ class BrokerOverview {
                         .orElseGet(() -> first.getDlqDestination()
                                 .orElseThrow(() -> new AssertionError("Missing both Incoming and DLQ destinations!")));
 
-                String endpointType = firstDestinationOrDlq.getDestinationType() == DestinationType.QUEUE
-                        ? "<div class='matsbm_queue'>Queue</div>"
-                        : "<div class='matsbm_topic'>Topic</div>";
+                boolean privateEp = endpointId.contains(".private.");
+                boolean queue = firstDestinationOrDlq.getDestinationType() == DestinationType.QUEUE;
 
-                out.html("<div class='matsbm_epid'>").DATA(endpointId).html("</div>");
-                out.html(" ").html(endpointType);
+                out.html("<td><div class='matsbm_epid matsbm_epid")
+                        .html(queue ? "_queue" : "_topic")
+                        .html(privateEp ? "_private" : "")
+                        .html("'>")
+                        .DATA(endpointId).html("</div></td>");
+
+                out.html("<td><div class='matsbm_marker matsbm_marker")
+                        .html(queue ? "_queue" : "_topic")
+                        .html(privateEp ? "_private" : "")
+                        .html("'>")
+                        .DATA(queue ? "Queue" : "Topic").html("</div></td>");
 
                 // :: Foreach Stage
+                out.html("<td>");
                 for (MatsStageBrokerRepresentation stage : stages.values()) {
                     out.html("<div class='matsbm_stage'>");
                     out.DATA(stage.getStageIndex() == 0 ? "Initial" : "S" + stage.getStageIndex());
@@ -114,8 +125,10 @@ class BrokerOverview {
                     }
                     out.html("</div>"); // /matsbm_stage
                 }
-                out.html("<br>\n");
+                out.html("</td>");
+                out.html("</tr>\n");
             }
+            out.html("</table>\n");
             out.html("</div>\n");
         }
         out.html("</div>\n");

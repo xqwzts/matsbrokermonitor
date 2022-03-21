@@ -112,7 +112,6 @@ public interface MatsFabricBrokerRepresentation {
          *         stage.getNumberOfDeadLetterMessages()} for {@link #getStages() all stages} of the Endpoint.
          */
         default long getStageMaxNumberOfDeadLetterMessages() {
-            // ?: Any Stage where stage.hasDeadLetteredMessages()
             return getStages().values().stream()
                     .map(MatsStageBrokerRepresentation::getNumberOfDeadLetterMessages)
                     .max(Comparator.naturalOrder())
@@ -133,7 +132,7 @@ public interface MatsFabricBrokerRepresentation {
         /**
          * @return the max of {@link MatsEndpointBrokerRepresentation#getStageOldestHeadMessageAgeMillis()
          *         endpoint.getStageOldestHeadMessageAgeMillis()} for {@link #getEndpoints() all endpoints} of the
-         *         EndpointGroup, if no endpoint has a message, {@link OptionalLong#empty()} is returned.
+         *         EndpointGroup, if no Endpoints has a message, {@link OptionalLong#empty()} is returned.
          */
         default OptionalLong getStageOldestHeadMessageAgeMillis() {
             return getEndpoints().values().stream()

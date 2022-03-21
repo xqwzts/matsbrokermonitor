@@ -72,8 +72,9 @@ public class MatsBrokerMonitor_TestJettyServer {
 
     private static final Logger log = LoggerFactory.getLogger(MatsBrokerMonitor_TestJettyServer.class);
 
-    private static String SERVICE_1 = "MatsTestBrokerMonitor.FirstSubService";
-    private static String SERVICE_2 = "MatsTestBrokerMonitor.SecondSubService";
+    private static String SERVICE = "MatsTestBrokerMonitor";
+    private static String SERVICE_1 = SERVICE+ ".FirstSubService";
+    private static String SERVICE_2 = SERVICE+ ".SecondSubService";
     private static String SERVICE_3 = "Another Group With Spaces.SubService";
 
     @WebListener
@@ -115,7 +116,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             LocalStatsMatsInterceptor.install(_matsFactory);
 
             // Make Futurizer:
-            MatsFuturizer matsFuturizer = MatsFuturizer.createMatsFuturizer(_matsFactory);
+            MatsFuturizer matsFuturizer = MatsFuturizer.createMatsFuturizer(_matsFactory, SERVICE);
             sc.setAttribute(MatsFuturizer.class.getName(), matsFuturizer);
 
             // Setup test endpoints
