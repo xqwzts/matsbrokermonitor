@@ -188,11 +188,7 @@ public class ExamineMessage {
         if (matsTrace != null) {
             out.html("<tr>");
             out.html("<td>Init debug info</td>");
-            String debugInfo = matsTrace.getDebugInfo();
-            if ((debugInfo == null) || (debugInfo.isEmpty())) {
-                debugInfo = "{none present}";
-            }
-            out.html("<td>").html(debugInfoToHtml(debugInfo)).html("</td>");
+            out.html("<td>").html(debugInfoToHtml(matsTrace.getDebugInfo())).html("</td>");
             out.html("</tr>\n");
         }
 
@@ -295,8 +291,10 @@ public class ExamineMessage {
             out.html("<tr>");
             out.html("<td>Call debug info</td>");
             String debugInfo = matsTrace.getCurrentCall().getDebugInfo();
-            if ((debugInfo == null) || (debugInfo.trim().isEmpty())) {
-                debugInfo = "{none present}";
+            // ?: Is this the initial call, and there is no info on the call (which is expected)
+            if (((debugInfo == null) || (debugInfo.trim().isEmpty())) && (matsTrace.getCallNumber() == 1) ) {
+                // -> Yes, initial, and call.debugInfo missing: Use info from init.
+                debugInfo = matsTrace.getDebugInfo();
             }
             out.html("<td>").html(debugInfoToHtml(debugInfo)).html("</td>");
             out.html("</tr>\n");
@@ -651,22 +649,24 @@ public class ExamineMessage {
             String callType;
             switch (currentCall.getCallType()) {
                 case REQUEST:
-                    callType = "<svg class='matsbm_arrow_req'><use xlink:href=\"#arrow-down\" /></svg> this is a REQUEST";
+                    callType = "<svg class='matsbm_arrow_req'><use xlink:href=\"#arrow-down\" /></svg>";
                     break;
                 case REPLY:
-                    callType = "<svg class='matsbm_arrow_rep'><use xlink:href=\"#arrow-down\" /></svg> this is a REPLY";
+                    callType = "<svg class='matsbm_arrow_rep'><use xlink:href=\"#arrow-down\" /></svg>";
                     break;
                 case NEXT:
-                    callType = "<svg class='matsbm_arrow_next'><use xlink:href=\"#arrow-down\" /></svg> this is a "
-                            + currentCall.getCallType();
+                    callType = "<svg class='matsbm_arrow_next'><use xlink:href=\"#arrow-down\" /></svg>";
                     break;
                 case GOTO:
-                    callType = "<svg class='matsbm_arrow_goto'><use xlink:href=\"#arrow-down\" /></svg> this is a "
-                            + currentCall.getCallType();
+                    callType = "<svg class='matsbm_arrow_goto'><use xlink:href=\"#arrow-down\" /></svg>";
+                    break;
+                case SEND: // For initiations only, both SEND and PUBLISH.
+                    callType = "<svg class='matsbm_arrow_send'><use xlink:href=\"#arrow-down\" /></svg>";
                     break;
                 default:
-                    callType = "this is a " + currentCall.getCallType();
+                    callType = "";
             }
+            callType += " this is a " + currentCall.getCallType();
             out.html(callType).html(" call");
             StackState<?> stackState = callToState.get(currentCall);
             if (stackState != null) {

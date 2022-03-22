@@ -35,7 +35,7 @@ public final class MatsFabricArranger {
         SortedMap<String, MatsEndpointBrokerRepresentationImpl> endpointBrokerRepresentations = new TreeMap<>();
         for (MatsBrokerDestination matsBrokerDestination : matsBrokerDestinations) {
             // ?: Is this the Global DLQ?
-            if (matsBrokerDestination.isGlobalDlq()) {
+            if (matsBrokerDestination.isDefaultGlobalDlq()) {
                 // -> Yes, Global DLQ: save, and continue.
                 globalDlq = matsBrokerDestination;
                 continue;
@@ -120,7 +120,7 @@ public final class MatsFabricArranger {
         }
 
         @Override
-        public Optional<MatsBrokerDestination> getGlobalDlq() {
+        public Optional<MatsBrokerDestination> getDefaultGlobalDlq() {
             return Optional.ofNullable(_globalDlq);
         }
 

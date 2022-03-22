@@ -47,14 +47,14 @@ public interface MatsFabricBrokerRepresentation {
     /**
      * @return the max of {@link MatsEndpointBrokerRepresentation#getStageMaxNumberOfDeadLetterMessages()
      *         endpoint.getStageMaxNumberOfDeadLetteredMessages()} for all Endpoints in the Mats fabric, including the
-     *         {@link #getGlobalDlq()} if present. Zero is a good number, any other means that there exists a DLQ with
-     *         messages which probably should be looked into.
+     *         {@link #getDefaultGlobalDlq()} if present. Zero is a good number, any other means that there exists a DLQ
+     *         with messages which probably should be looked into.
      */
     default long getQueueMaxNumberOfDeadLetterMessages() {
         Stream<Long> stagesMax = getEndpoints().values().stream()
                 .map(MatsEndpointBrokerRepresentation::getStageMaxNumberOfDeadLetterMessages);
 
-        Stream<Long> globalDlqNum = getGlobalDlq().map(MatsBrokerDestination::getNumberOfQueuedMessages)
+        Stream<Long> globalDlqNum = getDefaultGlobalDlq().map(MatsBrokerDestination::getNumberOfQueuedMessages)
                 .map(Stream::of).orElseGet(Stream::empty); // Java 8 missing optional.stream()
 
         return Stream.concat(stagesMax, globalDlqNum)
@@ -63,10 +63,10 @@ public interface MatsFabricBrokerRepresentation {
     }
 
     /**
-     * @return the global DLQ, if there is such a thing in the connected broker. There should really not be, as the
-     *         broker should be configured to use an "individual DLQ policy" whereby each queue gets its own DLQ.
+     * @return the default global DLQ, if there is such a thing in the connected broker. There should really not be, as
+     *         the broker should be configured to use an "individual DLQ policy" whereby each queue gets its own DLQ.
      */
-    Optional<MatsBrokerDestination> getGlobalDlq();
+    Optional<MatsBrokerDestination> getDefaultGlobalDlq();
 
     /**
      * All Endpoints, no grouping.

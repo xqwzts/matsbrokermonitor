@@ -97,7 +97,8 @@ public interface MatsBrokerMonitor extends Closeable {
         /**
          * @return the fully qualified destination name, which uniquely specifies the destination (natively) for the
          *         broker, including whether it is a queue or a topic. For ActiveMq, this looks like
-         *         <code>"queue://mats.ServiceName.serviceMethodName"</code>.
+         *         <code>"queue://mats.ServiceName.someServiceMethodName"</code> or
+         *         <code>"topic://mats.ServiceName.someSubscriptionTerminator"</code>.
          */
         String getFqDestinationName();
 
@@ -123,14 +124,17 @@ public interface MatsBrokerMonitor extends Closeable {
         /**
          * If the broker isn't properly configured with a broker-specific <i>Individual Dead Letter Queue policy</i>
          * where each queue gets its own DLQ (being the original queue name prefixed with "DLQ."), then there will be a
-         * global DLQ. This is not very good - but it will nevertheless be reported. This method will then return
-         * {@link Optional#empty()}, while get {@link #getDestinationName()} will be the actual DLQ name (e.g. for
-         * ActiveMQ, it is <code>"ActiveMQ.DLQ"</code>, while for Artemis it is <code>"DLQ"</code>).
+         * global DLQ. This is not very good - but it will nevertheless be reported. The method
+         * {@link #getMatsStageId()} will then return {@link Optional#empty()}, while get {@link #getDestinationName()}
+         * will be the actual DLQ name (e.g. for ActiveMQ, it is <code>"ActiveMQ.DLQ"</code>, while for Artemis it is
+         * <code>"DLQ"</code>).
+         * <p/>
+         * <b>Note: It is highly recommended to configure the broker with an individual DLQ policy!</b>
          *
          * @return whether this is the global DLQ for the broker ({@link #isDlq()} will then also return
          *         <code>true</code>).
          */
-        boolean isGlobalDlq();
+        boolean isDefaultGlobalDlq();
 
         /**
          * If this {@link #getDestinationName()} represent a Mats Stage (both a normal Queue or Topic for a Mats Stage,

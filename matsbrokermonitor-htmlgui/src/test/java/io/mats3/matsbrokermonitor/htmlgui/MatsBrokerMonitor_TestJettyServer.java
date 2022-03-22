@@ -12,7 +12,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
+import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
+import javax.jms.JMSException;
+import javax.jms.Message;
+import javax.jms.MessageProducer;
+import javax.jms.Queue;
+import javax.jms.Session;
 import javax.servlet.ServletContext;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
@@ -73,8 +79,8 @@ public class MatsBrokerMonitor_TestJettyServer {
     private static final Logger log = LoggerFactory.getLogger(MatsBrokerMonitor_TestJettyServer.class);
 
     private static String SERVICE = "MatsTestBrokerMonitor";
-    private static String SERVICE_1 = SERVICE+ ".FirstSubService";
-    private static String SERVICE_2 = SERVICE+ ".SecondSubService";
+    private static String SERVICE_1 = SERVICE + ".FirstSubService";
+    private static String SERVICE_2 = SERVICE + ".SecondSubService";
     private static String SERVICE_3 = "Another Group With Spaces.SubService";
 
     @WebListener
@@ -225,7 +231,6 @@ public class MatsBrokerMonitor_TestJettyServer {
             }
             int countF = count;
 
-            log.info("Sending [" + count + "] requests ..");
             out.println("Sending [" + count + "] requests ..");
 
             long nanosStart_sendMessages = System.nanoTime();
@@ -248,9 +253,36 @@ public class MatsBrokerMonitor_TestJettyServer {
             out.println(".. [" + count + "] requests sent, took [" + msTaken_sendMessages + "] ms.");
             out.println();
 
+            // :: Send a message to a non-existent endpoint, to have an endpoint with a non-consumed message
+            matsFactory.getDefaultInitiator().initiateUnchecked(
+                    (msg) -> {
+                        msg.traceId(MatsTestHelp.traceId() + "_nonExistentEndpoint")
+                                .keepTrace(KeepTrace.FULL)
+                                .from("/sendRequestInitiated")
+                                .to(SERVICE + ".NonExistentService.nonExistentMethod")
+                                .send(dto, new StateTO(1, 2));
+                    });
+
+            // :: Send a message to the ActiveMQ Global DLQ
+            // Get JMS ConnectionFactory from ServletContext
+            ConnectionFactory connFactory = (ConnectionFactory) req.getServletContext()
+                    .getAttribute(ConnectionFactory.class.getName());
+            try {
+                Connection connection = connFactory.createConnection();
+                Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+                Queue dlq = session.createQueue("ActiveMQ.DLQ");
+                MessageProducer producer = session.createProducer(dlq);
+                Message message = session.createMessage();
+                producer.send(message);
+                connection.close();
+            }
+            catch (JMSException e) {
+                throw new IOException("Couldn't send a message to DLQ.");
+            }
+
             // :: Chill till this has really gotten going.
             try {
-                Thread.sleep(500);
+                Thread.sleep(200);
             }
             catch (InterruptedException e) {
                 throw new IOException("Huh?", e);
@@ -400,8 +432,8 @@ public class MatsBrokerMonitor_TestJettyServer {
             }
 
             // Localinspect
-//            out.write("<h1>LocalHtmlInspectForMatsFactory</h1>\n");
-//            localInspect.createFactoryReport(out, true, true, true);
+            // out.write("<h1>LocalHtmlInspectForMatsFactory</h1>\n");
+            // localInspect.createFactoryReport(out, true, true, true);
 
             out.println("  </body>");
             out.println("</html>");

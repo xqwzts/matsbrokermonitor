@@ -33,6 +33,9 @@ class Outputter {
     }
 
     static String ESCAPE(String data) {
+        if (data == null) {
+            return "null";
+        }
         return data.replace("<", "&lt")
                 .replace(">", "&gt;")
                 .replace("&", "&amp;")

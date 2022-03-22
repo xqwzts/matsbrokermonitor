@@ -50,7 +50,7 @@ class BrowseQueue {
 
         out.html("Broker Queue '").DATA(queueId).html("'");
         // ?: Is this the Global DLQ?
-        if (matsBrokerDestination.isGlobalDlq()) {
+        if (matsBrokerDestination.isDefaultGlobalDlq()) {
             // -> Yes, global DLQ
             out.html(" is the Global DLQ, fully qualified name: [")
                     .DATA(matsBrokerDestination.getFqDestinationName())

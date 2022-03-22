@@ -51,18 +51,24 @@ class BrokerOverview {
         out.html("<br>\n");
 
         // :: Global DLQ
-        if (stack.getGlobalDlq().isPresent()) {
+        if (stack.getDefaultGlobalDlq().isPresent()) {
             out.html("<div class='matsbm_endpoint_group'>\n");
             out.html("<h2>Global DLQ</h2><br>");
-            MatsBrokerDestination globalDlq = stack.getGlobalDlq().get();
-            out.html("<div class='matsbm_epid'>")
+            MatsBrokerDestination globalDlq = stack.getDefaultGlobalDlq().get();
+            out.html("<table class='matsbm_table_endpointgroup'>");
+            out.html("<tr><td>");
+            out.html("<div class='matsbm_epid matsbm_epid_queue'>")
                     .DATA(globalDlq.getDestinationName())
                     .html("</div>");
+            out.html("</td><td><div class='matsbm_label matsbm_label_queue'>Queue</div></td>");
 
+            out.html("<td>");
             out.html("<div class='matsbm_stage'>")
                     .DATA(globalDlq.getFqDestinationName());
             out_queueCount(out, globalDlq);
             out.html("</div>");
+            out.html("</td>");
+            out.html("</table>");
 
             out.html("</div>");
         }
@@ -102,7 +108,7 @@ class BrokerOverview {
                         .html("'>")
                         .DATA(endpointId).html("</div></td>");
 
-                out.html("<td><div class='matsbm_marker matsbm_marker")
+                out.html("<td><div class='matsbm_label matsbm_label")
                         .html(queue ? "_queue" : "_topic")
                         .html(privateEp ? "_private" : "")
                         .html("'>")
@@ -110,13 +116,16 @@ class BrokerOverview {
 
                 // :: Foreach Stage
                 out.html("<td>");
+                boolean single = (stages.size() == 1) && (stages.values().iterator().next().getStageIndex() == 0);
                 for (MatsStageBrokerRepresentation stage : stages.values()) {
+                    boolean initial = stage.getStageIndex() == 0;
                     out.html("<div class='matsbm_stage'>");
-                    out.DATA(stage.getStageIndex() == 0 ? "Initial" : "S" + stage.getStageIndex());
+                    out.html(initial
+                            ? ("<div class='matsbm_stage_initial'>" + (single ? "single" : "initial") + "</div>")
+                            : "S" + stage.getStageIndex());
                     Optional<MatsBrokerDestination> incomingDest = stage.getIncomingDestination();
                     if (incomingDest.isPresent()) {
-                        MatsBrokerDestination incoming = incomingDest.get();
-                        out_queueCount(out, incoming);
+                        out_queueCount(out, incomingDest.get());
                     }
 
                     Optional<MatsBrokerDestination> dlqDest = stage.getDlqDestination();
@@ -136,6 +145,7 @@ class BrokerOverview {
 
     private static void out_queueCount(Outputter out, MatsBrokerDestination destination) throws IOException {
         if (destination.getDestinationType() == DestinationType.QUEUE) {
+            // -> Queue
             String style = destination.isDlq()
                     ? destination.getNumberOfQueuedMessages() == 0 ? "dlq_zero" : "dlq"
                     : destination.getNumberOfQueuedMessages() == 0 ? "queue_zero" : "queue";
@@ -145,6 +155,7 @@ class BrokerOverview {
                     .html("'>");
         }
         else {
+            // -> Topic
             out.html("<div class='topic'>");
         }
         out.html(destination.isDlq() ? "DLQ:" : "")

@@ -107,7 +107,6 @@
 
 /* boxes */
 
-
 .matsbm_endpoint_group {
     border-radius: 3px;
     box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
@@ -117,26 +116,39 @@
     margin: 0.5em 0.5em 1em 0.5em;
 }
 
+/* ep-group table */
+
 .matsbm_table_endpointgroup {
     border-collapse: collapse;
     margin: 0 0 0 1em;
-    /*padding: 0;*/
+    width: 99%;
 }
-
-.matsbm_table_endpointgroup tr {
-}
-
+.matsbm_table_endpointgroup tr {}
 .matsbm_table_endpointgroup td {
     padding: 0 0.4em 0 0;
 }
+/* .. make last cell take rest of space */
+.matsbm_table_endpointgroup td:not(:last-child) {
+    white-space: nowrap;
+}
+.matsbm_table_endpointgroup td:last-child {
+    width: 99%;
+}
+/* .. hover-highlight rows */
+.matsbm_table_endpointgroup tr:hover {
+    background-color: #ffff99;
+}
 
-/* epids and markers */
+/* epids and queue/topic labels */
 
-.matsbm_epid, .matsbm_marker {
+.matsbm_epid, .matsbm_label {
     font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;;
     font-size: 1em;
-    padding: 0.25em 0.5em 0.25em 0.5em;
-    border-radius: 5px;
+    padding: 0 0.5em 0 0.5em;
+    height: 17pt;
+    border-radius: 4px;
+    align-items: center;
+    display: flex;
 }
 
 /* epid */
@@ -144,7 +156,7 @@
     min-width: 550px;
 }
 .matsbm_epid_queue {
-    background-color: rgba(255, 255, 255, 0.3);
+    background-color: rgba(255, 255, 255, 0.4);
 }
 .matsbm_epid_queue_private {
     font-size: 0.85em;
@@ -153,7 +165,7 @@
     color: #313539;
 }
 .matsbm_epid_topic {
-    background-color: rgba(255, 255, 255, 0.3);
+    background-color: rgba(255, 255, 255, 0.4);
 }
 .matsbm_epid_topic_private {
     font-size: 0.85em;
@@ -162,22 +174,26 @@
     color: #313539;
 }
 
-/* marker */
-.matsbm_marker_queue, .matsbm_marker_queue_private, .matsbm_marker_topic, .matsbm_marker_topic_private {
+/* queue/topic label */
+.matsbm_label_queue, .matsbm_label_queue_private, .matsbm_label_topic, .matsbm_label_topic_private {
     font-size: 0.9em;
 }
-.matsbm_marker_queue {
+.matsbm_label_queue {
     background-color: rgb(187, 238, 187);
 }
-.matsbm_marker_queue_private {
+.matsbm_label_queue_private {
     background-color: rgb(187, 238, 187);
 }
-.matsbm_marker_topic {
-    background-color: rgb(171, 238, 238);
+.matsbm_label_topic {
+    background-color: #f0e040;
 }
-.matsbm_marker_topic_private {
-    background-color: rgb(171, 238, 238);
+.matsbm_label_topic_private {
+    background-color: #f0e040;
 }
+
+/* Markers for states of ep-groups and eps: Has incoming messages, Has DLQs */
+.matsbm_marker_has_msgs {}
+.matsbm_marker_has_dlq {}
 
 /* Stage with contents */
 .matsbm_stage {
@@ -190,10 +206,14 @@
     padding: 0.2em 0.2em 0.2em 0.2em;
 }
 
-.matsbm_report .queue, .queue_zero, .dlq, .dlq_zero, .topic, .topic_zero {
+.matsbm_stage_initial {
+    min-width: 2.7em;
+    display: inline-block;
+}
+
+.matsbm_report .queue, .queue_zero, .dlq, .dlq_zero, .topic {
     text-decoration: none;
     background-color: initial;
-    background-image: linear-gradient(#00D775, #00BD68);
     border-radius: 6px;
     box-shadow: rgba(0, 0, 0, 0.1) 0 2px 4px;
     color: #FFFFFF;
@@ -205,8 +225,13 @@
     transition: box-shadow 0.4s;
 }
 
+.matsbm_report .topic {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+
 .matsbm_report .queue {
-    background-image: linear-gradient(#0dccea, #0d70ea);
+    background-image: linear-gradient(#0d90ea, #0d60ea);
 }
 
 .matsbm_report .queue:hover {
@@ -239,10 +264,6 @@
 .matsbm_report .dlq_zero:hover {
     text-decoration: underline;
     box-shadow: #027d1a 0 3px 8px;
-}
-
-.matsbm_report .topic {
-    background-image: linear-gradient(#00e0c0, #00d0d0);
 }
 
 .matsbm_age {
@@ -479,6 +500,14 @@
     width: 1.5em;
     height: 1.5em;
     fill: #7f15b7;
+    transform: translateY(0.4em);
+    margin-top: -2em;
+}
+
+.matsbm_arrow_send {
+    width: 1.5em;
+    height: 1.5em;
+    fill: #7d7a00;
     transform: translateY(0.4em);
     margin-top: -2em;
 }

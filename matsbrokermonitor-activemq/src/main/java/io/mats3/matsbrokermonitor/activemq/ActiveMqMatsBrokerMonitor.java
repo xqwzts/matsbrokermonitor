@@ -141,14 +141,14 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         private final String _matsStageId;
         private final DestinationType _destinationType;
         private final boolean _isDlq;
-        private final boolean _isGlobalDlq;
+        private final boolean _isDefaultGlobalDlq;
         private final long _numberOfQueuedMessages;
         private final long _numberOfInFlightMessages;
         private final long _headMessageAgeMillis;
 
         public MatsBrokerDestinationImpl(long lastUpdateMillis, long lastUpdateBrokerMillis, String fqDestinationName,
                 String destinationName, String matsStageId, DestinationType destinationType, boolean isDlq,
-                boolean isGlobalDlq, long numberOfQueuedMessages, long numberOfInFlightMessages,
+                boolean isDefaultGlobalDlq, long numberOfQueuedMessages, long numberOfInFlightMessages,
                 long headMessageAgeMillis) {
             _lastUpdateMillis = lastUpdateMillis;
             _lastUpdateBrokerMillis = lastUpdateBrokerMillis;
@@ -157,7 +157,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
             _matsStageId = matsStageId;
             _destinationType = destinationType;
             _isDlq = isDlq;
-            _isGlobalDlq = isGlobalDlq;
+            _isDefaultGlobalDlq = isDefaultGlobalDlq;
             _numberOfQueuedMessages = numberOfQueuedMessages;
             _numberOfInFlightMessages = numberOfInFlightMessages;
             _headMessageAgeMillis = headMessageAgeMillis;
@@ -197,8 +197,8 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         }
 
         @Override
-        public boolean isGlobalDlq() {
-            return _isGlobalDlq;
+        public boolean isDefaultGlobalDlq() {
+            return _isDefaultGlobalDlq;
         }
 
         @Override
@@ -236,7 +236,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
                     ", _matsStageId='" + _matsStageId + '\'' +
                     ", _destinationType=" + _destinationType +
                     ", _isDlq=" + _isDlq +
-                    ", _isGlobalDlq=" + _isGlobalDlq +
+                    ", _isGlobalDlq=" + _isDefaultGlobalDlq +
                     ", _numberOfQueuedMessages=" + _numberOfQueuedMessages +
                     ", _numberOfInFlightMessages=" + (_numberOfInFlightMessages == 0
                             ? "{not present}"
