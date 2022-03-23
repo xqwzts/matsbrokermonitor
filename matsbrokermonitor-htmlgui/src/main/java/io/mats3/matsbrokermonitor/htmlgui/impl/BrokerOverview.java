@@ -3,9 +3,11 @@ package io.mats3.matsbrokermonitor.htmlgui.impl;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerInfo;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerSnapshot;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.DestinationType;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation;
@@ -34,19 +36,68 @@ class BrokerOverview {
         }
         out.html("</div>\n");
 
-        Map<String, MatsBrokerDestination> matsDestinations = matsBrokerMonitor.getMatsDestinations();
-        MatsFabricBrokerRepresentation stack = MatsFabricBrokerRepresentation.stack(matsDestinations.values());
+        Optional<BrokerSnapshot> snapshotO = matsBrokerMonitor.getSnapshot();
+        if (!snapshotO.isPresent()) {
+            out.html("<h1>Have not gotten an update from the broker yet!</h1>");
+            return;
+        }
+
+        BrokerSnapshot snapshot = snapshotO.get();
+
+        boolean tooOldMessage = false;
+        boolean hasDlqMessage = false;
+
+        MatsFabricBrokerRepresentation stack = MatsFabricBrokerRepresentation
+                .stack(snapshot.getMatsDestinations().values());
+
+        out.html("Updated as of: <b>").DATA(Statics.formatTimestampSpan(snapshot.getLastUpdateLocalMillis()));
+        if (snapshot.getLastUpdateBrokerMillis().isPresent()) {
+            out.html("</b> - broker time: <b>")
+                    .DATA(Statics.formatTimestamp(snapshot.getLastUpdateBrokerMillis().getAsLong()));
+        }
+        out.html("</b> <i>(all ages on queues are wrt. this update time)</i><br>");
+
+        long totalNumberOfIncomingMessages = stack.getTotalNumberOfIncomingMessages();
+        out.html("Total queued messages: <b>").DATA(totalNumberOfIncomingMessages).html("</b>");
+        if (totalNumberOfIncomingMessages > 0) {
+            long maxStage = stack.getMaxStageNumberOfIncomingMessages();
+            out.html(", worst queue has <b>").DATA(maxStage).html("</b> message").html(maxStage > 1 ? "s" : "");
+        }
+        OptionalLong oldestIncomingO = stack.getOldestIncomingMessageAgeMillis();
+        if (oldestIncomingO.isPresent()) {
+            long oldestIncoming = oldestIncomingO.getAsLong();
+            tooOldMessage = (oldestIncoming > 10 * 60 * 1000);
+            out.html(", ").html(tooOldMessage ? "<span class='matsbm_messages_old'>" : "")
+                    .html("oldest message is ")
+                    .html("<b>").DATA(Statics.millisSpanToHuman(oldestIncoming)).html("</b> old.")
+                    .html(tooOldMessage ? "</span>" : "");
+        }
+        out.html("<br>\n");
+        long totalNumberOfDeadLetterMessages = stack.getTotalNumberOfDeadLetterMessages();
+        out.html("Total DLQed messages: <b>").DATA(totalNumberOfDeadLetterMessages).html("</b>");
+        if (totalNumberOfDeadLetterMessages > 0) {
+            hasDlqMessage = true;
+            long maxQueue = stack.getMaxQueueNumberOfDeadLetterMessages();
+            out.html(", worst DLQ has <b>").DATA(maxQueue).html("</b> message").html(maxQueue > 1 ? "s" : "");
+        }
+        OptionalLong oldestDlq = stack.getOldestDlqMessageAgeMillis();
+        if (oldestDlq.isPresent()) {
+            out.html(", oldest DLQ message is <b>").DATA(Statics.millisSpanToHuman(oldestDlq.getAsLong()))
+                    .html("</b> old.");
+        }
+        out.html("<br>\n<br>\n");
 
         // :: ToC
         out.html("<b>EndpointGroups ToC</b><br>\n");
-        for (MatsEndpointGroupBrokerRepresentation service : stack.getEndpointGroups()
+        for (MatsEndpointGroupBrokerRepresentation endpointGroup : stack.getEndpointGroups()
                 .values()) {
-            String endpointGroupId = service.getEndpointGroup().trim().isEmpty()
+            String endpointGroupId = endpointGroup.getEndpointGroup().trim().isEmpty()
                     ? "{empty string}"
-                    : service.getEndpointGroup();
-            out.html("&nbsp;&nbsp;<b><a href='#").DATA(endpointGroupId).html("'>")
+                    : endpointGroup.getEndpointGroup();
+            out.html("&nbsp;&nbsp;<a href='#").DATA(endpointGroupId).html("'>")
                     .DATA(endpointGroupId)
-                    .html("</a></b><br>\n");
+                    .html("</a>");
+            out.html("<br>\n");
         }
         out.html("<br>\n");
 

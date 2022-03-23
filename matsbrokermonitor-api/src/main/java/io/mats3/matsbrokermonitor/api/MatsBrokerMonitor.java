@@ -42,9 +42,30 @@ public interface MatsBrokerMonitor extends Closeable {
 
     Optional<BrokerInfo> getBrokerInfo();
 
+    Optional<BrokerSnapshot> getSnapshot();
+
+
     void registerListener(Consumer<DestinationUpdateEvent> listener);
 
     void forceUpdate();
+
+    interface BrokerSnapshot {
+        /**
+         * @return the millis-since-Epoch when this was last updated, using the time of this receiving computer. Compare
+         *         to {@link #getLastUpdateBrokerMillis()}.
+         */
+        long getLastUpdateLocalMillis();
+
+        /**
+         * @return the millis-since-epoch <i>on the broker side</i> when this was last updated. Compare to
+         *         {@link #getLastUpdateLocalMillis()}.
+         */
+        OptionalLong getLastUpdateBrokerMillis();
+
+        NavigableMap<String, MatsBrokerDestination> getMatsDestinations();
+
+        Optional<BrokerInfo> getBrokerInfo();
+    }
 
     interface BrokerInfo {
         /**
@@ -61,7 +82,7 @@ public interface MatsBrokerMonitor extends Closeable {
          * @return any broker-specific information, in JSON format - the {@link #getBrokerType()} should be taken into
          *         account.
          */
-        String getBrokerJson();
+        Optional<String> getBrokerJson();
     }
 
     interface DestinationUpdateEvent {
@@ -75,8 +96,12 @@ public interface MatsBrokerMonitor extends Closeable {
         boolean isFullUpdate();
 
         /**
+         * TODO: Change semantics: Any destination not mentioned has ZERO messages.
+         *
          * @return a Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination}] for any new or updated
          *         Mats-relevant destinations.
+         *
+         *
          */
         NavigableMap<String, MatsBrokerDestination> getNewOrUpdatedDestinations();
     }

@@ -99,8 +99,6 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
     private final CopyOnWriteArrayList<Consumer<DestinationUpdateEvent>> _listeners = new CopyOnWriteArrayList<>();
 
-    private volatile BrokerInfo _brokerInfo;
-
     @Override
     public void registerListener(Consumer<DestinationUpdateEvent> listener) {
         _listeners.add(listener);
@@ -131,7 +129,63 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         return Optional.ofNullable(_brokerInfo);
     }
 
+    @Override
+    public Optional<BrokerSnapshot> getSnapshot() {
+        if (!_anyUpdateEver) {
+            return Optional.empty();
+        }
+        return Optional.of(new BrokerSnapshotImpl(_lastUpdateLocalMillis, _lastUpdateBrokerMillis, new TreeMap<>(
+                _currentDestinationsMap), _brokerInfo));
+    }
+
     // ===== IMPLEMENTATION
+
+    private volatile boolean _anyUpdateEver = false; // Start out not having gotten update
+
+    private volatile long _lastUpdateLocalMillis;
+
+    private volatile long _lastUpdateBrokerMillis;
+
+    private volatile BrokerInfo _brokerInfo;
+
+    private final ConcurrentNavigableMap<String, MatsBrokerDestination> _currentDestinationsMap = new ConcurrentSkipListMap<>();
+
+    private static class BrokerSnapshotImpl implements BrokerSnapshot {
+
+        private final long _lastUpdateLocalMillis;
+        private final long _lastUpdateBrokerMillis;
+        private final NavigableMap<String, MatsBrokerDestination> _matsDestinations;
+        private final BrokerInfo _brokerInfo; // nullable
+
+        public BrokerSnapshotImpl(long lastUpdateLocalMillis, Long lastUpdateBrokerMillis,
+                NavigableMap<String, MatsBrokerDestination> matsDestinations,
+                BrokerInfo brokerInfo) {
+            _lastUpdateLocalMillis = lastUpdateLocalMillis;
+            _lastUpdateBrokerMillis = lastUpdateBrokerMillis;
+            _matsDestinations = matsDestinations;
+            _brokerInfo = brokerInfo;
+        }
+
+        @Override
+        public long getLastUpdateLocalMillis() {
+            return _lastUpdateLocalMillis;
+        }
+
+        @Override
+        public OptionalLong getLastUpdateBrokerMillis() {
+            return OptionalLong.of(_lastUpdateBrokerMillis);
+        }
+
+        @Override
+        public NavigableMap<String, MatsBrokerDestination> getMatsDestinations() {
+            return _matsDestinations;
+        }
+
+        @Override
+        public Optional<BrokerInfo> getBrokerInfo() {
+            return Optional.ofNullable(_brokerInfo);
+        }
+    }
 
     private static class MatsBrokerDestinationImpl implements MatsBrokerDestination {
         private final long _lastUpdateMillis;
@@ -251,7 +305,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
     private static class BrokerInfoImpl implements BrokerInfo {
         private final String _brokerType;
         private final String _brokerName;
-        private final String _brokerJson;
+        private final String _brokerJson; // nullable
 
         public BrokerInfoImpl(String brokerType, String brokerName, String brokerJson) {
             _brokerType = brokerType;
@@ -270,8 +324,8 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         }
 
         @Override
-        public String getBrokerJson() {
-            return _brokerJson;
+        public Optional<String> getBrokerJson() {
+            return Optional.ofNullable(_brokerJson);
         }
     }
 
@@ -297,8 +351,6 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         }
     }
 
-    private final ConcurrentNavigableMap<String, MatsBrokerDestination> _currentDestinationsMap = new ConcurrentSkipListMap<>();
-
     private void eventFromQuerier(ActiveMqBrokerStatsEvent event) {
         ConcurrentNavigableMap<String, DestinationStatsDto> destStatsDtos = _querier
                 .getCurrentDestinationStatsDtos();
@@ -306,6 +358,8 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         List<String> fqDestinationsNewOrUpdated = new ArrayList<>();
 
         int matsDestinationCount = 0;
+
+        long latestUpdateBrokerMillis = 0;
 
         for (Entry<String, DestinationStatsDto> entry : destStatsDtos.entrySet()) {
             String fqDestinationName = entry.getKey();
@@ -363,6 +417,8 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
             long numberOfInflightMessages = stats.inflightCount;
 
             long lastUpdateBrokerMillis = stats.brokerTime.toEpochMilli();
+
+            latestUpdateBrokerMillis = Math.max(latestUpdateBrokerMillis, lastUpdateBrokerMillis);
 
             // If present: Calculate age: If lastUpdateBrokerMillis present, use this, otherwise lastUpdateMillis
             long headMessageAgeMillis = stats.headMessageBrokerInTime.map(instant -> (lastUpdateBrokerMillis != 0
@@ -435,6 +491,14 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
                         brokerStatsDto.brokerName,
                         brokerStatsDto.toJson()))
                 .orElse(null);
+
+        // Switch flag if not set: we've now gotten at least one update.
+        if (!_anyUpdateEver) {
+            _anyUpdateEver = true;
+        }
+
+        _lastUpdateLocalMillis = System.currentTimeMillis();
+        _lastUpdateBrokerMillis = latestUpdateBrokerMillis;
 
         // :: Construct and send the update event to listeners.
         DestinationUpdateEventImpl update = new DestinationUpdateEventImpl(false, newOrUpdatedDestinations);

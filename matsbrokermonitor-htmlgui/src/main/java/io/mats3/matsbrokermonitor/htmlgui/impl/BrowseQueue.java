@@ -2,8 +2,6 @@ package io.mats3.matsbrokermonitor.htmlgui.impl;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Collection;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
@@ -44,8 +42,9 @@ class BrowseQueue {
             }
         }
         if (matsBrokerDestination == null) {
-            // TODO: Write something sane here instead!
-            throw new IllegalArgumentException("Unknown destination!");
+            out.html("<h1>No info on destination!</h1><br>\n");
+            out.html("Destination: ").DATA(destinationId).html("<br>\n");
+            return;
         }
 
         out.html("Broker Queue '").DATA(queueId).html("'");
@@ -74,17 +73,18 @@ class BrowseQueue {
             out.html("<br>\n");
         }
 
-        long lastUpdate = matsBrokerDestination.getLastUpdateBrokerMillis()
-                .orElse(matsBrokerDestination.getLastUpdateLocalMillis());
-        LocalDateTime lastUpdateDt = LocalDateTime.ofInstant(Instant.ofEpochMilli(lastUpdate), ZoneId.systemDefault());
-
-        out.html("At ").DATA(lastUpdateDt.toString()).html(" it had ")
-                .DATA(matsBrokerDestination.getNumberOfQueuedMessages())
-                .html(" messages");
+        out.html("At ").DATA(Statics.formatTimestampSpan(matsBrokerDestination.getLastUpdateLocalMillis()))
+                .html(" it had ").DATA(matsBrokerDestination.getNumberOfQueuedMessages()).html(" messages");
         if (matsBrokerDestination.getNumberOfInflightMessages().isPresent()) {
             out.html(" of which ")
                     .DATA(matsBrokerDestination.getNumberOfInflightMessages().getAsLong())
-                    .html(" were in-flight.");
+                    .html(" were in-flight");
+        }
+        out.html(".");
+        if (matsBrokerDestination.getLastUpdateBrokerMillis().isPresent()) {
+            out.html(" (broker time: ")
+                    .DATA(Statics.formatTimestamp(matsBrokerDestination.getLastUpdateBrokerMillis().getAsLong()))
+                    .html(")");
         }
         out.html("<br>\n");
 
@@ -138,7 +138,7 @@ class BrowseQueue {
                 out.html("<a href='?examineMessage&destinationId=").DATA(destinationId)
                         .html("&messageSystemId=").DATA(matsMsg.getMessageSystemId()).html("'>");
                 Instant instant = Instant.ofEpochMilli(matsMsg.getTimestamp());
-                out.html(Statics.formatTimestamp(instant));
+                out.html(Statics.formatTimestampSpan(instant.toEpochMilli()));
                 out.html("</a>");
                 out.html("</td>");
 
@@ -165,7 +165,7 @@ class BrowseQueue {
                 out.html("<td>");
                 out.DATA(matsMsg.getExpirationTimestamp() == 0
                         ? "Never expires"
-                        : Statics.formatTimestamp(matsMsg.getExpirationTimestamp()));
+                        : Statics.formatTimestampSpan(matsMsg.getExpirationTimestamp()));
                 out.html("</td>");
 
                 out.html("</tr>\n");

@@ -105,7 +105,14 @@
 /* PAGE: Broker Overview */
 /* ===================== */
 
-/* boxes */
+/* intro info */
+
+.matsbm_messages_old {
+    background-color: red;
+    color: white;
+}
+
+/* box: endpoint group */
 
 .matsbm_endpoint_group {
     border-radius: 3px;
