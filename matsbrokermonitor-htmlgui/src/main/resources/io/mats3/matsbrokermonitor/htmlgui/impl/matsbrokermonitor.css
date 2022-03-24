@@ -107,6 +107,10 @@
 
 /* intro info */
 
+.matsbm_overview_message {
+    margin: 0.8em 0 0.8em 0;
+}
+
 .matsbm_messages_old {
     background-color: red;
     color: white;
@@ -117,12 +121,23 @@
 .matsbm_button_viewall {
     background-color: #008CBA;
     transition: background-color 0.3s, color 0.3s;
+    position: relative;
+    z-index: 2;
 }
 
 .matsbm_button_viewbad {
+    margin-left: 0.8em;
     background-color: #e57f00;
     transition: background-color 0.3s, color 0.3s;
+    position: relative;
+    z-index: 2;
 }
+
+.matsbm_button_active {
+    box-shadow: 0 0 5px 7px rgba(0, 255, 0, 0.6);
+    z-index: 1;
+}
+
 
 /* :: ToC */
 

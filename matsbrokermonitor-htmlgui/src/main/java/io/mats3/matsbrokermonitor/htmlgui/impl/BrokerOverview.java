@@ -47,7 +47,7 @@ class BrokerOverview {
 
         BrokerSnapshot snapshot = snapshotO.get();
 
-        boolean brokerHasTooOldMsgs = false;
+        boolean brokerHasOldMsgs = false;
         boolean brokerHasDlqMsgs = false;
 
         MatsFabricBrokerRepresentation stack = MatsFabricBrokerRepresentation
@@ -58,7 +58,9 @@ class BrokerOverview {
             out.html("</b> - broker time: <b>")
                     .DATA(Statics.formatTimestamp(snapshot.getLastUpdateBrokerMillis().getAsLong()));
         }
-        out.html("</b> <i>(all ages on queues are wrt. this update time)</i><br>");
+        out.html("</b> <i>(all ages on queues are wrt. this update time)</i><br>\n");
+
+        out.html("<div class='matsbm_overview_message'>\n");
 
         long totalNumberOfIncomingMessages = stack.getTotalNumberOfIncomingMessages();
         out.html("Total queued messages: <b>").DATA(totalNumberOfIncomingMessages).html("</b>");
@@ -69,11 +71,11 @@ class BrokerOverview {
         OptionalLong oldestIncomingO = stack.getOldestIncomingMessageAgeMillis();
         if (oldestIncomingO.isPresent()) {
             long oldestIncoming = oldestIncomingO.getAsLong();
-            brokerHasTooOldMsgs = (oldestIncoming > TOO_OLD);
-            out.html(", ").html(brokerHasTooOldMsgs ? "<span class='matsbm_messages_old'>" : "")
+            brokerHasOldMsgs = (oldestIncoming > TOO_OLD);
+            out.html(", ").html(brokerHasOldMsgs ? "<span class='matsbm_messages_old'>" : "")
                     .html("oldest message is ")
                     .html("<b>").DATA(Statics.millisSpanToHuman(oldestIncoming)).html("</b> old.")
-                    .html(brokerHasTooOldMsgs ? "</span>" : "");
+                    .html(brokerHasOldMsgs ? "</span>" : "");
         }
         out.html("<br>\n");
         long totalNumberOfDeadLetterMessages = stack.getTotalNumberOfDlqMessages();
@@ -88,16 +90,18 @@ class BrokerOverview {
             out.html(", oldest DLQ message is <b>").DATA(Statics.millisSpanToHuman(oldestDlq.getAsLong()))
                     .html("</b> old.");
         }
-        out.html("<br>\n");
+        out.html("</div>\n");
 
-        // :: SEE ALL vs SEE ONLY BAD
+        boolean startWithBad = brokerHasDlqMsgs || brokerHasOldMsgs;
+
+        // :: BUTTONS: View All vs View Bad
 
         out.html("<input type='button' id='matsbm_button_viewall' value='View All'"
-                + " class='matsbm_button matsbm_button_viewall'"
-                + " onclick='matsbm_view_all_destinations(event)'>");
+                + " class='matsbm_button matsbm_button_viewall" + (startWithBad ? "" : " matsbm_button_active")
+                + "' onclick='matsbm_view_all_destinations(event)'>");
         out.html("<input type='button' id='matsbm_button_viewbad' value='View Bad'"
-                + " class='matsbm_button matsbm_button_viewbad'"
-                + " onclick='matsbm_view_bad_destinations(event)'>");
+                + " class='matsbm_button matsbm_button_viewbad" + (startWithBad ? " matsbm_button_active" : "")
+                + "' onclick='matsbm_view_bad_destinations(event)'>");
         out.html("<br>\n");
 
         // :: ToC
@@ -108,11 +112,13 @@ class BrokerOverview {
             long oldestIncoming = oldestIncomO.orElse(-1);
             boolean hasOldMsgs = oldestIncoming > TOO_OLD;
             long dlqMessages = endpointGroup.getTotalNumberOfDlqMessages();
-            boolean hasDlqsMsgs = dlqMessages > 0;
+            boolean hasDlqMsgs = dlqMessages > 0;
 
             out.html("<tr class='matsbm_toc_endpointgroup")
                     .html(hasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
-                    .html(hasDlqsMsgs ? " matsbm_marker_has_dlqs" : "").html("'>");
+                    .html(hasDlqMsgs ? " matsbm_marker_has_dlqs" : "")
+                    .html(startWithBad && !(hasOldMsgs || hasDlqMsgs) ? " matsbm_marker_hidden_toc" : "")
+                    .html("'>");
             out.html("<td><div class='matsbm_toc_content'>");
             String endpointGroupId = endpointGroup.getEndpointGroup().trim().isEmpty()
                     ? "{empty string}"
@@ -153,7 +159,10 @@ class BrokerOverview {
         if (stack.getDefaultGlobalDlq().isPresent()) {
             MatsBrokerDestination globalDlq = stack.getDefaultGlobalDlq().get();
             boolean hasDlqMsgs = globalDlq.getNumberOfQueuedMessages() > 0;
-            out.html("<div class='matsbm_endpoint_group").html(hasDlqMsgs ? " matsbm_marker_has_dlqs" : "").html("'>");
+            out.html("<div class='matsbm_endpoint_group")
+                    .html(hasDlqMsgs ? " matsbm_marker_has_dlqs" : "")
+                    .html(startWithBad && !hasDlqMsgs ? " matsbm_marker_hidden_epgrp" : "")
+                    .html("'>");
             out.html("<h2>Global DLQ</h2><br>");
             out.html("<table class='matsbm_table_endpointgroup'>");
             out.html("<tr><td>");
@@ -186,6 +195,7 @@ class BrokerOverview {
             out.html("<div class='matsbm_endpoint_group")
                     .html(epgrHasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
                     .html(epgrHasDlqsmsgs ? " matsbm_marker_has_dlqs" : "")
+                    .html(startWithBad && !(epgrHasOldMsgs || epgrHasDlqsmsgs) ? " matsbm_marker_hidden_epgrp" : "")
                     .html("' id='").DATA(endpointGroupId).html("'>\n");
             out.html("<a href='#").DATA(endpointGroupId).html("'>");
             out.html("<h2>").DATA(endpointGroupId).html("</h2></a><br>\n");
@@ -199,7 +209,9 @@ class BrokerOverview {
 
                 out.html("<tr class='matsbm_endpoint_group_row")
                         .html(epHasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
-                        .html(epHasDlqsMsgs ? " matsbm_marker_has_dlqs" : "").html("'>");
+                        .html(epHasDlqsMsgs ? " matsbm_marker_has_dlqs" : "")
+                        .html(startWithBad && !(epHasOldMsgs || epHasDlqsMsgs) ? " matsbm_marker_hidden_row" : "")
+                        .html("'>");
                 String endpointId = endpoint.getEndpointId();
                 Map<Integer, MatsStageBrokerRepresentation> stages = endpoint.getStages();
 

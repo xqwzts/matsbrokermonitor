@@ -45,6 +45,9 @@ function matsbm_view_all_destinations(event) {
         // -> Remove the "hidden" class
         epGroupDiv.classList.remove("matsbm_marker_hidden_epgrp");
     }
+
+    document.getElementById("matsbm_button_viewall").classList.add('matsbm_button_active')
+    document.getElementById("matsbm_button_viewbad").classList.remove('matsbm_button_active')
 }
 
 function matsbm_view_bad_destinations(event) {
@@ -78,6 +81,9 @@ function matsbm_view_bad_destinations(event) {
             epGroupDiv.classList.add("matsbm_marker_hidden_epgrp");
         }
     }
+
+    document.getElementById("matsbm_button_viewall").classList.remove('matsbm_button_active')
+    document.getElementById("matsbm_button_viewbad").classList.add('matsbm_button_active')
 }
 
 
