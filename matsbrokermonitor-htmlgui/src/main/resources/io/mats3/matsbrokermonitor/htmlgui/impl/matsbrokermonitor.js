@@ -28,32 +28,54 @@ document.addEventListener('keydown', (event) => {
 
 function matsbm_view_all_destinations(event) {
     console.log("view all")
+    // :: ToC EndpointGroup
+    for (const epGroupRow of document.body.querySelectorAll(".matsbm_toc_endpointgroup")) {
+        // -> Remove the "hidden" class
+        epGroupRow.classList.remove("matsbm_marker_hidden_toc");
+    }
+
+    // :: Endpoints (rows in table)
     for (const epGroupRow of document.body.querySelectorAll(".matsbm_endpoint_group_row")) {
-        // ?: Does the group NOT have any of the "bad" markers?
-        if (! (epGroupRow.classList.contains("matsbm_marker_has_old_msgs")
-            || epGroupRow.classList.contains("matsbm_marker_has_dlqs"))) {
-            // -> No, does not have "bad" markers: Hide them
-            epGroupRow.classList.remove("matsbm_marker_hidden_row");
-        }
+        // -> Remove the "hidden" class
+        epGroupRow.classList.remove("matsbm_marker_hidden_row");
+    }
+
+    // :: EndpointGroups (divs with endpoint-table inside)
+    for (const epGroupDiv of document.body.querySelectorAll(".matsbm_endpoint_group")) {
+        // -> Remove the "hidden" class
+        epGroupDiv.classList.remove("matsbm_marker_hidden_epgrp");
     }
 }
 
 function matsbm_view_bad_destinations(event) {
     console.log("view bad")
-    // for (const epGroupDiv of document.body.querySelectorAll(".matsbm_endpoint_group")) {
-    //     // ?: Does the group NOT have any of the "bad" markers?
-    //     if (! (epGroupDiv.classList.contains("matsbm_marker_has_old_msgs")
-    //         || epGroupDiv.classList.contains("matsbm_marker_has_dlqs"))) {
-    //         // -> No, does not have "bad" markers: Hide them
-    //         epGroupDiv.classList.add("matsbm_marker_hidden");
-    //     }
-    // }
+    // :: ToC EndpointGroup
+    for (const epGroupRow of document.body.querySelectorAll(".matsbm_toc_endpointgroup")) {
+        // ?: Does the ToC entry NOT have any of the "bad" markers?
+        if (!(epGroupRow.classList.contains("matsbm_marker_has_old_msgs")
+            || epGroupRow.classList.contains("matsbm_marker_has_dlqs"))) {
+            // -> No, does not have "bad" markers: Hide them
+            epGroupRow.classList.add("matsbm_marker_hidden_toc");
+        }
+    }
+
+    // :: Endpoints (rows in table)
     for (const epGroupRow of document.body.querySelectorAll(".matsbm_endpoint_group_row")) {
         // ?: Does the group NOT have any of the "bad" markers?
-        if (! (epGroupRow.classList.contains("matsbm_marker_has_old_msgs")
+        if (!(epGroupRow.classList.contains("matsbm_marker_has_old_msgs")
             || epGroupRow.classList.contains("matsbm_marker_has_dlqs"))) {
             // -> No, does not have "bad" markers: Hide them
             epGroupRow.classList.add("matsbm_marker_hidden_row");
+        }
+    }
+
+    // :: EndpointGroups (divs with endpoint-table inside)
+    for (const epGroupDiv of document.body.querySelectorAll(".matsbm_endpoint_group")) {
+        // ?: Does the group NOT have any of the "bad" markers?
+        if (!(epGroupDiv.classList.contains("matsbm_marker_has_old_msgs")
+            || epGroupDiv.classList.contains("matsbm_marker_has_dlqs"))) {
+            // -> No, does not have "bad" markers: Hide them
+            epGroupDiv.classList.add("matsbm_marker_hidden_epgrp");
         }
     }
 }

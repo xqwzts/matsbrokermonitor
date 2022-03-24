@@ -112,30 +112,94 @@
     color: white;
 }
 
-/* box: endpoint group */
+/* :: Buttons: ViewAll, ViewBad */
 
-.matsbm_endpoint_group {
-    border-radius: 3px;
-    box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
-    border: thin solid #a0a0a0;
-    padding: 0.1em 0.5em 0.5em 0.5em;
-    background: #e8f0e8;
-    margin: 0.5em 0.5em 1em 0.5em;
+.matsbm_button_viewall {
+    background-color: #008CBA;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.matsbm_button_viewbad {
+    background-color: #e57f00;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+/* :: ToC */
+
+#matsbs_toc_heading {
+    margin-top: 0.6em;
+    font-weight: bold;
+    font-size: 1.2em;
 }
 
 /* table: ToC */
 
 #matsbm_table_toc {
+    border-collapse: collapse;
 }
 #matsbm_table_toc td {
-    padding: 0 0.75em 0 0.75em;
+    padding: 0.1em 0.75em 0.1em 0.75em;
 }
 /* .. hover-highlight rows */
 #matsbm_table_toc tr:hover {
     background-color: #ffff99;
 }
 
-/* table: ep-group */
+/* table-row ToC endpointgroups show/hide transitions */
+
+/* .. show */
+.matsbm_toc_endpointgroup td div {
+    transition: all 1.5s;
+}
+
+/* .. hide */
+.matsbm_marker_hidden_toc td, .matsbm_marker_hidden_toc td div {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    line-height: 0;
+    opacity: 0;
+    transition: all 1.5s;
+}
+
+
+/* :: Endpoint Groups boxes */
+
+/* box endpointgroup */
+
+.matsbm_endpoint_group {
+    border-radius: 3px;
+    box-sizing: border-box;
+    box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
+    border: thin solid #a0a0a0;
+    padding: 0.1em 0.5em 0.5em 0.5em;
+    background: #e8f0e8;
+    margin: 0.5em 0.5em 1em 0.5em;
+    max-height: 100000px;
+    transition: all 0.5s;
+}
+
+/* box endpoint group show/hide transitions */
+
+/* .. show */
+.matsbm_endpoint_group h2 {
+    transition: line-height 0.5s;
+}
+
+/* .. hide */
+.matsbm_marker_hidden_epgrp, .matsbm_marker_hidden_epgrp h2 {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+    margin-bottom: -0.6em;
+    /*transition: max-height 1.5s, opacity 1.5s, padding 1.5s, margin 1.5s;*/
+    line-height: 0;
+    transition: all 0.5s linear 0.7s;
+}
+
+
+/* table: Endpoints in EndpointGroup box */
 
 .matsbm_table_endpointgroup {
     border-collapse: collapse;
@@ -157,6 +221,46 @@
 .matsbm_table_endpointgroup tr:hover {
     background-color: #ffff99;
 }
+
+/* table-row endpoint show/hide transitions */
+
+/* .. show */
+.matsbm_table_endpointgroup td {
+    transition: line-height 1.5s;
+}
+
+.matsbm_table_endpointgroup td div {
+    max-height: 17pt;
+    overflow: hidden;
+    vertical-align:top;
+    transition: padding 1.5s, margin 1.5s, border 0.9s linear 0.6s, max-height 1.5s, opacity 1.5s;
+}
+
+/* .. hide */
+.matsbm_marker_hidden_row td {
+    line-height: 0;
+    transition: line-height 1.5s;
+}
+
+.matsbm_marker_hidden_row td div {
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+
+    border-top-width: 0;
+    border-bottom-width: 0;
+
+    max-height: 0;
+
+    opacity: 0;
+    transition: padding 1.5s, margin 1.5s, border 0.9s, max-height 1.5s, opacity 1.5s;
+}
+
+/* Markers for states of ep-groups and eps: Has incoming messages, Has DLQs */
+.matsbm_marker_has_old_msgs {}
+.matsbm_marker_has_dlqs {}
+
 
 /* epids and queue/topic labels */
 
@@ -180,51 +284,8 @@
     border-color: #a0a0a0;
     border-style: solid;
     margin: 0.1em 0.5em 0.2em 0;
-    padding: 0.2em 0.2em 0.2em 0.2em;
+    padding: 0.2em 0.2em 1.5em 0.2em;
 }
-/* ====== */
-
-.matsbm_table_endpointgroup td {
-    transition: line-height 1.5s;
-}
-
-
-.matsbm_table_endpointgroup td div {
-    max-height: 17pt;
-    overflow: hidden;
-    vertical-align:top;
-    transition: padding 1.5s, margin 1.5s, border 0.9s linear 0.6s, max-height 1.5s, opacity 1.5s;
-}
-
-/*.matsbm_marker_hidden {*/
-/*    max-height: 0;*/
-/*    transition: max-height 1.5s;*/
-/*}*/
-.matsbm_marker_hidden_row td {
-    line-height: 0;
-    transition: line-height 1.5s;
-}
-
-.matsbm_marker_hidden_row td div {
-    padding-top: 0;
-    padding-bottom: 0;
-    margin-top: 0;
-    margin-bottom: 0;
-
-    border-top-width: 0;
-    border-bottom-width: 0;
-
-    max-height: 0;
-
-    opacity: 0;
-    transition: padding 1.5s, margin 1.5s, border 0.9s, max-height 1.5s, opacity 1.5s;
-}
-
-
-/* Markers for states of ep-groups and eps: Has incoming messages, Has DLQs */
-.matsbm_marker_has_old_msgs {}
-.matsbm_marker_has_dlqs {}
-
 
 /* epid */
 .matsbm_epid_queue, .matsbm_epid_queue_private, .matsbm_epid_topic, .matsbm_epid_topic_private {
@@ -330,8 +391,9 @@
 .matsbm_age {
     display: inline;
     font-size: 75%;
+    line-height: 1.9em;
     font-style: italic;
-    margin: 0 0 0 0.2em;
+    margin-left: 0.3em;
 }
 
 

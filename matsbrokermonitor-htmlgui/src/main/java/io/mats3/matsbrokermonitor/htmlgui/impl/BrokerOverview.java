@@ -92,16 +92,16 @@ class BrokerOverview {
 
         // :: SEE ALL vs SEE ONLY BAD
 
-        out.html("<input type='button' id='matsbm_reissue_bulk' value='View All'"
-                + " class='matsbm_button matsbm_button_reissue'"
+        out.html("<input type='button' id='matsbm_button_viewall' value='View All'"
+                + " class='matsbm_button matsbm_button_viewall'"
                 + " onclick='matsbm_view_all_destinations(event)'>");
-        out.html("<input type='button' id='matsbm_delete_bulk' value='View Bad'"
-                + " class='matsbm_button matsbm_button_delete'"
+        out.html("<input type='button' id='matsbm_button_viewbad' value='View Bad'"
+                + " class='matsbm_button matsbm_button_viewbad'"
                 + " onclick='matsbm_view_bad_destinations(event)'>");
         out.html("<br>\n");
 
         // :: ToC
-        out.html("<b>EndpointGroups ToC</b><br>\n");
+        out.html("<div id='matsbs_toc_heading'>EndpointGroups ToC</div>\n");
         out.html("<table id='matsbm_table_toc'>\n");
         for (MatsEndpointGroupBrokerRepresentation endpointGroup : stack.getEndpointGroups().values()) {
             OptionalLong oldestIncomO = endpointGroup.getOldestIncomingMessageAgeMillis();
@@ -110,18 +110,17 @@ class BrokerOverview {
             long dlqMessages = endpointGroup.getTotalNumberOfDlqMessages();
             boolean hasDlqsMsgs = dlqMessages > 0;
 
-            out.html("<tr class='")
-                    .html(hasOldMsgs ? "matsbm_marker_has_old_msgs" : "")
-                    .html(hasOldMsgs && hasDlqsMsgs ? " " : "")
-                    .html(hasDlqsMsgs ? "matsbm_marker_has_dlqs" : "").html("'>");
-            out.html("<td>");
+            out.html("<tr class='matsbm_toc_endpointgroup")
+                    .html(hasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
+                    .html(hasDlqsMsgs ? " matsbm_marker_has_dlqs" : "").html("'>");
+            out.html("<td><div class='matsbm_toc_content'>");
             String endpointGroupId = endpointGroup.getEndpointGroup().trim().isEmpty()
                     ? "{empty string}"
                     : endpointGroup.getEndpointGroup();
             out.html("<a href='#").DATA(endpointGroupId).html("'>")
                     .DATA(endpointGroupId)
                     .html("</a>");
-            out.html("</td><td>");
+            out.html("</div></td><td><div class='matsbm_toc_content'>");
             long incomingMessages = endpointGroup.getTotalNumberOfIncomingMessages();
             out.html("Q:<b>").DATA(incomingMessages).html("</b>");
             if (incomingMessages > 0) {
@@ -134,7 +133,7 @@ class BrokerOverview {
                         .html("<b>").DATA(Statics.millisSpanToHuman(oldestIncoming)).html("</b>")
                         .html(hasOldMsgs ? "</span>" : "");
             }
-            out.html("</td><td>");
+            out.html("</div></td><td><div class='matsbm_toc_content'>");
             out.html("DLQ:<b>").DATA(dlqMessages).html("</b>");
             if (dlqMessages > 0) {
                 long maxQueue = endpointGroup.getMaxStageNumberOfDlqMessages();
@@ -145,7 +144,7 @@ class BrokerOverview {
                 out.html(", oldest:<b>").DATA(Statics.millisSpanToHuman(oldestDlqO.getAsLong()))
                         .html("</b>.");
             }
-            out.html("</td></tr>");
+            out.html("</div></td></tr>");
         }
         out.html("</table>");
         out.html("<br>\n");
@@ -257,9 +256,10 @@ class BrokerOverview {
     }
 
     private static void out_queueCount(Outputter out, MatsBrokerDestination destination) throws IOException {
+        boolean isDlq = destination.isDlq();
         if (destination.getDestinationType() == DestinationType.QUEUE) {
             // -> Queue
-            String style = destination.isDlq()
+            String style = isDlq
                     ? destination.getNumberOfQueuedMessages() == 0 ? "dlq_zero" : "dlq"
                     : destination.getNumberOfQueuedMessages() == 0 ? "queue_zero" : "queue";
             out.html("<a class='").html(style).html("' href='?browse&destinationId=")
@@ -271,13 +271,18 @@ class BrokerOverview {
             // -> Topic
             out.html("<div class='topic'>");
         }
-        out.html(destination.isDlq() ? "DLQ:" : "")
+        out.html(isDlq ? "DLQ:" : "")
                 .DATA(destination.getNumberOfQueuedMessages());
         out.html(destination.getDestinationType() == DestinationType.QUEUE ? "</a>" : "</div>");
 
         long age = destination.getHeadMessageAgeMillis().orElse(0);
         if (age > 0) {
-            out.html("<div class='matsbm_age'>(").DATA(Statics.millisSpanToHuman(age)).html(")</div>");
+            boolean markOld = (age > TOO_OLD) && (!isDlq);
+            out.html("<div class='matsbm_age")
+                    .html(markOld ? " matsbm_messages_old" : "")
+                    .html("'>(")
+                    .DATA(Statics.millisSpanToHuman(age))
+                    .html(")</div>");
         }
     }
 }
