@@ -13,21 +13,56 @@ document.addEventListener('keydown', (event) => {
     }
 
     if (document.getElementById("matsbm_page_browse_queue")) {
-        browseQueueKeyListener(event);
+        matsbm_browseQueueKeyListener(event);
     } else if (document.getElementById("matsbm_page_examine_message")) {
         if (matsbm_is_call_modal_active()) {
-            modalActiveKeyListener(event);
+            matsbm_modalActiveKeyListener(event);
         } else {
-            examineMessageKeyListener(event);
+            matsbm_examineMessageKeyListener(event);
         }
     }
 }, false);
 
 
+// ::: BROKER OVERVIEW
+
+function matsbm_view_all_destinations(event) {
+    console.log("view all")
+    for (const epGroupRow of document.body.querySelectorAll(".matsbm_endpoint_group_row")) {
+        // ?: Does the group NOT have any of the "bad" markers?
+        if (! (epGroupRow.classList.contains("matsbm_marker_has_old_msgs")
+            || epGroupRow.classList.contains("matsbm_marker_has_dlqs"))) {
+            // -> No, does not have "bad" markers: Hide them
+            epGroupRow.classList.remove("matsbm_marker_hidden_row");
+        }
+    }
+}
+
+function matsbm_view_bad_destinations(event) {
+    console.log("view bad")
+    // for (const epGroupDiv of document.body.querySelectorAll(".matsbm_endpoint_group")) {
+    //     // ?: Does the group NOT have any of the "bad" markers?
+    //     if (! (epGroupDiv.classList.contains("matsbm_marker_has_old_msgs")
+    //         || epGroupDiv.classList.contains("matsbm_marker_has_dlqs"))) {
+    //         // -> No, does not have "bad" markers: Hide them
+    //         epGroupDiv.classList.add("matsbm_marker_hidden");
+    //     }
+    // }
+    for (const epGroupRow of document.body.querySelectorAll(".matsbm_endpoint_group_row")) {
+        // ?: Does the group NOT have any of the "bad" markers?
+        if (! (epGroupRow.classList.contains("matsbm_marker_has_old_msgs")
+            || epGroupRow.classList.contains("matsbm_marker_has_dlqs"))) {
+            // -> No, does not have "bad" markers: Hide them
+            epGroupRow.classList.add("matsbm_marker_hidden_row");
+        }
+    }
+}
+
+
 // ::: BROWSE QUEUE
 
 // Key Listener for Browse Queue
-function browseQueueKeyListener(event) {
+function matsbm_browseQueueKeyListener(event) {
     const name = event.key;
     if (name === "Escape") {
         // ?: Is the "Confirm Delete" button active (non-hidden)?
@@ -169,10 +204,7 @@ function matsbm_evaluate_checkall_and_buttons() {
     } else {
         selectionText += ". Selected: " + numchecked + ", not selected:" + numunchecked;
     }
-
-
     document.getElementById("matsbm_num_messages_shown").textContent = selectionText;
-
 }
 
 function matsbm_reissue_or_delete_bulk(event, queueId, action) {
@@ -235,9 +267,9 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
 
 // ::: EXAMINE MESSAGE
 
-// Key Listener for Examine Message
+// .. Key Listener for Examine Message
 
-function examineMessageKeyListener(event) {
+function matsbm_examineMessageKeyListener(event) {
     const name = event.key;
     if (name === "Escape") {
         // ?: Is the "Confirm Delete" button active (non-hidden)?
@@ -264,7 +296,7 @@ function examineMessageKeyListener(event) {
     }
 }
 
-// :: REISSUE / DELETE
+// .. REISSUE / DELETE
 
 function matsbm_reissue_single(event, queueId, msgSysMsgId) {
     matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, "reissue")
@@ -353,7 +385,7 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
 }
 
 
-// :: MATSTRACE CALL MODAL
+// .. MATSTRACE CALL MODAL
 
 let matsbm_activecallmodal = -1;
 
@@ -419,7 +451,7 @@ function matsbm_callmodal(event) {
 }
 
 // Modal Key listener: when modal is active.
-function modalActiveKeyListener(event) {
+function matsbm_modalActiveKeyListener(event) {
     const name = event.key;
     const code = event.code;
     console.log(`Key pressed ${name} \r\n Key code value: ${code}`);
@@ -486,7 +518,7 @@ function modalActiveKeyListener(event) {
 }
 
 
-// :: MATSTRACE HOVER
+// .. MATSTRACE HOVER
 
 function matsbm_hover_call(event) {
     let tr = event.target.closest("tr");

@@ -123,7 +123,19 @@
     margin: 0.5em 0.5em 1em 0.5em;
 }
 
-/* ep-group table */
+/* table: ToC */
+
+#matsbm_table_toc {
+}
+#matsbm_table_toc td {
+    padding: 0 0.75em 0 0.75em;
+}
+/* .. hover-highlight rows */
+#matsbm_table_toc tr:hover {
+    background-color: #ffff99;
+}
+
+/* table: ep-group */
 
 .matsbm_table_endpointgroup {
     border-collapse: collapse;
@@ -157,6 +169,62 @@
     align-items: center;
     display: flex;
 }
+
+.matsbm_stage {
+    background: #f0f0f0;
+    display: inline-block;
+    border-radius: 3px;
+    box-sizing: border-box;
+    box-shadow: 2px 2px 2px 0 rgba(0, 0, 0, 0.37);
+    border-width: 1pt;
+    border-color: #a0a0a0;
+    border-style: solid;
+    margin: 0.1em 0.5em 0.2em 0;
+    padding: 0.2em 0.2em 0.2em 0.2em;
+}
+/* ====== */
+
+.matsbm_table_endpointgroup td {
+    transition: line-height 1.5s;
+}
+
+
+.matsbm_table_endpointgroup td div {
+    max-height: 17pt;
+    overflow: hidden;
+    vertical-align:top;
+    transition: padding 1.5s, margin 1.5s, border 0.9s linear 0.6s, max-height 1.5s, opacity 1.5s;
+}
+
+/*.matsbm_marker_hidden {*/
+/*    max-height: 0;*/
+/*    transition: max-height 1.5s;*/
+/*}*/
+.matsbm_marker_hidden_row td {
+    line-height: 0;
+    transition: line-height 1.5s;
+}
+
+.matsbm_marker_hidden_row td div {
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+
+    border-top-width: 0;
+    border-bottom-width: 0;
+
+    max-height: 0;
+
+    opacity: 0;
+    transition: padding 1.5s, margin 1.5s, border 0.9s, max-height 1.5s, opacity 1.5s;
+}
+
+
+/* Markers for states of ep-groups and eps: Has incoming messages, Has DLQs */
+.matsbm_marker_has_old_msgs {}
+.matsbm_marker_has_dlqs {}
+
 
 /* epid */
 .matsbm_epid_queue, .matsbm_epid_queue_private, .matsbm_epid_topic, .matsbm_epid_topic_private {
@@ -198,29 +266,15 @@
     background-color: #f0e040;
 }
 
-/* Markers for states of ep-groups and eps: Has incoming messages, Has DLQs */
-.matsbm_marker_has_msgs {}
-.matsbm_marker_has_dlq {}
-
 /* Stage with contents */
-.matsbm_stage {
-    background: #f0f0f0;
-    display: inline-block;
-    border-radius: 3px;
-    box-shadow: 2px 2px 2px 0px rgba(0, 0, 0, 0.37);
-    border: thin solid #a0a0a0;
-    margin: 0.1em 0.5em 0.2em 0;
-    padding: 0.2em 0.2em 0.2em 0.2em;
-}
-
 .matsbm_stage_initial {
     min-width: 2.7em;
     display: inline-block;
+    vertical-align: top;
 }
 
 .matsbm_report .queue, .queue_zero, .dlq, .dlq_zero, .topic {
     text-decoration: none;
-    background-color: initial;
     border-radius: 6px;
     box-shadow: rgba(0, 0, 0, 0.1) 0 2px 4px;
     color: #FFFFFF;
@@ -441,7 +495,7 @@
 }
 
 .matsbm_table_matstrace .processing {
-    background: linear-gradient(0deg, #f0f0f0 0%, #b0b0b0 20%, #b0b0b0 80%, #f0f0f0 100%);;
+    background-image: linear-gradient(0deg, #f0f0f0 0%, #b0b0b0 20%, #b0b0b0 80%, #f0f0f0 100%);;
     color: #002222;
 }
 

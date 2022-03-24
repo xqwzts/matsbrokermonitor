@@ -18,7 +18,7 @@ import io.mats3.matsbrokermonitor.api.impl.MatsFabricArranger;
  *
  * @author Endre Stølsvik 2022-01-07 00:36 - http://stolsvik.com/, endre@stolsvik.com
  */
-public interface MatsFabricBrokerRepresentation {
+public interface MatsFabricBrokerRepresentation extends MatsFabricAggregates {
 
     /**
      * @param matsDestinations
@@ -32,11 +32,7 @@ public interface MatsFabricBrokerRepresentation {
     default long getTotalNumberOfIncomingMessages() {
         long total = 0;
         for (MatsEndpointBrokerRepresentation endpoint : getEndpoints().values()) {
-            for (MatsStageBrokerRepresentation stage : endpoint.getStages().values()) {
-                total += stage.getIncomingDestination()
-                        .map(MatsBrokerDestination::getNumberOfQueuedMessages)
-                        .orElse(0L);
-            }
+            total += endpoint.getTotalNumberOfIncomingMessages();
         }
         return total;
     }
@@ -67,17 +63,13 @@ public interface MatsFabricBrokerRepresentation {
                 .orElse(0L);
     }
 
-    default long getTotalNumberOfDeadLetterMessages() {
+    default long getTotalNumberOfDlqMessages() {
         long total = 0;
         if (getDefaultGlobalDlq().isPresent()) {
             total += getDefaultGlobalDlq().get().getNumberOfQueuedMessages();
         }
         for (MatsEndpointBrokerRepresentation endpoint : getEndpoints().values()) {
-            for (MatsStageBrokerRepresentation stage : endpoint.getStages().values()) {
-                total += stage.getDlqDestination()
-                        .map(MatsBrokerDestination::getNumberOfQueuedMessages)
-                        .orElse(0L);
-            }
+            total += endpoint.getTotalNumberOfDlqMessages();
         }
         return total;
     }
@@ -93,19 +85,19 @@ public interface MatsFabricBrokerRepresentation {
     }
 
     /**
-     * @return the max of {@link MatsEndpointBrokerRepresentation#getMaxStageNumberOfDeadLetterMessages()
+     * @return the max of {@link MatsEndpointBrokerRepresentation#getMaxStageNumberOfDlqMessages()
      *         endpoint.getMaxStageNumberOfDeadLetteredMessages()} for all Endpoints in the Mats fabric, including the
      *         {@link #getDefaultGlobalDlq()} if present. Zero is a good number, any other means that there exists a DLQ
      *         with messages which probably should be looked into.
      */
-    default long getMaxQueueNumberOfDeadLetterMessages() {
-        Stream<Long> stagesMax = getEndpoints().values().stream()
-                .map(MatsEndpointBrokerRepresentation::getMaxStageNumberOfDeadLetterMessages);
-
+    default long getMaxStageNumberOfDlqMessages() {
         Stream<Long> globalDlqNum = getDefaultGlobalDlq().map(MatsBrokerDestination::getNumberOfQueuedMessages)
                 .map(Stream::of).orElseGet(Stream::empty); // Java 8 missing optional.stream()
 
-        return Stream.concat(stagesMax, globalDlqNum)
+        Stream<Long> stagesMax = getEndpoints().values().stream()
+                .map(MatsEndpointBrokerRepresentation::getMaxStageNumberOfDlqMessages);
+
+        return Stream.concat(globalDlqNum, stagesMax)
                 .max(Comparator.naturalOrder())
                 .orElse(0L);
     }
@@ -135,16 +127,19 @@ public interface MatsFabricBrokerRepresentation {
      * Representation of a Mats Endpoint (which contains all stages) as seen from the "Mats Fabric", i.e. as seen from
      * the Broker.
      */
-    interface MatsEndpointBrokerRepresentation {
+    interface MatsEndpointBrokerRepresentation extends MatsFabricAggregates  {
         String getEndpointId();
 
         Map<Integer, MatsStageBrokerRepresentation> getStages();
 
-        default long getMaxStageNumberOfIncomingMessages() {
-            return getStages().values().stream()
-                    .map(MatsStageBrokerRepresentation::getNumberOfIncomingMessages)
-                    .max(Comparator.naturalOrder())
-                    .orElse(0L);
+        default long getTotalNumberOfIncomingMessages() {
+            long total = 0;
+            for (MatsStageBrokerRepresentation stage : getStages().values()) {
+                total += stage.getIncomingDestination()
+                        .map(MatsBrokerDestination::getNumberOfQueuedMessages)
+                        .orElse(0L);
+            }
+            return total;
         }
 
         /**
@@ -162,15 +157,21 @@ public interface MatsFabricBrokerRepresentation {
                     .orElse(OptionalLong.empty());
         }
 
-        /**
-         * @return the max of {@link MatsStageBrokerRepresentation#getNumberOfDeadLetterMessages()
-         *         stage.getNumberOfDeadLetterMessages()} for {@link #getStages() all stages} of the Endpoint.
-         */
-        default long getMaxStageNumberOfDeadLetterMessages() {
+        default long getMaxStageNumberOfIncomingMessages() {
             return getStages().values().stream()
-                    .map(MatsStageBrokerRepresentation::getNumberOfDeadLetterMessages)
+                    .map(MatsStageBrokerRepresentation::getNumberOfIncomingMessages)
                     .max(Comparator.naturalOrder())
                     .orElse(0L);
+        }
+
+        default long getTotalNumberOfDlqMessages() {
+            long total = 0;
+            for (MatsStageBrokerRepresentation stage : getStages().values()) {
+                total += stage.getDlqDestination()
+                        .map(MatsBrokerDestination::getNumberOfQueuedMessages)
+                        .orElse(0L);
+            }
+            return total;
         }
 
         default OptionalLong getOldestDlqMessageAgeMillis() {
@@ -182,6 +183,17 @@ public interface MatsFabricBrokerRepresentation {
                     .map(OptionalLong::of)
                     .orElse(OptionalLong.empty());
         }
+        /**
+         * @return the max of {@link MatsStageBrokerRepresentation#getNumberOfDlqMessages()
+         *         stage.getNumberOfDeadLetterMessages()} for {@link #getStages() all stages} of the Endpoint.
+         */
+        default long getMaxStageNumberOfDlqMessages() {
+            return getStages().values().stream()
+                    .map(MatsStageBrokerRepresentation::getNumberOfDlqMessages)
+                    .max(Comparator.naturalOrder())
+                    .orElse(0L);
+        }
+
     }
 
     /**
@@ -189,10 +201,18 @@ public interface MatsFabricBrokerRepresentation {
      * name, i.e. <code>"EndpointGroup.[SubServiceName.]methodName"</code>. This should ideally have a 1:1 relation with
      * the actual (micro) services in the system.
      */
-    interface MatsEndpointGroupBrokerRepresentation {
+    interface MatsEndpointGroupBrokerRepresentation extends MatsFabricAggregates {
         String getEndpointGroup();
 
         Map<String, MatsEndpointBrokerRepresentation> getEndpoints();
+
+        default long getTotalNumberOfIncomingMessages() {
+            long total = 0;
+            for (MatsEndpointBrokerRepresentation endpoint : getEndpoints().values()) {
+                total += endpoint.getTotalNumberOfIncomingMessages();
+            }
+            return total;
+        }
 
         /**
          * @return the max of {@link MatsEndpointBrokerRepresentation#getMaxStageNumberOfIncomingMessages()
@@ -211,7 +231,7 @@ public interface MatsFabricBrokerRepresentation {
          *         endpoint.getStageOldestIncomingHeadMessageAgeMillis()} for {@link #getEndpoints() all endpoints} of
          *         the EndpointGroup, if no Endpoints has a message, {@link OptionalLong#empty()} is returned.
          */
-        default OptionalLong getOldestIncomingHeadMessageAgeMillis() {
+        default OptionalLong getOldestIncomingMessageAgeMillis() {
             return getEndpoints().values().stream()
                     .map(MatsEndpointBrokerRepresentation::getOldestIncomingMessageAgeMillis)
                     .filter(OptionalLong::isPresent)
@@ -221,14 +241,22 @@ public interface MatsFabricBrokerRepresentation {
                     .orElse(OptionalLong.empty());
         }
 
+        default long getTotalNumberOfDlqMessages() {
+            long total = 0;
+            for (MatsEndpointBrokerRepresentation endpoint : getEndpoints().values()) {
+                total += endpoint.getTotalNumberOfDlqMessages();
+            }
+            return total;
+        }
+
         /**
-         * @return the max of {@link MatsEndpointBrokerRepresentation#getMaxStageNumberOfDeadLetterMessages()
+         * @return the max of {@link MatsEndpointBrokerRepresentation#getMaxStageNumberOfDlqMessages()
          *         endpoint.getMaxStageNumberOfDeadLetteredMessages()} for {@link #getEndpoints() all Endpoints} of the
          *         EndpointGroup.
          */
-        default long getMaxStageNumberOfDeadLetterMessages() {
+        default long getMaxStageNumberOfDlqMessages() {
             return getEndpoints().values().stream()
-                    .map(MatsEndpointBrokerRepresentation::getMaxStageNumberOfDeadLetterMessages)
+                    .map(MatsEndpointBrokerRepresentation::getMaxStageNumberOfDlqMessages)
                     .max(Comparator.naturalOrder())
                     .orElse(0L);
         }
@@ -242,7 +270,6 @@ public interface MatsFabricBrokerRepresentation {
                     .map(OptionalLong::of)
                     .orElse(OptionalLong.empty());
         }
-
 
     }
 
@@ -295,11 +322,12 @@ public interface MatsFabricBrokerRepresentation {
                     .map(MatsBrokerDestination::getHeadMessageAgeMillis)
                     .orElse(OptionalLong.empty());
         }
+
         /**
          * @return {@link MatsBrokerDestination#getNumberOfQueuedMessages()} for the DLQ of this stage, or zero if
          *         {@link #getDlqDestination()} is not present.
          */
-        default long getNumberOfDeadLetterMessages() {
+        default long getNumberOfDlqMessages() {
             return getDlqDestination()
                     .map(MatsBrokerDestination::getNumberOfQueuedMessages)
                     .orElse(0L);

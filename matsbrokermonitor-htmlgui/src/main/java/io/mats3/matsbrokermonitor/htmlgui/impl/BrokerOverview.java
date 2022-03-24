@@ -20,6 +20,9 @@ import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl
  * @author Endre Stølsvik 2022-03-13 23:32 - http://stolsvik.com/, endre@stolsvik.com
  */
 class BrokerOverview {
+
+    private static final long TOO_OLD = 10 * 60 * 1000;
+
     static void gui_BrokerOverview(MatsBrokerMonitor matsBrokerMonitor, Outputter out,
             Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException {
@@ -44,8 +47,8 @@ class BrokerOverview {
 
         BrokerSnapshot snapshot = snapshotO.get();
 
-        boolean tooOldMessage = false;
-        boolean hasDlqMessage = false;
+        boolean brokerHasTooOldMsgs = false;
+        boolean brokerHasDlqMsgs = false;
 
         MatsFabricBrokerRepresentation stack = MatsFabricBrokerRepresentation
                 .stack(snapshot.getMatsDestinations().values());
@@ -66,18 +69,18 @@ class BrokerOverview {
         OptionalLong oldestIncomingO = stack.getOldestIncomingMessageAgeMillis();
         if (oldestIncomingO.isPresent()) {
             long oldestIncoming = oldestIncomingO.getAsLong();
-            tooOldMessage = (oldestIncoming > 10 * 60 * 1000);
-            out.html(", ").html(tooOldMessage ? "<span class='matsbm_messages_old'>" : "")
+            brokerHasTooOldMsgs = (oldestIncoming > TOO_OLD);
+            out.html(", ").html(brokerHasTooOldMsgs ? "<span class='matsbm_messages_old'>" : "")
                     .html("oldest message is ")
                     .html("<b>").DATA(Statics.millisSpanToHuman(oldestIncoming)).html("</b> old.")
-                    .html(tooOldMessage ? "</span>" : "");
+                    .html(brokerHasTooOldMsgs ? "</span>" : "");
         }
         out.html("<br>\n");
-        long totalNumberOfDeadLetterMessages = stack.getTotalNumberOfDeadLetterMessages();
+        long totalNumberOfDeadLetterMessages = stack.getTotalNumberOfDlqMessages();
         out.html("Total DLQed messages: <b>").DATA(totalNumberOfDeadLetterMessages).html("</b>");
         if (totalNumberOfDeadLetterMessages > 0) {
-            hasDlqMessage = true;
-            long maxQueue = stack.getMaxQueueNumberOfDeadLetterMessages();
+            brokerHasDlqMsgs = true;
+            long maxQueue = stack.getMaxStageNumberOfDlqMessages();
             out.html(", worst DLQ has <b>").DATA(maxQueue).html("</b> message").html(maxQueue > 1 ? "s" : "");
         }
         OptionalLong oldestDlq = stack.getOldestDlqMessageAgeMillis();
@@ -85,27 +88,74 @@ class BrokerOverview {
             out.html(", oldest DLQ message is <b>").DATA(Statics.millisSpanToHuman(oldestDlq.getAsLong()))
                     .html("</b> old.");
         }
-        out.html("<br>\n<br>\n");
+        out.html("<br>\n");
+
+        // :: SEE ALL vs SEE ONLY BAD
+
+        out.html("<input type='button' id='matsbm_reissue_bulk' value='View All'"
+                + " class='matsbm_button matsbm_button_reissue'"
+                + " onclick='matsbm_view_all_destinations(event)'>");
+        out.html("<input type='button' id='matsbm_delete_bulk' value='View Bad'"
+                + " class='matsbm_button matsbm_button_delete'"
+                + " onclick='matsbm_view_bad_destinations(event)'>");
+        out.html("<br>\n");
 
         // :: ToC
         out.html("<b>EndpointGroups ToC</b><br>\n");
-        for (MatsEndpointGroupBrokerRepresentation endpointGroup : stack.getEndpointGroups()
-                .values()) {
+        out.html("<table id='matsbm_table_toc'>\n");
+        for (MatsEndpointGroupBrokerRepresentation endpointGroup : stack.getEndpointGroups().values()) {
+            OptionalLong oldestIncomO = endpointGroup.getOldestIncomingMessageAgeMillis();
+            long oldestIncoming = oldestIncomO.orElse(-1);
+            boolean hasOldMsgs = oldestIncoming > TOO_OLD;
+            long dlqMessages = endpointGroup.getTotalNumberOfDlqMessages();
+            boolean hasDlqsMsgs = dlqMessages > 0;
+
+            out.html("<tr class='")
+                    .html(hasOldMsgs ? "matsbm_marker_has_old_msgs" : "")
+                    .html(hasOldMsgs && hasDlqsMsgs ? " " : "")
+                    .html(hasDlqsMsgs ? "matsbm_marker_has_dlqs" : "").html("'>");
+            out.html("<td>");
             String endpointGroupId = endpointGroup.getEndpointGroup().trim().isEmpty()
                     ? "{empty string}"
                     : endpointGroup.getEndpointGroup();
-            out.html("&nbsp;&nbsp;<a href='#").DATA(endpointGroupId).html("'>")
+            out.html("<a href='#").DATA(endpointGroupId).html("'>")
                     .DATA(endpointGroupId)
                     .html("</a>");
-            out.html("<br>\n");
+            out.html("</td><td>");
+            long incomingMessages = endpointGroup.getTotalNumberOfIncomingMessages();
+            out.html("Q:<b>").DATA(incomingMessages).html("</b>");
+            if (incomingMessages > 0) {
+                long maxStage = endpointGroup.getMaxStageNumberOfIncomingMessages();
+                out.html(", worst:<b>").DATA(maxStage).html("</b>");
+            }
+            if (oldestIncomO.isPresent()) {
+                out.html(", ").html(hasOldMsgs ? "<span class='matsbm_messages_old'>" : "")
+                        .html("oldest:")
+                        .html("<b>").DATA(Statics.millisSpanToHuman(oldestIncoming)).html("</b>")
+                        .html(hasOldMsgs ? "</span>" : "");
+            }
+            out.html("</td><td>");
+            out.html("DLQ:<b>").DATA(dlqMessages).html("</b>");
+            if (dlqMessages > 0) {
+                long maxQueue = endpointGroup.getMaxStageNumberOfDlqMessages();
+                out.html(", worst:<b>").DATA(maxQueue).html("</b>");
+            }
+            OptionalLong oldestDlqO = endpointGroup.getOldestDlqMessageAgeMillis();
+            if (oldestDlqO.isPresent()) {
+                out.html(", oldest:<b>").DATA(Statics.millisSpanToHuman(oldestDlqO.getAsLong()))
+                        .html("</b>.");
+            }
+            out.html("</td></tr>");
         }
+        out.html("</table>");
         out.html("<br>\n");
 
         // :: Global DLQ
         if (stack.getDefaultGlobalDlq().isPresent()) {
-            out.html("<div class='matsbm_endpoint_group'>\n");
-            out.html("<h2>Global DLQ</h2><br>");
             MatsBrokerDestination globalDlq = stack.getDefaultGlobalDlq().get();
+            boolean hasDlqMsgs = globalDlq.getNumberOfQueuedMessages() > 0;
+            out.html("<div class='matsbm_endpoint_group").html(hasDlqMsgs ? " matsbm_marker_has_dlqs" : "").html("'>");
+            out.html("<h2>Global DLQ</h2><br>");
             out.html("<table class='matsbm_table_endpointgroup'>");
             out.html("<tr><td>");
             out.html("<div class='matsbm_epid matsbm_epid_queue'>")
@@ -125,20 +175,32 @@ class BrokerOverview {
         }
 
         // :: Foreach EndpointGroup
-        for (MatsEndpointGroupBrokerRepresentation service : stack.getEndpointGroups()
-                .values()) {
+        for (MatsEndpointGroupBrokerRepresentation endpointGroup : stack.getEndpointGroups().values()) {
             // :: EndpointGroup
-            String endpointGroupId = service.getEndpointGroup().trim().isEmpty()
+
+            boolean epgrHasOldMsgs = endpointGroup.getOldestIncomingMessageAgeMillis().orElse(-1) > TOO_OLD;
+            boolean epgrHasDlqsmsgs = endpointGroup.getTotalNumberOfDlqMessages() > 0;
+
+            String endpointGroupId = endpointGroup.getEndpointGroup().trim().isEmpty()
                     ? "{empty string}"
-                    : service.getEndpointGroup();
-            out.html("<div class='matsbm_endpoint_group' id='").DATA(endpointGroupId).html("'>\n");
+                    : endpointGroup.getEndpointGroup();
+            out.html("<div class='matsbm_endpoint_group")
+                    .html(epgrHasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
+                    .html(epgrHasDlqsmsgs ? " matsbm_marker_has_dlqs" : "")
+                    .html("' id='").DATA(endpointGroupId).html("'>\n");
             out.html("<a href='#").DATA(endpointGroupId).html("'>");
             out.html("<h2>").DATA(endpointGroupId).html("</h2></a><br>\n");
 
             // :: Foreach Endpoint
             out.html("<table class='matsbm_table_endpointgroup'>");
-            for (MatsEndpointBrokerRepresentation endpoint : service.getEndpoints().values()) {
-                out.html("<tr>");
+            for (MatsEndpointBrokerRepresentation endpoint : endpointGroup.getEndpoints().values()) {
+
+                boolean epHasOldMsgs = endpoint.getOldestIncomingMessageAgeMillis().orElse(-1) > TOO_OLD;
+                boolean epHasDlqsMsgs = endpoint.getTotalNumberOfDlqMessages() > 0;
+
+                out.html("<tr class='matsbm_endpoint_group_row")
+                        .html(epHasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
+                        .html(epHasDlqsMsgs ? " matsbm_marker_has_dlqs" : "").html("'>");
                 String endpointId = endpoint.getEndpointId();
                 Map<Integer, MatsStageBrokerRepresentation> stages = endpoint.getStages();
 
