@@ -106,8 +106,8 @@ class BrowseQueue {
         out.html("<br>\n");
 
         boolean anyMessages = false;
-        out.html("<div class='matsbm_table_container'>"); // For
-        out.html("<table class='matsbm_table_browse_queue'>");
+        out.html("<div class='matsbm_table_browse_queue_container'>"); // To make room for text "number of messages"
+        out.html("<table id='matsbm_table_browse_queue'>");
         out.html("<thead>");
         out.html("<th><input type='checkbox' id='matsbm_checkall' autocomplete='off'"
                 + " onchange='matsbm_checkall(event)'></th>");
@@ -129,44 +129,44 @@ class BrowseQueue {
                 anyMessages = true;
                 out.html("<tr id='matsbm_msgid_").DATA(matsMsg.getMessageSystemId()).html("'>");
 
-                out.html("<td>");
+                out.html("<td><div class='matsbm_table_browse_nobreak'>");
                 out.html("<input type='checkbox' class='matsbm_checkmsg' autocomplete='off' data-msgid='")
                         .DATA(matsMsg.getMessageSystemId()).html("' onchange='matsbm_checkmsg(event)'>");
-                out.html("</td>");
+                out.html("</div></td>");
 
-                out.html("<td>");
+                out.html("<td><div class='matsbm_table_browse_nobreak'>");
                 out.html("<a href='?examineMessage&destinationId=").DATA(destinationId)
                         .html("&messageSystemId=").DATA(matsMsg.getMessageSystemId()).html("'>");
                 Instant instant = Instant.ofEpochMilli(matsMsg.getTimestamp());
                 out.html(Statics.formatTimestampSpan(instant.toEpochMilli()));
                 out.html("</a>");
-                out.html("</td>");
+                out.html("</div></td>");
 
                 // Found MessageSystemId to be pretty irrelevant in this overview.
 
-                out.html("<td>").DATA(matsMsg.getTraceId()).html("</td>");
+                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(matsMsg.getTraceId()).html("</div></td>");
 
-                out.html("<td>");
+                out.html("<td><div class='matsbm_table_browse_breakall'>");
                 out.DATA(matsMsg.getInitializingApp() != null ? matsMsg.getInitializingApp() : "{missing init app}");
-                out.html("</td>");
+                out.html("</div></td>");
 
-                out.html("<td>");
+                out.html("<td><div class='matsbm_table_browse_breakall'>");
                 out.DATA(matsMsg.getInitiatorId() != null ? matsMsg.getInitiatorId() : "{missing init id}");
-                out.html("</td>");
+                out.html("</div></td>");
 
-                out.html("<td>").DATA(matsMsg.getMessageType()).html(" from").html("</td>");
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(matsMsg.getMessageType()).html(" from").html("</div></td>");
 
-                out.html("<td>").DATA(matsMsg.getFromStageId()).html("</td>");
+                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(matsMsg.getFromStageId()).html("</div></td>");
 
-                out.html("<td>").DATA(matsMsg.isPersistent() ? "Persistent" : "Non-Persistent").html("</td>");
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(matsMsg.isPersistent() ? "Persistent" : "Non-Persistent").html("</div></td>");
 
-                out.html("<td>").DATA(matsMsg.isInteractive() ? "Interactive" : "Non-Interactive").html("</td>");
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(matsMsg.isInteractive() ? "Interactive" : "Non-Interactive").html("</div></td>");
 
-                out.html("<td>");
+                out.html("<td><div class='matsbm_table_browse_nobreak'>");
                 out.DATA(matsMsg.getExpirationTimestamp() == 0
                         ? "Never expires"
                         : Statics.formatTimestampSpan(matsMsg.getExpirationTimestamp()));
-                out.html("</td>");
+                out.html("</div></td>");
 
                 out.html("</tr>\n");
 

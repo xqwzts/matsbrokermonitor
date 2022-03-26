@@ -284,7 +284,17 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
                 if (action === "reissue") {
                     console.log("Reissued MsgSysMsgIds:", result.reissuedMsgSysMsgIds);
                 }
-                setTimeout(() => window.location.reload(), 3500);
+                // Annoying CSS "delayed transition" also somehow "overwrites" the row color transition..?!
+                // Using JS hack instead, to delay second part of transition.
+                setTimeout(() => {
+                    for (const msgSysMsgId of result.msgSysMsgIds) {
+                        const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
+                        if (row) {
+                            row.classList.add('matsbs_delete_or_reissue');
+                        }
+                    }
+                    setTimeout(() => window.location.reload(), 1000);
+                }, 1500)
             });
         })
         .catch(error => {
@@ -391,7 +401,6 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
                 if (result.numberOfAffectedMessages !== 1) {
                     actionMessage = "Message wasn't " + actionPast + "! Already " + actionPast + "?"
                 } else {
-                    const msgSysMsgId = result.msgSysMsgIds[0];
                     actionMessage = "Message " + actionPast + "!"
                 }
                 document.getElementById('matsbm_action_message').textContent = actionMessage + (action === 'reissue' ? " (Check console for new message id)." : "");
@@ -402,7 +411,8 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
                     document.getElementById('matsbm_part_flow_and_message_props').classList.add('matsbm_part_hidden');
                     document.getElementById('matsbm_part_state_and_message').classList.add('matsbm_part_hidden');
                     document.getElementById('matsbm_part_matstrace').classList.add('matsbm_part_hidden');
-                    setTimeout(() => window.location = window.location.pathname + "?browse&destinationId=queue:" + queueId, 2000);
+                    setTimeout(() => window.location = window.location.pathname + "?browse&destinationId=queue:" + queueId,
+                        2000);
                 }, 750);
             });
         })

@@ -152,9 +152,11 @@
 #matsbm_table_toc {
     border-collapse: collapse;
 }
+
 #matsbm_table_toc td {
     padding: 0.1em 0.75em 0.1em 0.75em;
 }
+
 /* .. hover-highlight rows */
 #matsbm_table_toc tr:hover {
     background-color: #ffff99;
@@ -221,17 +223,23 @@
     margin: 0 0 0 1em;
     width: 99%;
 }
-.matsbm_table_endpointgroup tr {}
+
+.matsbm_table_endpointgroup tr {
+}
+
 .matsbm_table_endpointgroup td {
     padding: 0 0.4em 0 0;
 }
+
 /* .. make last cell take rest of space */
 .matsbm_table_endpointgroup td:not(:last-child) {
     white-space: nowrap;
 }
+
 .matsbm_table_endpointgroup td:last-child {
     width: 99%;
 }
+
 /* .. hover-highlight rows */
 .matsbm_table_endpointgroup tr:hover {
     background-color: #ffff99;
@@ -247,8 +255,8 @@
 .matsbm_table_endpointgroup td div {
     max-height: 17pt;
     overflow: hidden;
-    vertical-align:top;
-    transition: padding 1.5s, margin 1.5s, border 0.9s linear 0.6s, max-height 1.5s, opacity 1.5s;
+    vertical-align: top;
+    transition: padding 1.5s, margin 1.5s, border 0.9s linear 0.6s, max-height 1.5s, opacity 1.5s, transform 1.5s;
 }
 
 /* .. hide */
@@ -269,12 +277,18 @@
     max-height: 0;
 
     opacity: 0;
-    transition: padding 1.5s, margin 1.5s, border 0.9s, max-height 1.5s, opacity 1.5s;
+
+    transform: scaleY(0.5);
+
+    transition: padding 1.5s, margin 1.5s, border 0.9s, max-height 1.5s, opacity 1.5s, transform 1.5s;
 }
 
 /* Markers for states of ep-groups and eps: Has incoming messages, Has DLQs */
-.matsbm_marker_has_old_msgs {}
-.matsbm_marker_has_dlqs {}
+.matsbm_marker_has_old_msgs {
+}
+
+.matsbm_marker_has_dlqs {
+}
 
 
 /* epids and queue/topic labels */
@@ -306,18 +320,22 @@
 .matsbm_epid_queue, .matsbm_epid_queue_private, .matsbm_epid_topic, .matsbm_epid_topic_private {
     min-width: 550px;
 }
+
 .matsbm_epid_queue {
     background-color: rgba(255, 255, 255, 0.4);
 }
+
 .matsbm_epid_queue_private {
     font-size: 0.85em;
     font-style: italic;
     background-color: rgba(0, 0, 0, 0.05);
     color: #313539;
 }
+
 .matsbm_epid_topic {
     background-color: rgba(255, 255, 255, 0.4);
 }
+
 .matsbm_epid_topic_private {
     font-size: 0.85em;
     font-style: italic;
@@ -329,15 +347,19 @@
 .matsbm_label_queue, .matsbm_label_queue_private, .matsbm_label_topic, .matsbm_label_topic_private {
     font-size: 0.9em;
 }
+
 .matsbm_label_queue {
     background-color: rgb(187, 238, 187);
 }
+
 .matsbm_label_queue_private {
     background-color: rgb(187, 238, 187);
 }
+
 .matsbm_label_topic {
     background-color: #f0e040;
 }
+
 .matsbm_label_topic_private {
     background-color: #f0e040;
 }
@@ -425,54 +447,87 @@
 
 /* TABLE: Browse queue */
 
-.matsbm_table_browse_queue {
+#matsbm_table_browse_queue {
     width: 100%;
     border-collapse: collapse;
     /*font-size: 0.9em;*/
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
 }
 
-.matsbm_table_browse_queue thead th {
+#matsbm_table_browse_queue thead th {
     position: sticky;
     top: 0;
     background-color: #009879;
     color: #ffffff;
 }
 
-.matsbm_table_browse_queue th, .matsbm_table_browse_queue td {
+#matsbm_table_browse_queue th, #matsbm_table_browse_queue td {
     padding: 0.5em 0.5em 0.5em 0.5em;
 }
 
-.matsbm_table_browse_queue tbody tr {
+#matsbm_table_browse_queue tbody tr {
     border-bottom: thin solid #dddddd;
 }
 
-.matsbm_table_browse_queue tbody tr:nth-of-type(even) {
+#matsbm_table_browse_queue tbody tr:nth-of-type(even) {
     background-color: #f3f3f3;
 }
 
-.matsbm_table_browse_queue tbody tr:hover {
+#matsbm_table_browse_queue tbody tr:hover {
     background-color: #ffff99;
 }
 
-.matsbm_table_browse_queue tbody tr:last-of-type {
+#matsbm_table_browse_queue tbody tr:last-of-type {
     border-bottom: thick solid #009879;
 }
 
-/* .. when messages have been reissued or deleted */
+/* .. the cell types */
+.matsbm_table_browse_nobreak {
+    white-space: nowrap;
+}
 
-.matsbm_table_browse_queue .matsbm_deleted {
+.matsbm_table_browse_breakall {
+    word-break: break-all;
+}
+
+/* :: Transition when messages have been reissued or deleted */
+
+/* .. for transition, need fixed max-height */
+#matsbm_table_browse_queue div {
+    max-height: 5em;
+    overflow: hidden;
+}
+
+#matsbm_table_browse_queue .matsbm_deleted {
     background-color: #f44336 !important;
-    transition: background-color 2s;
+    transition: background-color 1s;
 }
 
-.matsbm_table_browse_queue .matsbm_reissued {
+#matsbm_table_browse_queue .matsbm_reissued {
     background-color: #4CAF50 !important;
-    transition: background-color 2s;
+    transition: background-color 1s;
 }
 
-/* .. displaying the actual number of messages shown */
-.matsbm_table_container {
+#matsbm_table_browse_queue tbody .matsbs_delete_or_reissue {
+    border-bottom: 0;
+}
+
+#matsbm_table_browse_queue .matsbs_delete_or_reissue td {
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+    transform: scaleY(0);
+    transition: padding 0.5s, opacity 0.5s, transform 0.5s;
+}
+
+#matsbm_table_browse_queue .matsbs_delete_or_reissue div {
+    max-height: 0;
+    transition: max-height 0.5s;
+}
+
+
+/* :: displaying the actual number of messages shown, above table */
+.matsbm_table_browse_queue_container {
     position: relative;
     padding-top: 2em;
 }
