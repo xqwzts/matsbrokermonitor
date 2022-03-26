@@ -1,7 +1,9 @@
 package io.mats3.matsbrokermonitor.htmlgui.impl;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -47,11 +49,12 @@ class BrokerOverview {
 
         BrokerSnapshot snapshot = snapshotO.get();
 
-        boolean brokerHasOldMsgs = false;
-        boolean brokerHasDlqMsgs = false;
+        Collection<MatsBrokerDestination> destinations = snapshot.getMatsDestinations().values();
 
+
+        // :: "Stack up" into a Mats Fabric representation
         MatsFabricBrokerRepresentation stack = MatsFabricBrokerRepresentation
-                .stack(snapshot.getMatsDestinations().values());
+                .stack(destinations);
 
         out.html("Updated as of: <b>").DATA(Statics.formatTimestampSpan(snapshot.getLastUpdateLocalMillis()));
         if (snapshot.getLastUpdateBrokerMillis().isPresent()) {
@@ -59,9 +62,31 @@ class BrokerOverview {
                     .DATA(Statics.formatTimestamp(snapshot.getLastUpdateBrokerMillis().getAsLong()));
         }
         out.html("</b> <i>(all ages on queues are wrt. this update time)</i><br>\n");
+        int dlqs = 0;
+        int queues = 0;
+        int topics = 0;
+        for (MatsBrokerDestination destination : destinations) {
+            if (destination.isDlq()) {
+                dlqs ++;
+            }
+            else if (destination.getDestinationType() == DestinationType.QUEUE) {
+                queues ++;
+            }
+            else {
+                topics ++;
+            }
+        }
+        out.html("<i>(Number of Mats incoming Queues: <b>").DATA(queues)
+                .html("</b>, Topics: <b>").DATA(topics)
+                .html("</b>, Dead Letter Queues: <b>").DATA(dlqs)
+                .html("</b>, Total Mats relevant destinations: <b>").DATA(queues + topics + dlqs)
+                .html("</b>)</i><br>");
 
+        // :: Summary
+
+        boolean brokerHasOldMsgs = false;
+        boolean brokerHasDlqMsgs = false;
         out.html("<div class='matsbm_overview_message'>\n");
-
         long totalNumberOfIncomingMessages = stack.getTotalNumberOfIncomingMessages();
         out.html("Total queued messages: <b>").DATA(totalNumberOfIncomingMessages).html("</b>");
         if (totalNumberOfIncomingMessages > 0) {
