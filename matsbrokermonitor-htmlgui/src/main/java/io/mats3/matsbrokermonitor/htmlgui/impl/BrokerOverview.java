@@ -3,7 +3,6 @@ package io.mats3.matsbrokermonitor.htmlgui.impl;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Map;
-import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -51,7 +50,6 @@ class BrokerOverview {
 
         Collection<MatsBrokerDestination> destinations = snapshot.getMatsDestinations().values();
 
-
         // :: "Stack up" into a Mats Fabric representation
         MatsFabricBrokerRepresentation stack = MatsFabricBrokerRepresentation
                 .stack(destinations);
@@ -67,13 +65,13 @@ class BrokerOverview {
         int topics = 0;
         for (MatsBrokerDestination destination : destinations) {
             if (destination.isDlq()) {
-                dlqs ++;
+                dlqs++;
             }
             else if (destination.getDestinationType() == DestinationType.QUEUE) {
-                queues ++;
+                queues++;
             }
             else {
-                topics ++;
+                topics++;
             }
         }
         out.html("<i>(Number of Mats incoming Queues: <b>").DATA(queues)
@@ -190,7 +188,11 @@ class BrokerOverview {
                     .html("'>");
             out.html("<h2>Global DLQ</h2><br>");
             out.html("<table class='matsbm_table_endpointgroup'>");
-            out.html("<tr><td>");
+            out.html("<tr class='matsbm_endpoint_group_row")
+                    .html(hasDlqMsgs ? " matsbm_marker_has_dlqs" : "")
+                    .html(startWithBad && !hasDlqMsgs ? " matsbm_marker_hidden_row" : "")
+                    .html("'>");
+            out.html("<td>");
             out.html("<div class='matsbm_epid matsbm_epid_queue'>")
                     .DATA(globalDlq.getDestinationName())
                     .html("</div>");

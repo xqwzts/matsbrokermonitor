@@ -29,15 +29,15 @@ document.addEventListener('keydown', (event) => {
 function matsbm_view_all_destinations(event) {
     console.log("view all")
     // :: ToC EndpointGroup
-    for (const epGroupRow of document.body.querySelectorAll(".matsbm_toc_endpointgroup")) {
+    for (const tocEpGroupRow of document.body.querySelectorAll(".matsbm_toc_endpointgroup")) {
         // -> Remove the "hidden" class
-        epGroupRow.classList.remove("matsbm_marker_hidden_toc");
+        tocEpGroupRow.classList.remove("matsbm_marker_hidden_toc");
     }
 
     // :: Endpoints (rows in table)
-    for (const epGroupRow of document.body.querySelectorAll(".matsbm_endpoint_group_row")) {
+    for (const epRow of document.body.querySelectorAll(".matsbm_endpoint_group_row")) {
         // -> Remove the "hidden" class
-        epGroupRow.classList.remove("matsbm_marker_hidden_row");
+        epRow.classList.remove("matsbm_marker_hidden_row");
     }
 
     // :: EndpointGroups (divs with endpoint-table inside)
@@ -53,22 +53,22 @@ function matsbm_view_all_destinations(event) {
 function matsbm_view_bad_destinations(event) {
     console.log("view bad")
     // :: ToC EndpointGroup
-    for (const epGroupRow of document.body.querySelectorAll(".matsbm_toc_endpointgroup")) {
+    for (const tocEpGroupRow of document.body.querySelectorAll(".matsbm_toc_endpointgroup")) {
         // ?: Does the ToC entry NOT have any of the "bad" markers?
-        if (!(epGroupRow.classList.contains("matsbm_marker_has_old_msgs")
-            || epGroupRow.classList.contains("matsbm_marker_has_dlqs"))) {
+        if (!(tocEpGroupRow.classList.contains("matsbm_marker_has_old_msgs")
+            || tocEpGroupRow.classList.contains("matsbm_marker_has_dlqs"))) {
             // -> No, does not have "bad" markers: Hide them
-            epGroupRow.classList.add("matsbm_marker_hidden_toc");
+            tocEpGroupRow.classList.add("matsbm_marker_hidden_toc");
         }
     }
 
     // :: Endpoints (rows in table)
-    for (const epGroupRow of document.body.querySelectorAll(".matsbm_endpoint_group_row")) {
+    for (const epRow of document.body.querySelectorAll(".matsbm_endpoint_group_row")) {
         // ?: Does the group NOT have any of the "bad" markers?
-        if (!(epGroupRow.classList.contains("matsbm_marker_has_old_msgs")
-            || epGroupRow.classList.contains("matsbm_marker_has_dlqs"))) {
+        if (!(epRow.classList.contains("matsbm_marker_has_old_msgs")
+            || epRow.classList.contains("matsbm_marker_has_dlqs"))) {
             // -> No, does not have "bad" markers: Hide them
-            epGroupRow.classList.add("matsbm_marker_hidden_row");
+            epRow.classList.add("matsbm_marker_hidden_row");
         }
     }
 
