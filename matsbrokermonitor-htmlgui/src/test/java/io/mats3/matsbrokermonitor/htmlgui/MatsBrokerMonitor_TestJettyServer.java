@@ -141,7 +141,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             // Register a dummy listener
             matsBrokerMonitor1.registerListener(destinationUpdateEvent -> {
                 log.info("Listener at TestJettyServer: Got update! " + destinationUpdateEvent);
-                destinationUpdateEvent.getNewOrUpdatedDestinations().forEach((fqName, matsBrokerDestination) -> log
+                destinationUpdateEvent.getEventDestinations().forEach((fqName, matsBrokerDestination) -> log
                         .info(".. new/updated: [" + fqName + "] = [" + matsBrokerDestination + "]"));
             });
             matsBrokerMonitor1.start();

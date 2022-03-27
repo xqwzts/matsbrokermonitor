@@ -3,17 +3,13 @@ package io.mats3.matsbrokermonitor.activemq;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
 import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
@@ -121,38 +117,15 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
     }
 
     @Override
-    public ConcurrentNavigableMap<String, MatsBrokerDestination> getMatsDestinations() {
-        return _currentDestinationsMap;
-    }
-
-    @Override
-    public Optional<BrokerInfo> getBrokerInfo() {
-        return Optional.ofNullable(_brokerInfo);
-    }
-
-    @Override
     public Optional<BrokerSnapshot> getSnapshot() {
-        if (!_anyUpdateEver) {
-            return Optional.empty();
-        }
-        return Optional.of(new BrokerSnapshotImpl(_lastUpdateLocalMillis, _lastUpdateBrokerMillis, new TreeMap<>(
-                _currentDestinationsMap), _brokerInfo));
+        return Optional.ofNullable(_brokerSnapshot);
     }
 
     // ===== IMPLEMENTATION
 
-    private volatile boolean _anyUpdateEver = false; // Start out not having gotten update
-
-    private volatile long _lastUpdateLocalMillis;
-
-    private volatile long _lastUpdateBrokerMillis;
-
-    private volatile BrokerInfo _brokerInfo;
-
-    private final ConcurrentNavigableMap<String, MatsBrokerDestination> _currentDestinationsMap = new ConcurrentSkipListMap<>();
+    private volatile BrokerSnapshotImpl _brokerSnapshot;
 
     private static class BrokerSnapshotImpl implements BrokerSnapshot {
-
         private final long _lastUpdateLocalMillis;
         private final long _lastUpdateBrokerMillis;
         private final NavigableMap<String, MatsBrokerDestination> _matsDestinations;
@@ -179,7 +152,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
         @Override
         public NavigableMap<String, MatsBrokerDestination> getMatsDestinations() {
-            return _matsDestinations;
+            return Collections.unmodifiableNavigableMap(_matsDestinations);
         }
 
         @Override
@@ -332,11 +305,13 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
     private static class DestinationUpdateEventImpl implements DestinationUpdateEvent {
 
+        private final String _correlationId; // nullable
         private final boolean _isFullUpdate;
         private final NavigableMap<String, MatsBrokerDestination> _newOrUpdatedDestinations;
 
-        public DestinationUpdateEventImpl(boolean isFullUpdate,
+        public DestinationUpdateEventImpl(String correlationId, boolean isFullUpdate,
                 NavigableMap<String, MatsBrokerDestination> newOrUpdatedDestinations) {
+            _correlationId = correlationId;
             _isFullUpdate = isFullUpdate;
             _newOrUpdatedDestinations = newOrUpdatedDestinations;
         }
@@ -347,7 +322,12 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         }
 
         @Override
-        public NavigableMap<String, MatsBrokerDestination> getNewOrUpdatedDestinations() {
+        public Optional<String> getCorrelationId() {
+            return Optional.ofNullable(_correlationId);
+        }
+
+        @Override
+        public NavigableMap<String, MatsBrokerDestination> getEventDestinations() {
             return _newOrUpdatedDestinations;
         }
     }
@@ -356,11 +336,10 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         ConcurrentNavigableMap<String, DestinationStatsDto> destStatsDtos = _querier
                 .getCurrentDestinationStatsDtos();
 
-        List<String> fqDestinationsNewOrUpdated = new ArrayList<>();
-
-        int matsDestinationCount = 0;
-
         long latestUpdateBrokerMillis = 0;
+
+        TreeMap<String, MatsBrokerDestination> destinationsMap = new TreeMap<>();
+        TreeMap<String, MatsBrokerDestination> destinationsMapNonZero = new TreeMap<>();
 
         for (Entry<String, DestinationStatsDto> entry : destStatsDtos.entrySet()) {
             String fqDestinationName = entry.getKey();
@@ -386,8 +365,6 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
             }
 
             // ----- This is a Mats relevant destination!
-
-            matsDestinationCount++;
 
             // Is this a queue?
             DestinationType destinationType = fqDestinationName.startsWith("queue://")
@@ -427,82 +404,46 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
                     : lastUpdateMillis) - instant.toEpochMilli())
                     .orElse(0L);
 
-            if (log.isDebugEnabled()) log.debug("FQ Name: " + fqDestinationName + ", destinationName:["
-                    + destinationName
-                    + "], matsStageId:[" + matsStageId + "], destinationType:[" + destinationType + "], isDlq:[" + isDlq
-                    + "], queuedMessages:[" + numberOfQueuedMessages + "]");
+            if (log.isTraceEnabled()) log.trace("FQ Name: " + fqDestinationName + ", destinationName:["
+                    + destinationName + "], matsStageId:[" + matsStageId + "], destinationType:[" + destinationType
+                    + "], isDlq:[" + isDlq + "], queuedMessages:[" + numberOfQueuedMessages + "]");
 
             // Create the representation
             MatsBrokerDestinationImpl matsBrokerDestination = new MatsBrokerDestinationImpl(lastUpdateMillis,
                     lastUpdateBrokerMillis, fqDestinationName, destinationName, matsStageId, destinationType, isDlq,
                     isGlobalDlq, numberOfQueuedMessages, numberOfInflightMessages, headMessageAgeMillis);
             // Put it in the map.
-            MatsBrokerDestination existingInfo = _currentDestinationsMap.put(fqDestinationName, matsBrokerDestination);
-            // ?: Was this new, or there an update in number of queued messages?
-            if ((existingInfo == null) || existingInfo.getNumberOfQueuedMessages() != numberOfQueuedMessages) {
-                // -> Yes, new or updated - so then it is new-or-changed!
-                fqDestinationsNewOrUpdated.add(fqDestinationName);
+            destinationsMap.put(fqDestinationName, matsBrokerDestination);
+            if (matsBrokerDestination.getNumberOfQueuedMessages() > 0) {
+                destinationsMapNonZero.put(fqDestinationName, matsBrokerDestination);
             }
         }
 
         // ----- We've parsed the update from the Querier.
 
         // TODO: At most log.debug
-        log.info("Got event for [" + destStatsDtos.size() + "] destinations, [" + matsDestinationCount + "] of them was"
-                + " Mats-relevant, [" + fqDestinationsNewOrUpdated.size() + "] was new/updated. Notifying listeners.");
-
-        // :: Scavenge old destinations no longer getting updates (i.e. not existing anymore).
-        Iterator<MatsBrokerDestination> currentDestinationsIterator = _currentDestinationsMap.values().iterator();
-        long longAgo = System.currentTimeMillis() - SCAVENGE_OLD_DESTINATIONS_SECONDS * 1000;
-        int removedMatsDestinations = 0;
-        while (currentDestinationsIterator.hasNext()) {
-            MatsBrokerDestination next = currentDestinationsIterator.next();
-            if (next.getLastUpdateLocalMillis() < longAgo) {
-                log.info("Removing destination [" + next.getDestinationName() + "]");
-                currentDestinationsIterator.remove();
-                removedMatsDestinations++;
-            }
-        }
-        boolean removedDestinations_ForceFullUpdate = removedMatsDestinations > 0;
-        // :: Construct the update-map
-        NavigableMap<String, MatsBrokerDestination> newOrUpdatedDestinations;
-
-        // ?: Was any Mats-destinations removed by scavenge above?
-        if (removedDestinations_ForceFullUpdate) {
-            // -> Yes, Mats-destinations removed, so create event "update map" consisting of all known destinations.
-            newOrUpdatedDestinations = new TreeMap<>();
-            newOrUpdatedDestinations.putAll(_currentDestinationsMap);
-        }
-        // ?: Was there any new or updated mats destinations?
-        else if (!fqDestinationsNewOrUpdated.isEmpty()) {
-            // -> Yes, new or updated, so construct the event "update map" with new or updated.
-            newOrUpdatedDestinations = new TreeMap<>();
-            for (String fqDestination : fqDestinationsNewOrUpdated) {
-                newOrUpdatedDestinations.put(fqDestination, _currentDestinationsMap.get(fqDestination));
-            }
-        }
-        else {
-            // -> No new or changed, so use an empty event "update map".
-            newOrUpdatedDestinations = Collections.emptyNavigableMap();
-        }
+        log.info("Got event for [" + destStatsDtos.size() + "] destinations, [" + destinationsMap.size() + "] of them"
+                + " was Mats-relevant, [" + destinationsMapNonZero.size() + "] was non-zero. Notifying listeners.");
 
         // :: Create the BrokerInfo object, if we have info
-        _brokerInfo = _querier.getCurrentBrokerStatsDto()
+        BrokerInfoImpl brokerInfo = _querier.getCurrentBrokerStatsDto()
                 .map(brokerStatsDto -> new BrokerInfoImpl(BROKER_TYPE,
                         brokerStatsDto.brokerName,
                         brokerStatsDto.toJson()))
                 .orElse(null);
 
-        // Switch flag if not set: we've now gotten at least one update.
-        if (!_anyUpdateEver) {
-            _anyUpdateEver = true;
-        }
-
-        _lastUpdateLocalMillis = System.currentTimeMillis();
-        _lastUpdateBrokerMillis = latestUpdateBrokerMillis;
+        // :: Create the new BrokerSnapshot
+        _brokerSnapshot = new BrokerSnapshotImpl(System.currentTimeMillis(), latestUpdateBrokerMillis, destinationsMap,
+                brokerInfo);
 
         // :: Construct and send the update event to listeners.
-        DestinationUpdateEventImpl update = new DestinationUpdateEventImpl(false, newOrUpdatedDestinations);
+        // TODO: Fix isFullUpdate (both on forced, and every 20 mins or so).
+        boolean isFullUpdate = false;
+        TreeMap<String, MatsBrokerDestination> eventDestinations = isFullUpdate
+                ? destinationsMap
+                : destinationsMapNonZero;
+        DestinationUpdateEventImpl update = new DestinationUpdateEventImpl(event.getCorrelationId().orElse(null),
+                isFullUpdate, eventDestinations);
         for (Consumer<DestinationUpdateEvent> listener : _listeners) {
             try {
                 listener.accept(update);

@@ -34,16 +34,7 @@ public interface MatsBrokerMonitor extends Closeable {
 
     void close();
 
-    /**
-     * @return a Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination}] for currently known Mats-relevant
-     *         destinations.
-     */
-    ConcurrentNavigableMap<String, MatsBrokerDestination> getMatsDestinations();
-
-    Optional<BrokerInfo> getBrokerInfo();
-
     Optional<BrokerSnapshot> getSnapshot();
-
 
     void registerListener(Consumer<DestinationUpdateEvent> listener);
 
@@ -62,6 +53,10 @@ public interface MatsBrokerMonitor extends Closeable {
          */
         OptionalLong getLastUpdateBrokerMillis();
 
+        /**
+         * @return a Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination}] for currently known Mats-relevant
+         *         destinations.
+         */
         NavigableMap<String, MatsBrokerDestination> getMatsDestinations();
 
         Optional<BrokerInfo> getBrokerInfo();
@@ -90,20 +85,22 @@ public interface MatsBrokerMonitor extends Closeable {
          * A full update might be sent periodically.
          *
          * @return whether this is a full update (<code>true</code>), in which case the receiver should consider the
-         *         {@link #getNewOrUpdatedDestinations()} as authoritative information about all currently known
-         *         destinations on the broker, thus overwriting any local view kept by incremental updates.
+         *         {@link #getEventDestinations()} as authoritative information about all currently known destinations
+         *         on the broker, thus overwriting any local view kept by incremental updates.
          */
         boolean isFullUpdate();
 
         /**
-         * TODO: Change semantics: Any destination not mentioned has ZERO messages.
-         *
-         * @return a Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination}] for any new or updated
-         *         Mats-relevant destinations.
-         *
-         *
+         * @return the correlationId if this update event is a reply to an invocation of
+         *         {@link #forceUpdate(String, boolean)}.
          */
-        NavigableMap<String, MatsBrokerDestination> getNewOrUpdatedDestinations();
+        Optional<String> getCorrelationId();
+
+        /**
+         * @return a Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination}] for either the non-zero
+         *         destinations, or if {@link #isFullUpdate()} is true, all destinations.
+         */
+        NavigableMap<String, MatsBrokerDestination> getEventDestinations();
     }
 
     interface MatsBrokerDestination {

@@ -29,7 +29,16 @@ class BrokerOverview {
             throws IOException {
         out.html("<div id='matsbm_page_broker_overview' class='matsbm_report'>\n");
         out.html("<div class='matsbm_heading'>");
-        Optional<BrokerInfo> brokerInfoO = matsBrokerMonitor.getBrokerInfo();
+
+        Optional<BrokerSnapshot> snapshotO = matsBrokerMonitor.getSnapshot();
+        if (!snapshotO.isPresent()) {
+            out.html("<h1>Have not gotten an update from the broker yet!</h1>");
+            return;
+        }
+
+        BrokerSnapshot snapshot = snapshotO.get();
+
+        Optional<BrokerInfo> brokerInfoO = snapshot.getBrokerInfo();
         if (brokerInfoO.isPresent()) {
             BrokerInfo brokerInfo = brokerInfoO.get();
             out.html("Broker <h1>'").DATA(brokerInfo.getBrokerName()).html("'</h1>");
@@ -39,14 +48,6 @@ class BrokerOverview {
             out.html("<h2>Unknown broker</h2>");
         }
         out.html("</div>\n");
-
-        Optional<BrokerSnapshot> snapshotO = matsBrokerMonitor.getSnapshot();
-        if (!snapshotO.isPresent()) {
-            out.html("<h1>Have not gotten an update from the broker yet!</h1>");
-            return;
-        }
-
-        BrokerSnapshot snapshot = snapshotO.get();
 
         Collection<MatsBrokerDestination> destinations = snapshot.getMatsDestinations().values();
 

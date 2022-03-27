@@ -3,12 +3,15 @@ package io.mats3.matsbrokermonitor.htmlgui.impl;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.SortedMap;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.BrokerIOException;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageIterable;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerSnapshot;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.DestinationType;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl;
@@ -33,17 +36,21 @@ class BrowseQueue {
 
         String queueId = destinationId.substring("queue:".length());
 
-        Collection<MatsBrokerDestination> values = matsBrokerMonitor.getMatsDestinations().values();
+        Collection<MatsBrokerDestination> values = matsBrokerMonitor.getSnapshot()
+                .map(BrokerSnapshot::getMatsDestinations)
+                .map(SortedMap::values)
+                .orElseGet(Collections::emptySet);
+
         MatsBrokerDestination matsBrokerDestination = null;
         for (MatsBrokerDestination dest : values) {
-            if (dest.getDestinationType() == DestinationType.QUEUE
-                    && queueId.equals(dest.getDestinationName())) {
+            if ((dest.getDestinationType() == DestinationType.QUEUE) && queueId.equals(dest.getDestinationName())) {
                 matsBrokerDestination = dest;
             }
         }
         if (matsBrokerDestination == null) {
             out.html("<h1>No info on destination!</h1><br>\n");
             out.html("Destination: ").DATA(destinationId).html("<br>\n");
+            out.html("</div>");
             return;
         }
 
@@ -51,7 +58,7 @@ class BrowseQueue {
         // ?: Is this the Global DLQ?
         if (matsBrokerDestination.isDefaultGlobalDlq()) {
             // -> Yes, global DLQ
-            out.html(" is the Global DLQ, fully qualified name: [")
+            out.html(" is the <b>Global DLQ</b>, fully qualified name: [")
                     .DATA(matsBrokerDestination.getFqDestinationName())
                     .html("]<br>\n");
         }
@@ -60,15 +67,14 @@ class BrowseQueue {
             // ?: Is this a MatsStage Queue or DLQ?
             if (matsBrokerDestination.getMatsStageId().isPresent()) {
                 // -> Mats stage queue.
-                out.html(" is the ");
-                out.DATA(matsBrokerDestination.isDlq() ? "DLQ" : "incoming Queue");
-                out.html(" for Mats Stage '")
+                out.html(" is the <b>");
+                out.DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Incoming Queue");
+                out.html("</b> for Mats Stage '")
                         .DATA(matsBrokerDestination.getMatsStageId().get()).html("'");
             }
             else {
                 // -> Non-Mats Queue. Not really supported, but just to handle it.
-                out.html(" is a ");
-                out.DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Queue");
+                out.html(" is a <b>").DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Queue").html("</b>");
             }
             out.html("<br>\n");
         }
