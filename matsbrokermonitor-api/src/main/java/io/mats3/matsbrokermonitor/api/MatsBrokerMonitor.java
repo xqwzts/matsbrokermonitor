@@ -47,7 +47,7 @@ public interface MatsBrokerMonitor extends Closeable {
 
     void registerListener(Consumer<DestinationUpdateEvent> listener);
 
-    void forceUpdate();
+    void forceUpdate(String correlationId, boolean full);
 
     interface BrokerSnapshot {
         /**

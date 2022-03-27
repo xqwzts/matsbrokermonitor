@@ -2,12 +2,15 @@ package io.mats3.matsbrokermonitor.activemq;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
@@ -37,6 +40,9 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
     private final Clock _clock;
 
+    private static final String NORMAL_CORRELATION_ID_PREFIX = "Scheduled:";
+    private static final String FORCED_CORRELATION_ID_PREFIX = "Forced:";
+
     static ActiveMqBrokerStatsQuerierImpl create(ConnectionFactory connectionFactory) {
         return new ActiveMqBrokerStatsQuerierImpl(connectionFactory, Clock.systemUTC());
     }
@@ -54,10 +60,9 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         CLOSED
     }
 
-    private String _matsDestinationPrefix;
+    private String _matsDestinationPrefix = "mats.";
 
-    private final Object _requestWaitAndPingObject = new Object();
-    private int _forceUpdateRequestCount = 0;
+    private final Deque<String> _waitObject_And_ForceUpdateOutstandingCorrelationIds = new ArrayDeque<>();
 
     // RunStatus: NOT_STARTED -> RUNNING -> CLOSED. Not restartable.
     private volatile RunStatus _runStatus = RunStatus.NOT_STARTED;
@@ -87,7 +92,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         log.info("Starting ActiveMQ Broker statistics querier.");
         _sendStatsRequestMessages_Thread = new Thread(this::sendStatsRequestMessages,
                 "MatsBrokerMonitor.ActiveMQ: Sending Statistics request messages");
-        _receiveDestinationsStatsReplyMessages_Thread = new Thread(this::receiveDestinationStatsReplyMessages,
+        _receiveDestinationsStatsReplyMessages_Thread = new Thread(this::receiveStatisticsReplyMessagesRunnable,
                 "MatsBrokerMonitor.ActiveMQ: Receive Destination Statistics reply messages");
 
         // :: First start reply consumer
@@ -113,8 +118,8 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         _runStatus = RunStatus.CLOSED;
         log.info("Asked to close. Set runStatus to CLOSED, closing Connections and interrupting threads.");
         // Notify the request sender - it'll close the Connection on its way out.
-        synchronized (_requestWaitAndPingObject) {
-            _requestWaitAndPingObject.notifyAll();
+        synchronized (_waitObject_And_ForceUpdateOutstandingCorrelationIds) {
+            _waitObject_And_ForceUpdateOutstandingCorrelationIds.notifyAll();
         }
         // Closing Connections for the receiver - they'll wake up from 'con.receive()'.
         closeConnectionIgnoreException(_receiveDestinationsStatsReplyMessages_Connection);
@@ -168,14 +173,33 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     }
 
     @Override
-    public void forceUpdate() {
-        synchronized (_requestWaitAndPingObject) {
-            _forceUpdateRequestCount++;
-            _requestWaitAndPingObject.notifyAll();
+    public void forceUpdate(String correlationId) {
+        synchronized (_waitObject_And_ForceUpdateOutstandingCorrelationIds) {
+            _waitObject_And_ForceUpdateOutstandingCorrelationIds.add(correlationId);
+            // ?: Are there WAY too many outstanding correlation Ids?
+            if (_waitObject_And_ForceUpdateOutstandingCorrelationIds.size() > 150) {
+                // -> Yes, so then we're actually screwed - there are obviously no response from the broker
+                log.error("We have 150 outstanding forced updates with correlationIds, which implies that the broker"
+                        + " does not respond. We'll just ditch them all to prevent OOME; you need to figure out the"
+                        + " problem: Probably the Statistics[Broker]Plugin is not installed on the ActiveMQ server.");
+                _waitObject_And_ForceUpdateOutstandingCorrelationIds.clear();
+            }
+            _waitObject_And_ForceUpdateOutstandingCorrelationIds.notifyAll();
         }
     }
 
     private static class ActiveMqBrokerStatsEventImpl implements ActiveMqBrokerStatsEvent {
+
+        private final String _correlationId;
+
+        public ActiveMqBrokerStatsEventImpl(String correlationId) {
+            _correlationId = correlationId;
+        }
+
+        @Override
+        public Optional<String> getCorrelationId() {
+            return Optional.ofNullable(_correlationId);
+        }
     }
 
     public Optional<BrokerStatsDto> getCurrentBrokerStatsDto() {
@@ -241,10 +265,8 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     requestQueuesQueue_main = session.createQueue(queryRequestDestination_specific);
                     requestTopicsTopic_main = session.createTopic(queryRequestDestination_specific);
                     requestQueuesQueue_individualDlq = session.createQueue(queryRequestDestination_specific_DLQ);
-                    // Note: Using undocumented feature to request a "null message" after last reply-message for query.
-                    // NOTICE! This will be the last query sent!
                     requestQueuesQueue_globalDlq = session.createQueue(QUERY_REQUEST_DESTINATION_PREFIX + "."
-                            + Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME + QUERY_REQUEST_DENOTE_END_LIST);
+                            + Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME);
                 }
                 else {
                     // -> No, this is a bad prefix that cannot utilize the wildcard syntax, so have to ask for every
@@ -256,19 +278,24 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             + " the query to mats-specific destinations, but must query for all destinations by"
                             + " employing [" + queryRequestDestination_all + "]");
                     requestQueuesQueue_main = session.createQueue(queryRequestDestination_all);
-                    // Note: Using undocumented feature to request a "null message" after last reply-message for query.
-                    // NOTICE! This will be the last query sent!
-                    requestTopicsTopic_main = session.createTopic(queryRequestDestination_all
-                            + QUERY_REQUEST_DENOTE_END_LIST);
+                    requestTopicsTopic_main = session.createTopic(queryRequestDestination_all);
                 }
 
-                Topic requestBrokerTopic = session.createTopic(QUERY_REQUEST_BROKER);
+                // :: Create queue for the "zero-termination", sent in a separate request query
+                // NOTE: We just ask for a queue which shall not be there, but request the "zero termination".
+                Queue requestQueuesQueue_zeroQueuesMatchWithNullTermination = session.createQueue(
+                        QUERY_REQUEST_DESTINATION_PREFIX + ".No_Match_Whatsoever_abcxyz123");
 
-                Topic responseStatisticsTopic = session.createTopic(QUERY_REPLY_STATISTICS_TOPIC);
+                // Request BrokerStats topic
+                Topic requestBrokerTopic = session.createTopic(QUERY_REQUEST_BROKER);
+                // Reply topic for all statistics messages (this thread)
+                Topic replyStatisticsTopic = session.createTopic(QUERY_REPLY_STATISTICS_TOPIC);
 
                 // Chill a small tad before sending first request, so that receivers hopefully have started.
                 // Notice: It isn't particularly bad if they haven't, they'll just miss the first request/reply.
                 chill(CHILL_MILLIS_BEFORE_FIRST_STATS_REQUEST);
+
+                String correlationId = null;
 
                 while (_runStatus == RunStatus.RUNNING) {
 
@@ -278,7 +305,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     if (log.isDebugEnabled()) log.debug("Sending stats queries to ActiveMQ.");
                     // :: Request stats for Broker
                     Message requestBrokerMsg = session.createMessage();
-                    requestBrokerMsg.setJMSReplyTo(responseStatisticsTopic);
+                    requestBrokerMsg.setJMSReplyTo(replyStatisticsTopic);
                     producer.send(requestBrokerTopic, requestBrokerMsg);
 
                     // ::: Destinations
@@ -286,12 +313,12 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     // :: Request stats for Queues
                     Message requestQueuesMsg = session.createMessage();
                     set_includeFirstMessageTimestamp(requestQueuesMsg);
-                    requestQueuesMsg.setJMSReplyTo(responseStatisticsTopic);
+                    requestQueuesMsg.setJMSReplyTo(replyStatisticsTopic);
 
                     // :: Request stats for Topics
                     Message requestTopicsMsg = session.createMessage();
                     set_includeFirstMessageTimestamp(requestTopicsMsg);
-                    requestTopicsMsg.setJMSReplyTo(responseStatisticsTopic);
+                    requestTopicsMsg.setJMSReplyTo(replyStatisticsTopic);
 
                     // :: Send destination stats messages
                     _countOfDestinationsReceivedAfterRequest.set(0);
@@ -310,36 +337,56 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                         // frikkin' individual DLQ policy.)
                         Message requestIndividualDlqMsg = session.createMessage();
                         set_includeFirstMessageTimestamp(requestIndividualDlqMsg);
-                        requestIndividualDlqMsg.setJMSReplyTo(responseStatisticsTopic);
+                        requestIndividualDlqMsg.setJMSReplyTo(replyStatisticsTopic);
 
                         Message requestGlobalDlqMsg = session.createMessage();
                         set_includeFirstMessageTimestamp(requestGlobalDlqMsg);
-                        requestGlobalDlqMsg.setJMSReplyTo(responseStatisticsTopic);
+                        requestGlobalDlqMsg.setJMSReplyTo(replyStatisticsTopic);
 
                         producer.send(requestQueuesQueue_individualDlq, requestIndividualDlqMsg);
                         producer.send(requestQueuesQueue_globalDlq, requestGlobalDlqMsg);
                     }
 
+                    if (correlationId == null) {
+                        correlationId = NORMAL_CORRELATION_ID_PREFIX + Long.toString(ThreadLocalRandom.current()
+                                .nextLong(), 36);
+                    }
+
+                    // Send the null-termination query (query w/o any destination replies, only the null-terminator)
+                    Message requestNullTermination = session.createMessage();
+                    requestNullTermination.setJMSReplyTo(replyStatisticsTopic);
+                    requestNullTermination.setBooleanProperty(QUERY_REQUEST_DENOTE_END_LIST, true);
+                    requestNullTermination.setJMSCorrelationID(correlationId);
+                    producer.send(requestQueuesQueue_zeroQueuesMatchWithNullTermination, requestNullTermination);
+
+                    // We've done this job, clear out correlationId
+                    correlationId = null;
+
                     // :: Chill and loop
-                    synchronized (_requestWaitAndPingObject) {
+                    synchronized (_waitObject_And_ForceUpdateOutstandingCorrelationIds) {
                         // ?: Exiting?
                         if (_runStatus != RunStatus.RUNNING) {
                             // -> Yes, exiting, so shortcut out, avoiding going into wait.
                             break;
                         }
                         // ?: Do we have a force update already waiting?
-                        if (_forceUpdateRequestCount > 0) {
-                            // -> Yes, so decrement and immediately do the new request.
-                            _forceUpdateRequestCount--;
+                        if (!_waitObject_And_ForceUpdateOutstandingCorrelationIds.isEmpty()) {
+                            // -> Yes, so pop the force update correlationId and immediately do the new request.
+                            correlationId = FORCED_CORRELATION_ID_PREFIX
+                                    + _waitObject_And_ForceUpdateOutstandingCorrelationIds.remove();
                             continue;
                         }
                         // Go into wait - either interval, or force update.
-                        _requestWaitAndPingObject.wait(INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS);
+                        _waitObject_And_ForceUpdateOutstandingCorrelationIds.wait(
+                                INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS);
+
                         // NOTE: If this was a "we are going down!"-wakeup, the loop conditional takes care of it.
+
                         // ?: Was this a force update wakeup?
-                        if (_forceUpdateRequestCount > 0) {
-                            // -> Yes, so decrement before looping.
-                            _forceUpdateRequestCount--;
+                        if (!_waitObject_And_ForceUpdateOutstandingCorrelationIds.isEmpty()) {
+                            // -> Yes, so pop the force update correlationId before looping.
+                            correlationId = FORCED_CORRELATION_ID_PREFIX
+                                    + _waitObject_And_ForceUpdateOutstandingCorrelationIds.remove();
                         }
                     }
                 }
@@ -366,7 +413,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     }
 
     @SuppressWarnings("unchecked")
-    private void receiveDestinationStatsReplyMessages() {
+    private void receiveStatisticsReplyMessagesRunnable() {
         OUTERLOOP: while (_runStatus == RunStatus.RUNNING) {
             try {
                 _receiveDestinationsStatsReplyMessages_Connection = _connectionFactory.createConnection();
@@ -378,15 +425,28 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
                 long nanosAtEnd_lastMessageReceived = 0;
                 while (_runStatus == RunStatus.RUNNING) {
-                    // Go into timed receive.
+
+                    // Note: The logic here is that we'll get a bunch of statistics reply messages, ended by either
+                    // an explicit "empty terminator", or by timing out. This first, timed receive is for the "bunch",
+                    // while the later, indefinite receive is for waiting for the next batch.
+
+                    // Since I do not feel utterly confident about the ordering of the messages vs. the multiple
+                    // requests and the last "empty terminator", we should also handle that a bunch is split into
+                    // two parts: Some replies, the empty terminator, and the rest of the replies. This is not handled
+                    // /good/, but we will at least receive the stats messages. However, the fired event will be too
+                    // early. This will definitely be a "eventually consistent" scenario - so lets hope the ordering
+                    // holds, in which case we have a very good consistency wrt. when sending the update event.
+
+                    // Go into timed receive (receiving "the rest of the bunch", but handling startup)
                     MapMessage replyMsg = (MapMessage) consumer.receive(
                             TIMEOUT_MILLIS_FOR_LAST_MESSAGE_IN_BATCH_FOR_DESTINATION_STATS);
                     // NOTE: We're using an undocumented feature of ActiveMQ's StatisticsBrokerPlugin whereby if we add
                     // a special marker to the query, the replies will be "empty terminated" by an empty MapMessage.
-                    // ?: Did we get an "empty" MapMessage, OR null, BUT runFlag still true?
-                    if (((replyMsg == null) || (replyMsg.getString("destinationName") == null))
+                    // ?: Did we either get a null, or get an "empty" MapMessage, BUT runFlag still true?
+                    // (Null would be timeout for stats, empty MapMessage would be the "null termination" for stats.)
+                    if (((replyMsg == null) || (replyMsg.getObject("brokerName") == null))
                             && (_runStatus == RunStatus.RUNNING)) {
-                        // -> empty or null, but runStatus==RUNNING, so this was a "terminator" or timeout.
+                        // -> null or empty, but runStatus==RUNNING, so this was a timeout or "terminator".
                         // ?: Have we gotten (bunch of) stats messages by now?
                         if (_countOfDestinationsReceivedAfterRequest.get() > 0) {
                             // -> We've gotten 1 or more stats messages.
@@ -407,13 +467,22 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             while (currentStatsIterator.hasNext()) {
                                 DestinationStatsDto next = currentStatsIterator.next();
                                 if (next.statsReceived.toEpochMilli() < longAgo) {
-                                    log.info("Removing destination [" + next.destinationName + "]");
+                                    log.info("Removing destination which haven't gotten updates for ["
+                                            + SCAVENGE_OLD_STATS_SECONDS + "] seconds: [" + next.destinationName + "]");
                                     currentStatsIterator.remove();
                                 }
                             }
 
+                            String correlationId = null;
+                            if (replyMsg != null) {
+                                String raw = replyMsg.getJMSCorrelationID();
+                                if (raw.startsWith(FORCED_CORRELATION_ID_PREFIX)) {
+                                    correlationId = raw.substring(FORCED_CORRELATION_ID_PREFIX.length());
+                                }
+                            }
+
                             // :: Notify listeners
-                            ActiveMqBrokerStatsEventImpl event = new ActiveMqBrokerStatsEventImpl();
+                            ActiveMqBrokerStatsEventImpl event = new ActiveMqBrokerStatsEventImpl(correlationId);
                             for (Consumer<ActiveMqBrokerStatsEvent> listener : _listeners) {
                                 listener.accept(event);
                             }
@@ -424,10 +493,11 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                         }
 
                         // ----- So, either startup, or we've finished a batch of messages:
-                        // Go into indefinite receive, waiting for next batch of messages triggered by next stats
-                        // request.
+                        // Go into indefinite receive: Waiting for _next batch_ of messages triggered by _next stats
+                        // request_.
                         replyMsg = (MapMessage) consumer.receive();
                     }
+
                     // ?: Was this a null-message, most probably denoting that we're exiting?
                     if (replyMsg == null) {
                         // -> Yes, null message received.
@@ -444,11 +514,10 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                         // -> Destination stats
                         // This was a destination stats message - count it
                         _countOfDestinationsReceivedAfterRequest.incrementAndGet();
-                        // .. log time we received it
+                        // .. log time we received this destination stats message
                         nanosAtEnd_lastMessageReceived = System.nanoTime();
 
                         DestinationStatsDto dto = mapMessageToDestinationStatsDto(replyMsg);
-                        // log.debug("### "+produceTextRepresentationOfMapMessage_old(replyMsg));
                         log.debug("Message DTO: " + dto);
                         _currentDestinationStatsDtos.put(dto.destinationName, dto);
                     }

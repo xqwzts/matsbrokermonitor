@@ -105,8 +105,9 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
     }
 
     @Override
-    public void forceUpdate() {
-        _querier.forceUpdate();
+    public void forceUpdate(String correlationId, boolean full) {
+        // TODO: Implement full update
+        _querier.forceUpdate(correlationId);
     }
 
     @Override

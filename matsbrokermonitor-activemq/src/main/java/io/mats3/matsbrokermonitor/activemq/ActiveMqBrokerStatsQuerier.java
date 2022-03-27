@@ -19,9 +19,10 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
     void registerListener(Consumer<ActiveMqBrokerStatsEvent> listener);
 
     interface ActiveMqBrokerStatsEvent {
+        Optional<String> getCorrelationId();
     }
 
-    void forceUpdate();
+    void forceUpdate(String correlationId);
 
     Optional<BrokerStatsDto> getCurrentBrokerStatsDto();
 
