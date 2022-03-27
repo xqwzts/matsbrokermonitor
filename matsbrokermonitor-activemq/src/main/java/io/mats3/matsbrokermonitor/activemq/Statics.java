@@ -36,8 +36,7 @@ public interface Statics {
     String QUERY_REQUEST_DENOTE_END_LIST = "ActiveMQ.Statistics.Destination.List.End.With.Null";
     String QUERY_REQUEST_DESTINATION_INCLUDE_FIRST_MESSAGE_TIMESTAMP = "ActiveMQ.Statistics.Destination.Include.First.Message.Timestamp";
 
-    String QUERY_REPLY_BROKER_TOPIC = "matsbrokermonitor.MatsBrokerMonitor.ActiveMQ.Broker";
-    String QUERY_REPLY_DESTINATION_TOPIC = "matsbrokermonitor.MatsBrokerMonitor.ActiveMQ.Destinations";
+    String QUERY_REPLY_STATISTICS_TOPIC = "matsbrokermonitor.MatsBrokerMonitor.ActiveMQ.Statistics";
 
     /**
      * Truncate milliseconds to 3 decimals.

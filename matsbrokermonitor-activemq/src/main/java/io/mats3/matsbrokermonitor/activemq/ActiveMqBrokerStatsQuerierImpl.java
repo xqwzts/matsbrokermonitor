@@ -63,8 +63,6 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     private volatile RunStatus _runStatus = RunStatus.NOT_STARTED;
 
     private volatile Thread _sendStatsRequestMessages_Thread;
-    private volatile Thread _receiveBrokerStatsReplyMessages_Thread;
-    private volatile Connection _receiveBrokerStatsReplyMessages_Connection;
     private volatile Thread _receiveDestinationsStatsReplyMessages_Thread;
     private volatile Connection _receiveDestinationsStatsReplyMessages_Connection;
 
@@ -89,13 +87,10 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         log.info("Starting ActiveMQ Broker statistics querier.");
         _sendStatsRequestMessages_Thread = new Thread(this::sendStatsRequestMessages,
                 "MatsBrokerMonitor.ActiveMQ: Sending Statistics request messages");
-        _receiveBrokerStatsReplyMessages_Thread = new Thread(this::receiveBrokerStatsReplyMessages,
-                "MatsBrokerMonitor.ActiveMQ: Receive Broker Statistics reply messages");
         _receiveDestinationsStatsReplyMessages_Thread = new Thread(this::receiveDestinationStatsReplyMessages,
                 "MatsBrokerMonitor.ActiveMQ: Receive Destination Statistics reply messages");
 
-        // :: First start reply consumers
-        _receiveBrokerStatsReplyMessages_Thread.start();
+        // :: First start reply consumer
         _receiveDestinationsStatsReplyMessages_Thread.start();
         // .. then starting requester (it will chill a small tad after getting connection before doing first request)
         _sendStatsRequestMessages_Thread.start();
@@ -121,13 +116,11 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         synchronized (_requestWaitAndPingObject) {
             _requestWaitAndPingObject.notifyAll();
         }
-        // Closing Connections for the receivers - they'll wake up from 'con.receive()'.
-        closeConnectionIgnoreException(_receiveBrokerStatsReplyMessages_Connection);
+        // Closing Connections for the receiver - they'll wake up from 'con.receive()'.
         closeConnectionIgnoreException(_receiveDestinationsStatsReplyMessages_Connection);
         // Check that all threads exit
         try {
             _sendStatsRequestMessages_Thread.join(TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN);
-            _receiveBrokerStatsReplyMessages_Thread.join(TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN);
             _receiveDestinationsStatsReplyMessages_Thread.join(TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN);
         }
         catch (InterruptedException e) {
@@ -136,11 +129,9 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         // .. interrupt the request sender if the above didn't work.
         interruptThread(_sendStatsRequestMessages_Thread);
         // .. interrupt the receivers too if they haven't gotten out.
-        interruptThread(_receiveBrokerStatsReplyMessages_Thread);
         interruptThread(_receiveDestinationsStatsReplyMessages_Thread);
         // Null out Threads
         _sendStatsRequestMessages_Thread = null;
-        _receiveBrokerStatsReplyMessages_Thread = null;
         _receiveDestinationsStatsReplyMessages_Thread = null;
     }
 
@@ -273,8 +264,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
                 Topic requestBrokerTopic = session.createTopic(QUERY_REQUEST_BROKER);
 
-                Topic responseBrokerTopic = session.createTopic(QUERY_REPLY_BROKER_TOPIC);
-                Topic responseDestinationsTopic = session.createTopic(QUERY_REPLY_DESTINATION_TOPIC);
+                Topic responseStatisticsTopic = session.createTopic(QUERY_REPLY_STATISTICS_TOPIC);
 
                 // Chill a small tad before sending first request, so that receivers hopefully have started.
                 // Notice: It isn't particularly bad if they haven't, they'll just miss the first request/reply.
@@ -288,7 +278,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     if (log.isDebugEnabled()) log.debug("Sending stats queries to ActiveMQ.");
                     // :: Request stats for Broker
                     Message requestBrokerMsg = session.createMessage();
-                    requestBrokerMsg.setJMSReplyTo(responseBrokerTopic);
+                    requestBrokerMsg.setJMSReplyTo(responseStatisticsTopic);
                     producer.send(requestBrokerTopic, requestBrokerMsg);
 
                     // ::: Destinations
@@ -296,12 +286,12 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     // :: Request stats for Queues
                     Message requestQueuesMsg = session.createMessage();
                     set_includeFirstMessageTimestamp(requestQueuesMsg);
-                    requestQueuesMsg.setJMSReplyTo(responseDestinationsTopic);
+                    requestQueuesMsg.setJMSReplyTo(responseStatisticsTopic);
 
                     // :: Request stats for Topics
                     Message requestTopicsMsg = session.createMessage();
                     set_includeFirstMessageTimestamp(requestTopicsMsg);
-                    requestTopicsMsg.setJMSReplyTo(responseDestinationsTopic);
+                    requestTopicsMsg.setJMSReplyTo(responseStatisticsTopic);
 
                     // :: Send destination stats messages
                     _countOfDestinationsReceivedAfterRequest.set(0);
@@ -320,11 +310,11 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                         // frikkin' individual DLQ policy.)
                         Message requestIndividualDlqMsg = session.createMessage();
                         set_includeFirstMessageTimestamp(requestIndividualDlqMsg);
-                        requestIndividualDlqMsg.setJMSReplyTo(responseDestinationsTopic);
+                        requestIndividualDlqMsg.setJMSReplyTo(responseStatisticsTopic);
 
                         Message requestGlobalDlqMsg = session.createMessage();
                         set_includeFirstMessageTimestamp(requestGlobalDlqMsg);
-                        requestGlobalDlqMsg.setJMSReplyTo(responseDestinationsTopic);
+                        requestGlobalDlqMsg.setJMSReplyTo(responseStatisticsTopic);
 
                         producer.send(requestQueuesQueue_individualDlq, requestIndividualDlqMsg);
                         producer.send(requestQueuesQueue_globalDlq, requestGlobalDlqMsg);
@@ -375,49 +365,6 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         msg.setBooleanProperty(QUERY_REQUEST_DESTINATION_INCLUDE_FIRST_MESSAGE_TIMESTAMP, true);
     }
 
-    private void receiveBrokerStatsReplyMessages() {
-        OUTERLOOP: while (_runStatus == RunStatus.RUNNING) {
-            try {
-                _receiveBrokerStatsReplyMessages_Connection = _connectionFactory.createConnection();
-                _receiveBrokerStatsReplyMessages_Connection.start();
-                Session session = _receiveBrokerStatsReplyMessages_Connection.createSession(false,
-                        Session.DUPS_OK_ACKNOWLEDGE);
-                Topic replyTopic = session.createTopic(QUERY_REPLY_BROKER_TOPIC);
-                MessageConsumer consumer = session.createConsumer(replyTopic);
-
-                while (_runStatus == RunStatus.RUNNING) {
-                    MapMessage replyMsg = (MapMessage) consumer.receive();
-                    // ?: Was this a null-message, most probably denoting that we're exiting?
-                    if (replyMsg == null) {
-                        // -> Yes, null message received.
-                        log.info("Received null message from consumer.receive(), assuming shutdown.");
-                        if (_runStatus != RunStatus.RUNNING) {
-                            break OUTERLOOP;
-                        }
-                        throw new UnexpectedNullMessageReceivedException(
-                                "Null message received, but runFlag still true?!");
-                    }
-                    _currentBrokerStatsDto = mapMessageToBrokerStatsDto(replyMsg);
-                    log.info("Got BrokerStats: " + _currentBrokerStatsDto);
-                }
-            }
-            catch (Throwable t) {
-                // ?: Exiting?
-                if (_runStatus != RunStatus.RUNNING) {
-                    // -> Yes, exiting, so get out.
-                    break;
-                }
-                log.warn("Got a [" + t.getClass().getSimpleName() + "] in the receive-loop."
-                        + " Attempting to close JMS Connection if gotten, then chill-waiting, then trying again.", t);
-                closeConnectionIgnoreException(_receiveBrokerStatsReplyMessages_Connection);
-                chill(CHILL_MILLIS_WAIT_AFTER_THROWABLE_IN_RECEIVE_LOOPS);
-            }
-        }
-        // To exit, we're signalled via the JMS Connection being closed; Our job is just to null it on our way out.
-        _receiveBrokerStatsReplyMessages_Connection = null;
-        log.info("Got asked to exit, and that we do!");
-    }
-
     @SuppressWarnings("unchecked")
     private void receiveDestinationStatsReplyMessages() {
         OUTERLOOP: while (_runStatus == RunStatus.RUNNING) {
@@ -426,7 +373,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 _receiveDestinationsStatsReplyMessages_Connection.start();
                 Session session = _receiveDestinationsStatsReplyMessages_Connection.createSession(false,
                         Session.DUPS_OK_ACKNOWLEDGE);
-                Topic replyTopic = session.createTopic(QUERY_REPLY_DESTINATION_TOPIC);
+                Topic replyTopic = session.createTopic(QUERY_REPLY_STATISTICS_TOPIC);
                 MessageConsumer consumer = session.createConsumer(replyTopic);
 
                 long nanosAtEnd_lastMessageReceived = 0;
@@ -492,15 +439,28 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                                 + " but runFlag still true?!");
                     }
 
-                    // This was a destination stats message - count it
-                    _countOfDestinationsReceivedAfterRequest.incrementAndGet();
-                    // .. log time we received it
-                    nanosAtEnd_lastMessageReceived = System.nanoTime();
+                    // :: Evaluate whether it is a BrokerStatistics or DestinationStatistics message
+                    if (replyMsg.getObject("destinationName") != null) {
+                        // -> Destination stats
+                        // This was a destination stats message - count it
+                        _countOfDestinationsReceivedAfterRequest.incrementAndGet();
+                        // .. log time we received it
+                        nanosAtEnd_lastMessageReceived = System.nanoTime();
 
-                    DestinationStatsDto dto = mapMessageToDestinationStatsDto(replyMsg);
-                    // log.debug("### "+produceTextRepresentationOfMapMessage_old(replyMsg));
-                    log.debug("Message DTO: " + dto);
-                    _currentDestinationStatsDtos.put(dto.destinationName, dto);
+                        DestinationStatsDto dto = mapMessageToDestinationStatsDto(replyMsg);
+                        // log.debug("### "+produceTextRepresentationOfMapMessage_old(replyMsg));
+                        log.debug("Message DTO: " + dto);
+                        _currentDestinationStatsDtos.put(dto.destinationName, dto);
+                    }
+                    else if (replyMsg.getObject("storeUsage") != null) {
+                        // -> Broker stats
+                        _currentBrokerStatsDto = mapMessageToBrokerStatsDto(replyMsg);
+                        log.info("Got BrokerStats: " + _currentBrokerStatsDto);
+                    }
+                    else {
+                        log.warn("Got a JMS Message that was neither destination stats nor broker stats:\n" + replyMsg);
+                    }
+
                 }
             }
             catch (Throwable t) {
