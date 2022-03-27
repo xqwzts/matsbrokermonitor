@@ -131,7 +131,7 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
             return "  \"statsReceivedTimeMillis\"=" + statsReceived + "\n" +
                     "  \"brokerId\"=\"" + brokerId + '"' + "\n" +
                     "  \"brokerName\"=\"" + brokerName + '"' + "\n" +
-                    "  \"brokerTime\"=" + brokerTime + '"' + "\n" +
+                    "  \"brokerTime\"=\"" + brokerTime + '"' + "\n" +
                     "  \"size\"=" + size + "\n" +
                     "  \"enqueueCount\"=" + enqueueCount + "\n" +
                     "  \"dequeueCount\"=" + dequeueCount + "\n" +
@@ -209,14 +209,14 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
 
     class DestinationStatsDto extends CommonStatsDto {
         String destinationName;
-        // To-be feature created by me, also it is only present if there is a head message present:
-        Optional<Instant> headMessageBrokerInTime;
+        // Only present if there is a head message present (I created this feature in ActiveMQ!)
+        Optional<Instant> firstMessageTimestamp;
 
         @Override
         public String toString() {
             return "DestinationStatsDto{" +
                     ", destinationName='" + destinationName + '\'' +
-                    ", headMessageBrokerInTime='" + headMessageBrokerInTime + '\'' +
+                    ", firstMessageTimestamp='" + firstMessageTimestamp + '\'' +
                     ", " +
                     getCommonToString() +
                     '}';
@@ -225,8 +225,8 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
         public String toJson() {
             return "{\n" +
                     "  \"destinationName\"=\"" + destinationName + "\"\n" +
-                    "  \"headMessageBrokerInTime\"=" +
-                    (headMessageBrokerInTime.map(instant -> "\"" + instant + "\"").orElse("null")) + "\n" +
+                    "  \"firstMessageTimestamp\"=" +
+                    (firstMessageTimestamp.map(instant -> "\"" + instant + "\"").orElse("null")) + "\n" +
                     getCommonJson() +
                     '}';
         }

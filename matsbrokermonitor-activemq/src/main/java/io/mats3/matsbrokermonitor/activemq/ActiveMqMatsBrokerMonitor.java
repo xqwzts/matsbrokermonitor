@@ -421,7 +421,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
             latestUpdateBrokerMillis = Math.max(latestUpdateBrokerMillis, lastUpdateBrokerMillis);
 
             // If present: Calculate age: If lastUpdateBrokerMillis present, use this, otherwise lastUpdateMillis
-            long headMessageAgeMillis = stats.headMessageBrokerInTime.map(instant -> (lastUpdateBrokerMillis != 0
+            long headMessageAgeMillis = stats.firstMessageTimestamp.map(instant -> (lastUpdateBrokerMillis != 0
                     ? lastUpdateBrokerMillis
                     : lastUpdateMillis) - instant.toEpochMilli())
                     .orElse(0L);

@@ -6,6 +6,16 @@ dependencies {
     implementation "javax.jms:jms-api:$jmsApiVersion"
     implementation "org.slf4j:slf4j-api:$slf4jVersion"
 
-    // TEST
+    // ===== TEST
+
     testImplementation "org.slf4j:log4j-over-slf4j:$slf4jVersion"
+    testImplementation "ch.qos.logback:logback-classic:$logbackVersion"
+    // MatsTestBroker
+    testImplementation "io.mats3:mats-test-broker:$matsVersion"
+    // Must manually drag in ActiveMq broker
+    testImplementation "org.apache.activemq:activemq-broker:$activeMqVersion"
+    // JUnit
+    testImplementation "junit:junit:$junitVersion"
+
+
 }

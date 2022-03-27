@@ -61,6 +61,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
     // RunStatus: NOT_STARTED -> RUNNING -> CLOSED. Not restartable.
     private volatile RunStatus _runStatus = RunStatus.NOT_STARTED;
+
     private volatile Thread _sendStatsRequestMessages_Thread;
     private volatile Thread _receiveBrokerStatsReplyMessages_Thread;
     private volatile Connection _receiveBrokerStatsReplyMessages_Connection;
@@ -250,10 +251,13 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     requestTopicsTopic_main = session.createTopic(queryRequestDestination_specific);
                     requestQueuesQueue_individualDlq = session.createQueue(queryRequestDestination_specific_DLQ);
                     // Note: Using undocumented feature to request a "null message" after last reply-message for query.
+                    // NOTICE! This will be the last query sent!
                     requestQueuesQueue_globalDlq = session.createQueue(QUERY_REQUEST_DESTINATION_PREFIX + "."
                             + Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME + QUERY_REQUEST_DENOTE_END_LIST);
                 }
                 else {
+                    // -> No, this is a bad prefix that cannot utilize the wildcard syntax, so have to ask for every
+                    // single queue and topic.
                     String queryRequestDestination_all = QUERY_REQUEST_DESTINATION_PREFIX + ".>";
 
                     log.info("The matsDestinationPrefix was set to [" + _matsDestinationPrefix + "], but this isn't"
@@ -262,6 +266,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             + " employing [" + queryRequestDestination_all + "]");
                     requestQueuesQueue_main = session.createQueue(queryRequestDestination_all);
                     // Note: Using undocumented feature to request a "null message" after last reply-message for query.
+                    // NOTICE! This will be the last query sent!
                     requestTopicsTopic_main = session.createTopic(queryRequestDestination_all
                             + QUERY_REQUEST_DENOTE_END_LIST);
                 }
@@ -543,7 +548,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         mapMessageToCommonStatsDto(mm, dto);
 
         dto.destinationName = (String) mm.getObject("destinationName");
-        dto.headMessageBrokerInTime = getTimestampFromMapMessage(mm, "firstMessageTimestamp");
+        dto.firstMessageTimestamp = getTimestampFromMapMessage(mm, "firstMessageTimestamp");
 
         return dto;
     }
