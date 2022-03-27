@@ -284,7 +284,8 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 // :: Create queue for the "zero-termination", sent in a separate request query
                 // NOTE: We just ask for a queue which shall not be there, but request the "zero termination".
                 Queue requestQueuesQueue_zeroQueuesMatchWithNullTermination = session.createQueue(
-                        QUERY_REQUEST_DESTINATION_PREFIX + ".No_Match_Whatsoever_abcxyz123");
+                        QUERY_REQUEST_DESTINATION_PREFIX + ".No_Match_Whatsoever_"
+                                + Long.toString(Math.abs(ThreadLocalRandom.current().nextLong()), 36));
 
                 // Request BrokerStats topic
                 Topic requestBrokerTopic = session.createTopic(QUERY_REQUEST_BROKER);
@@ -329,6 +330,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     // ?: Are we using a proper "path-style" mats destination prefix?
                     if (requestQueuesQueue_individualDlq != null) {
                         // -> Yes, we're using a "path-style" mats destination prefix.
+                        // The main queue (and topic) query is then a specific query for only those relevant queues.
                         // Therefore, we'll also need to ask for the individual DLQs, and for the ActiveMQ Global DLQ.
                         // (Asking for the Global DLQ is just to point things out for users that haven't configured
                         // individual DLQ policy. We won't try to fix this problem fully, i.e. won't "distribute"
@@ -347,7 +349,9 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                         producer.send(requestQueuesQueue_globalDlq, requestGlobalDlqMsg);
                     }
 
+                    // Do we currently have a specific correlationId?
                     if (correlationId == null) {
+                        // -> No specific correlation Id, so make a "normal" Scheduled correlationId.
                         correlationId = NORMAL_CORRELATION_ID_PREFIX + Long.toString(ThreadLocalRandom.current()
                                 .nextLong(), 36);
                     }
@@ -355,6 +359,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     // Send the null-termination query (query w/o any destination replies, only the null-terminator)
                     Message requestNullTermination = session.createMessage();
                     requestNullTermination.setJMSReplyTo(replyStatisticsTopic);
+                    // .. set the special property which directs the StatisticsPlugin to "empty terminate" the replies.
                     requestNullTermination.setBooleanProperty(QUERY_REQUEST_DENOTE_END_LIST, true);
                     requestNullTermination.setJMSCorrelationID(correlationId);
                     producer.send(requestQueuesQueue_zeroQueuesMatchWithNullTermination, requestNullTermination);
@@ -412,6 +417,10 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         msg.setBooleanProperty(QUERY_REQUEST_DESTINATION_INCLUDE_FIRST_MESSAGE_TIMESTAMP, true);
     }
 
+    private long _millisAtLastLogline;
+    private int _numberOfSuppressedLoglines;
+    private long _numberOfNanosTotalBetweenRequestAndEvent;
+
     @SuppressWarnings("unchecked")
     private void receiveStatisticsReplyMessagesRunnable() {
         OUTERLOOP: while (_runStatus == RunStatus.RUNNING) {
@@ -437,11 +446,25 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     // early. This will definitely be a "eventually consistent" scenario - so lets hope the ordering
                     // holds, in which case we have a very good consistency wrt. when sending the update event.
 
+                    // The net effect here is that we will receive stats updates for everything we want, but the
+                    // ordering and clean division into "sets" based on the requests being sent cannot be totally
+                    // guaranteed - both due to mentioned ordering, but also the fact that there should be multiple
+                    // nodes running this (so that we can get interleaving of requests), and that downstream can at
+                    // any point request a forced update request, which might come right after a scheduled update req.
+
+                    // However, since we do stack everything we get up into a persistent memory map on this side, we
+                    // will just get more and more current information. As long as we eventually notify our listeners
+                    // (the ActiveMqMatsBrokerMonitor), the downstream will get a good view about the broker state.
+                    // (The map is scavenged based on time: If there are old destinations that haven't gotten an update
+                    // for a longish time, it is assumed that the destination is gone from the broker).
+
                     // Go into timed receive (receiving "the rest of the bunch", but handling startup)
                     MapMessage replyMsg = (MapMessage) consumer.receive(
                             TIMEOUT_MILLIS_FOR_LAST_MESSAGE_IN_BATCH_FOR_DESTINATION_STATS);
+
                     // NOTE: We're using an undocumented feature of ActiveMQ's StatisticsBrokerPlugin whereby if we add
                     // a special marker to the query, the replies will be "empty terminated" by an empty MapMessage.
+
                     // ?: Did we either get a null, or get an "empty" MapMessage, BUT runFlag still true?
                     // (Null would be timeout for stats, empty MapMessage would be the "null termination" for stats.)
                     if (((replyMsg == null) || (replyMsg.getObject("brokerName") == null))
@@ -454,25 +477,51 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             long nanosBetweenQueryAndLastMessageOfBatch = nanosAtEnd_lastMessageReceived
                                     - _nanosAtStart_RequestQuery;
                             long nanosBetweenQueryAndNow = System.nanoTime() - _nanosAtStart_RequestQuery;
-                            log.info("We've received a batch of [" + _countOfDestinationsReceivedAfterRequest.get()
-                                    + "] destination stats messages, time taken between request sent and last message"
-                                    + " of reply batch received: [" + nanos3(nanosBetweenQueryAndLastMessageOfBatch)
-                                    + "] ms - this is [" + nanos3(nanosBetweenQueryAndNow)
-                                    + "] ms since request. Notifying listeners.");
+                            long nowMillis = System.currentTimeMillis();
+                            // ?: Should we log this logline, or suppress it?
+                            if ((nowMillis - _millisAtLastLogline) > LOGLINE_SUPPRESSION_MILLIS) {
+                                // -> Log it!
+                                long averageNanos = _numberOfSuppressedLoglines > 0
+                                        ? _numberOfNanosTotalBetweenRequestAndEvent / _numberOfSuppressedLoglines
+                                        : -1;
+                                log.info("Statistics updates received! [Suppressed loglines since last: '"
+                                        + _numberOfSuppressedLoglines
+                                        + "', average time for each request-to-last-message-of-batch: '"
+                                        + nanos3(averageNanos) + "'] -- We've received a batch of ["
+                                        + _countOfDestinationsReceivedAfterRequest.get()
+                                        + "] destination stats messages, current number of destinations ["
+                                        + _currentDestinationStatsDtos.size()
+                                        + "], time taken between request sent and last message of reply batch received: ["
+                                        + nanos3(nanosBetweenQueryAndLastMessageOfBatch)
+                                        + "] ms - this logline is [" + nanos3(nanosBetweenQueryAndNow)
+                                        + "] ms since request. Notifying listeners.");
+                                // Zero out suppression-counts
+                                _numberOfNanosTotalBetweenRequestAndEvent = 0;
+                                _numberOfSuppressedLoglines = 0;
+                                // Note the time we logged
+                                _millisAtLastLogline = nowMillis;
+                            }
+                            else {
+                                // -> No, suppress log line. Increase "suppression-stats".
+                                _numberOfSuppressedLoglines++;
+                                _numberOfNanosTotalBetweenRequestAndEvent += nanosBetweenQueryAndLastMessageOfBatch;
+                            }
 
                             // :: Scavenge old statistics no longer getting updates (i.e. not existing anymore).
-                            Iterator<DestinationStatsDto> currentStatsIterator = _currentDestinationStatsDtos.values()
-                                    .iterator();
                             long longAgo = System.currentTimeMillis() - SCAVENGE_OLD_STATS_SECONDS * 1000;
+                            Iterator<DestinationStatsDto> currentStatsIterator = _currentDestinationStatsDtos
+                                    .values().iterator();
                             while (currentStatsIterator.hasNext()) {
-                                DestinationStatsDto next = currentStatsIterator.next();
-                                if (next.statsReceived.toEpochMilli() < longAgo) {
+                                DestinationStatsDto stats = currentStatsIterator.next();
+                                if (stats.statsReceived.toEpochMilli() < longAgo) {
                                     log.info("Removing destination which haven't gotten updates for ["
-                                            + SCAVENGE_OLD_STATS_SECONDS + "] seconds: [" + next.destinationName + "]");
+                                            + SCAVENGE_OLD_STATS_SECONDS
+                                            + "] seconds: [" + stats.destinationName + "]");
                                     currentStatsIterator.remove();
                                 }
                             }
 
+                            // :: Find CorrelationId if it was a Forced update.
                             String correlationId = null;
                             if (replyMsg != null) {
                                 String raw = replyMsg.getJMSCorrelationID();
@@ -517,14 +566,14 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                         // .. log time we received this destination stats message
                         nanosAtEnd_lastMessageReceived = System.nanoTime();
 
-                        DestinationStatsDto dto = mapMessageToDestinationStatsDto(replyMsg);
-                        log.debug("Message DTO: " + dto);
-                        _currentDestinationStatsDtos.put(dto.destinationName, dto);
+                        DestinationStatsDto destinationStatsDto = mapMessageToDestinationStatsDto(replyMsg);
+                        log.debug("God DestinationStats: " + destinationStatsDto);
+                        _currentDestinationStatsDtos.put(destinationStatsDto.destinationName, destinationStatsDto);
                     }
                     else if (replyMsg.getObject("storeUsage") != null) {
                         // -> Broker stats
                         _currentBrokerStatsDto = mapMessageToBrokerStatsDto(replyMsg);
-                        log.info("Got BrokerStats: " + _currentBrokerStatsDto);
+                        log.debug("Got BrokerStats: " + _currentBrokerStatsDto);
                     }
                     else {
                         log.warn("Got a JMS Message that was neither destination stats nor broker stats:\n" + replyMsg);

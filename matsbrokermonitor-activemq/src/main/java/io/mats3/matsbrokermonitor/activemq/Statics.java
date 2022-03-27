@@ -26,6 +26,9 @@ public interface Statics {
     int TIMEOUT_MILLIS_FOR_LAST_MESSAGE_IN_BATCH_FOR_DESTINATION_STATS = 250;
     int TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN = 500;
 
+    // Time between each logline we want logged
+    long LOGLINE_SUPPRESSION_MILLIS = 15 * 60 * 1000;
+
     String QUERY_REQUEST_BROKER = "ActiveMQ.Statistics.Broker";
     /**
      * Note: This should be postfixed with ".{which destination}", which handles wildcards - so ".>" will return a

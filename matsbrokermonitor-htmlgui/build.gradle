@@ -15,6 +15,8 @@ dependencies {
     // :: TESTING
 
     // MATS STUFF:
+    // Need the JMS Mats
+    testImplementation "io.mats3:mats-impl-jms:$matsVersion"
     // We need an implementation of the MatsSerializer, the MatsSerializerJson
     testImplementation "io.mats3:mats-serial-json:$matsVersion"
     // Testing tools for Mats
@@ -23,6 +25,14 @@ dependencies {
     testImplementation "io.mats3:mats-intercept-logging:$matsVersion"
     // We want the localinspect tool
     testImplementation "io.mats3:mats-localinspect:$matsVersion"
+
+    // JMS API
+    testImplementation "javax.jms:jms-api:$jmsApiVersion"
+    // MatsTestBroker
+    testImplementation "io.mats3:mats-test-broker:$matsVersion"
+    // Must manually drag in ActiveMq broker
+    testImplementation "org.apache.activemq:activemq-broker:$activeMqVersion"
+
 
     // Base Jetty Server
     testImplementation "org.eclipse.jetty:jetty-server:$jettyVersion"
