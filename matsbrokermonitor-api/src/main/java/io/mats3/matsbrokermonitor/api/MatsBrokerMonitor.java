@@ -35,7 +35,7 @@ public interface MatsBrokerMonitor extends Closeable {
 
     Optional<BrokerSnapshot> getSnapshot();
 
-    void registerListener(Consumer<DestinationUpdateEvent> listener);
+    void registerListener(Consumer<UpdateEvent> listener);
 
     void forceUpdate(String correlationId, boolean full);
 
@@ -64,6 +64,9 @@ public interface MatsBrokerMonitor extends Closeable {
          */
         NavigableMap<String, MatsBrokerDestination> getMatsDestinations();
 
+        /**
+         * @return a {@link BrokerInfo} instance.
+         */
         Optional<BrokerInfo> getBrokerInfo();
     }
 
@@ -85,10 +88,15 @@ public interface MatsBrokerMonitor extends Closeable {
         Optional<String> getBrokerJson();
     }
 
-    interface DestinationUpdateEvent {
+    interface UpdateEvent {
         /**
-         * A full update might be sent periodically, and when {@link #forceUpdate(String, boolean)} was invoked with the
-         * 'full' parameter set to <code>true</code>.
+         * A full update will be sent when {@link #forceUpdate(String, boolean)} was invoked with the 'full' parameter
+         * set to <code>true</code>, and will be sent periodically, and will be sent when destinations disappear.
+         * <p/>
+         * When this is <code>true</code>, the receiver should consider the {@link #getEventDestinations()} as
+         * authoritative information about all currently known destinations on the broker, thus overwriting any local
+         * view kept by incremental updates. {@link MatsBrokerMonitor#getSnapshot() BrokerSnapshots} taken after such an
+         * event will also reflect the new situation.
          *
          * @return whether this is a full update (<code>true</code>), in which case the receiver should consider the
          *         {@link #getEventDestinations()} as authoritative information about all currently known destinations

@@ -10,6 +10,16 @@ import java.util.function.Consumer;
  * @author Endre Stølsvik 2021-12-28 02:31 - http://stolsvik.com/, endre@stolsvik.com
  */
 public interface ActiveMqBrokerStatsQuerier extends Closeable {
+
+    /**
+     * @param nodeId
+     *            the internal nodeId to decide whether an update came from "this node" or not, used for
+     *            {@link ActiveMqBrokerStatsEvent#isStatsEventOriginatedOnThisNode()}. Must be different for each
+     *            instance connected to the same ActiveMQ instance. Not really needed, since it works just nice with a
+     *            random id (which it uses default), but it can be valuable for debugging.
+     */
+    void setNodeId(String nodeId);
+
     void start();
 
     void close();
@@ -41,6 +51,12 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
          * @return <code>true</code> if this event was the result from a request sent from this node.
          */
         boolean isStatsEventOriginatedOnThisNode();
+
+        /**
+         * @return the nodeId which performed the request which resulted in this update event - the nodeId is a random
+         *         string unless set using {@link ActiveMqBrokerStatsQuerier#setNodeId(String)}.
+         */
+        Optional<String> getOriginatingNodeId();
     }
 
     /**

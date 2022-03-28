@@ -137,7 +137,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             sc.setAttribute(LocalHtmlInspectForMatsFactory.class.getName(), inspect);
 
             // :: Create the MatsBrokerMonitor #1
-            MatsBrokerMonitor matsBrokerMonitor1 = ActiveMqMatsBrokerMonitor.create(connFactory, "endre:");
+            MatsBrokerMonitor matsBrokerMonitor1 = ActiveMqMatsBrokerMonitor.create(connFactory, "endre:", 15_000);
             // Register a dummy listener
             matsBrokerMonitor1.registerListener(destinationUpdateEvent -> {
                 log.info("Listener #1 at TestJettyServer: Got update! " + destinationUpdateEvent);
@@ -146,7 +146,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             });
             matsBrokerMonitor1.start();
 
-            MatsBrokerMonitor matsBrokerMonitor2 = ActiveMqMatsBrokerMonitor.create(connFactory, "endre:");
+            MatsBrokerMonitor matsBrokerMonitor2 = ActiveMqMatsBrokerMonitor.create(connFactory, "endre:", 15_000);
             // Register a dummy listener
             matsBrokerMonitor2.registerListener(destinationUpdateEvent -> {
                 log.info("Listener #2 at TestJettyServer: Got update! " + destinationUpdateEvent);
@@ -166,11 +166,11 @@ public class MatsBrokerMonitor_TestJettyServer {
             MatsBrokerMonitorHtmlGuiImpl matsBrokerMonitorHtmlGui1 = MatsBrokerMonitorHtmlGui.create(
                     matsBrokerMonitor1, matsBrokerBrowseAndActions1, matsSerializer);
 
-            // TODO: Enable multiple MQs.
+            // For multiple ActiveMQs:
             // Either: an identifier of sorts, so that the MatsBrokerMonitor knows if it is talked to.
             // Or: .. just use "URL routing" to target the different, i.e. put them on different URL paths.
-            // Worth remembering: This is somewhat different to a MatsFactory, in that it monitors the _underlying_
-            // broker, not the "local" MatsFactory.
+            // Worth remembering: This is different from a MatsFactory, in that it monitors the _underlying_ broker, not
+            // the "local" MatsFactory.
 
             // Put it in ServletContext, for servlet to get
             sc.setAttribute("matsBrokerMonitorHtmlGui1", matsBrokerMonitorHtmlGui1);

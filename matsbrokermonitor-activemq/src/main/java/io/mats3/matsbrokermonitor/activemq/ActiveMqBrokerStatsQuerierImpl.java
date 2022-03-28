@@ -38,22 +38,28 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     private static final String CORRELATION_ID_PREFIX_SCHEDULED = "Scheduled";
     private static final String CORRELATION_ID_PREFIX_FORCED = "Forced";
     private static final String CORRELATION_ID_PARAMETER_FULL_UPDATE = "fullUpdate";
-    private static final String CORRELATION_ID_PARAMETER_NODE = "node";
+    private static final String CORRELATION_ID_PARAMETER_NODE_ID = "nodeId";
 
-    private final String _syntheticNodeId = Long.toString(Math.abs(ThreadLocalRandom.current().nextLong()), 36)
+    private String _nodeId = Long.toString(Math.abs(ThreadLocalRandom.current().nextLong()), 36)
             + Long.toString(Math.abs(ThreadLocalRandom.current().nextLong()), 36);
 
     private final ConnectionFactory _connectionFactory;
-
     private final Clock _clock;
+    private final long _updateIntervalMillis;
 
     static ActiveMqBrokerStatsQuerierImpl create(ConnectionFactory connectionFactory) {
-        return new ActiveMqBrokerStatsQuerierImpl(connectionFactory, Clock.systemUTC());
+        return create(connectionFactory, DEFAULT_UPDATE_INTERVAL_MILLIS);
     }
 
-    private ActiveMqBrokerStatsQuerierImpl(ConnectionFactory connectionFactory, Clock clock) {
+    static ActiveMqBrokerStatsQuerierImpl create(ConnectionFactory connectionFactory, long updateIntervalMillisMillis) {
+        return new ActiveMqBrokerStatsQuerierImpl(connectionFactory, Clock.systemUTC(), updateIntervalMillisMillis);
+    }
+
+    private ActiveMqBrokerStatsQuerierImpl(ConnectionFactory connectionFactory, Clock clock,
+            long updateIntervalMillis) {
         _connectionFactory = connectionFactory;
         _clock = clock;
+        _updateIntervalMillis = updateIntervalMillis;
     }
 
     private enum RunStatus {
@@ -86,6 +92,11 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     private final ConcurrentNavigableMap<String, DestinationStatsDto> _currentDestinationStatsDtos = new ConcurrentSkipListMap<>();
 
     private final CopyOnWriteArrayList<Consumer<ActiveMqBrokerStatsEvent>> _listeners = new CopyOnWriteArrayList<>();
+
+    @Override
+    public void setNodeId(String nodeId) {
+        _nodeId = nodeId;
+    }
 
     public void start() {
         if (_runStatus == RunStatus.CLOSED) {
@@ -183,7 +194,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     private String constructCorrelationIdToSend(boolean forced, boolean fullUpdate, String correlationId) {
         return (forced ? CORRELATION_ID_PREFIX_FORCED : CORRELATION_ID_PREFIX_SCHEDULED)
                 + ":" + CORRELATION_ID_PARAMETER_FULL_UPDATE + "." + fullUpdate
-                + ":" + CORRELATION_ID_PARAMETER_NODE + "." + _syntheticNodeId
+                + ":" + CORRELATION_ID_PARAMETER_NODE_ID + "." + _nodeId
                 + ":" + correlationId;
     }
 
@@ -198,21 +209,21 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
         boolean forced = CORRELATION_ID_PREFIX_FORCED.equals(prefix);
         boolean fullUpdate = full.contains("true");
-        String syntheticNodeId = node.substring(CORRELATION_ID_PARAMETER_NODE.length() + 1);
+        String nodeId = node.substring(CORRELATION_ID_PARAMETER_NODE_ID.length() + 1);
 
-        return new CorrSplit(forced, fullUpdate, syntheticNodeId, correlationId);
+        return new CorrSplit(forced, fullUpdate, nodeId, correlationId);
     }
 
     private static class CorrSplit {
         final boolean forced;
         final boolean fullUpdate;
-        final String synthethicNodeId;
+        final String nodeId;
         final String correlationId;
 
-        public CorrSplit(boolean forced, boolean fullUpdate, String synthethicNodeId, String correlationId) {
+        public CorrSplit(boolean forced, boolean fullUpdate, String nodeId, String correlationId) {
             this.forced = forced;
             this.fullUpdate = fullUpdate;
-            this.synthethicNodeId = synthethicNodeId;
+            this.nodeId = nodeId;
             this.correlationId = correlationId;
         }
     }
@@ -220,7 +231,8 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     @Override
     public void forceUpdate(String correlationId, boolean fullUpdate) {
         synchronized (_waitObject_And_ForceUpdateOutstandingCorrelationIds) {
-            _waitObject_And_ForceUpdateOutstandingCorrelationIds.add(constructCorrelationIdToSend(true, fullUpdate, correlationId));
+            _waitObject_And_ForceUpdateOutstandingCorrelationIds.add(constructCorrelationIdToSend(true, fullUpdate,
+                    correlationId));
             // ?: Are there WAY too many outstanding correlation Ids?
             if (_waitObject_And_ForceUpdateOutstandingCorrelationIds
                     .size() > MAX_NUMBER_OF_OUTSTANDING_CORRELATION_IDS) {
@@ -240,13 +252,15 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         private final boolean _fullUpdate;
         private final double _requestReplyLatencyMillis;
         private final boolean _statsEventOriginatedOnThisNode;
+        private final String _originatingNodeId;
 
         public ActiveMqBrokerStatsEventImpl(String correlationId, boolean fullUpdate, double requestReplyLatencyMillis,
-                boolean statsEventOriginatedOnThisNode) {
+                boolean statsEventOriginatedOnThisNode, String originatingNodeId) {
             _correlationId = correlationId;
             _fullUpdate = fullUpdate;
             _requestReplyLatencyMillis = requestReplyLatencyMillis;
             _statsEventOriginatedOnThisNode = statsEventOriginatedOnThisNode;
+            _originatingNodeId = originatingNodeId;
         }
 
         @Override
@@ -267,6 +281,11 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         @Override
         public boolean isStatsEventOriginatedOnThisNode() {
             return _statsEventOriginatedOnThisNode;
+        }
+
+        @Override
+        public Optional<String> getOriginatingNodeId() {
+            return Optional.ofNullable(_originatingNodeId);
         }
     }
 
@@ -449,14 +468,12 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             }
                             // E-> No forced waiting, so calculate how long to wait
                             // 5% randomness
-                            long randomRange = (long) Math.max(150, INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS * .05d);
+                            long randomRange = (long) Math.max(150, _updateIntervalMillis * .05d);
                             long currentRandom = Math.round(ThreadLocalRandom.current().nextDouble() * randomRange);
                             long halfRandomRange = randomRange / 2;
-                            long currentWait = INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS - halfRandomRange + currentRandom;
+                            long currentWait = _updateIntervalMillis - halfRandomRange + currentRandom;
 
-                            log.info(_syntheticNodeId + ": Current wait: " + currentWait);
                             _waitObject_And_ForceUpdateOutstandingCorrelationIds.wait(currentWait);
-                            log.info(_syntheticNodeId + ": wakeup!");
 
                             // ?: Not running anymore?
                             if (_runStatus != RunStatus.RUNNING) {
@@ -475,14 +492,10 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             // If it is older, then it is probably we that requested the last.
                             // If it is not older, then it is probably the other node having requested the last.
                             if (_lastStatsUpdateMessageReceived < (System.currentTimeMillis()
-                                    - (INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS * 0.75d))) {
+                                    - (_updateIntervalMillis * 0.75d))) {
                                 // -> Yes, the message is overdue enough, so let's do the request
-                                log.info(_syntheticNodeId + ": We should do the request!");
                                 // Break out of wait-loop
                                 break;
-                            }
-                            else {
-                                log.info(_syntheticNodeId + ": The OTHER NODE has done the request!");
                             }
                         }
 
@@ -625,13 +638,15 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             // are deleted is just a few full updates too much. No problem.
                             boolean isFullUpdate = destinationsScavenged;
                             boolean requestSentFromThisNode = false;
+                            String originatingSyntheticNodeId = null;
                             if (replyMsg != null) {
                                 String raw = replyMsg.getJMSCorrelationID();
                                 if (raw != null) {
                                     CorrSplit corrSplit = splitCorrelation(raw);
                                     correlationId = corrSplit.forced ? corrSplit.correlationId : null;
                                     isFullUpdate = corrSplit.fullUpdate;
-                                    requestSentFromThisNode = _syntheticNodeId.equals(corrSplit.synthethicNodeId);
+                                    requestSentFromThisNode = _nodeId.equals(corrSplit.nodeId);
+                                    originatingSyntheticNodeId = corrSplit.nodeId;
                                 }
                             }
 
@@ -646,7 +661,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             // :: Notify listeners
                             ActiveMqBrokerStatsEventImpl event = new ActiveMqBrokerStatsEventImpl(correlationId,
                                     isFullUpdate, nanosBetweenQueryAndNow / 1_000_000d,
-                                    requestSentFromThisNode);
+                                    requestSentFromThisNode, originatingSyntheticNodeId);
                             for (Consumer<ActiveMqBrokerStatsEvent> listener : _listeners) {
                                 listener.accept(event);
                             }

@@ -28,10 +28,6 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
     private static final Logger log = LoggerFactory.getLogger(ActiveMqMatsBrokerMonitor.class);
 
-    static ActiveMqMatsBrokerMonitor create(ActiveMqBrokerStatsQuerierImpl querier, String matsDestinationPrefix) {
-        return new ActiveMqMatsBrokerMonitor(querier, matsDestinationPrefix);
-    }
-
     private final ActiveMqBrokerStatsQuerier _querier;
 
     private final String _matsDestinationPrefix;
@@ -56,11 +52,32 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
      *
      * @param jmsConnectionFactory
      *            the ConnectionFactory to the backing ActiveMQ.
+     * @param matsDestinationPrefix
+     *            the destination prefix that the MatsFactory is configured with.
      * @return the newly created instance.
      */
     public static ActiveMqMatsBrokerMonitor create(ConnectionFactory jmsConnectionFactory,
             String matsDestinationPrefix) {
-        ActiveMqBrokerStatsQuerierImpl querier = ActiveMqBrokerStatsQuerierImpl.create(jmsConnectionFactory);
+        ActiveMqBrokerStatsQuerier querier = ActiveMqBrokerStatsQuerierImpl.create(jmsConnectionFactory);
+        return create(querier, matsDestinationPrefix);
+    }
+
+    /**
+     * Convenience method where the {@link ActiveMqBrokerStatsQuerierImpl} is instantiated locally based on the supplied
+     * JMS {@link ConnectionFactory}, MatsDestinationPrefix, and updateIntervalMillisMillis.
+     *
+     * @param jmsConnectionFactory
+     *            the ConnectionFactory to the backing ActiveMQ.
+     * @param matsDestinationPrefix
+     *            the destination prefix that the MatsFactory is configured with.
+     * @param updateIntervalMillis
+     *            the interval between "stats requests", i.e. how often the statistics is updated.
+     * @return the newly created instance.
+     */
+    public static ActiveMqMatsBrokerMonitor create(ConnectionFactory jmsConnectionFactory,
+            String matsDestinationPrefix, long updateIntervalMillis) {
+        ActiveMqBrokerStatsQuerier querier = ActiveMqBrokerStatsQuerierImpl.create(jmsConnectionFactory,
+                updateIntervalMillis);
         return create(querier, matsDestinationPrefix);
     }
 
@@ -75,6 +92,21 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
      */
     public static ActiveMqMatsBrokerMonitor create(ConnectionFactory jmsConnectionFactory) {
         return create(jmsConnectionFactory, "mats.");
+    }
+
+    /**
+     * Convenience method where the {@link ActiveMqBrokerStatsQuerierImpl} is instantiated locally based on the supplied
+     * JMS {@link ConnectionFactory} and updateIntervalMillis, and where the MatsFactory is assumed to be set up with the
+     * default "mats." MatsDestinationPrefix.
+     *
+     * @param jmsConnectionFactory
+     *            the ConnectionFactory to the backing ActiveMQ.
+     * @param updateIntervalMillis
+     *            the interval between "stats requests", i.e. how often the statistics is updated.
+     * @return the newly created instance.
+     */
+    public static ActiveMqMatsBrokerMonitor create(ConnectionFactory jmsConnectionFactory, long updateIntervalMillis) {
+        return create(jmsConnectionFactory, "mats.", updateIntervalMillis);
     }
 
     private ActiveMqMatsBrokerMonitor(ActiveMqBrokerStatsQuerier querier, String matsDestinationPrefix) {
@@ -94,7 +126,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
     }
 
     @Override
-    public void registerListener(Consumer<DestinationUpdateEvent> listener) {
+    public void registerListener(Consumer<UpdateEvent> listener) {
         _listeners.add(listener);
     }
 
@@ -120,7 +152,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
     // ===== IMPLEMENTATION
 
-    private final CopyOnWriteArrayList<Consumer<DestinationUpdateEvent>> _listeners = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<Consumer<UpdateEvent>> _listeners = new CopyOnWriteArrayList<>();
 
     private volatile BrokerSnapshotImpl _brokerSnapshot;
 
@@ -309,20 +341,23 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         }
     }
 
-    private static class DestinationUpdateEventImpl implements DestinationUpdateEvent {
+    private static class UpdateEventImpl implements UpdateEvent {
 
         private final String _correlationId; // nullable
         private final boolean _isFullUpdate;
-        private final NavigableMap<String, MatsBrokerDestination> _newOrUpdatedDestinations;
+        private final NavigableMap<String, MatsBrokerDestination> _eventDestinations;
         private final boolean _statsEventOriginatedOnThisNode;
+        private final String _originatingNodeId;
 
-        public DestinationUpdateEventImpl(String correlationId, boolean isFullUpdate,
-                NavigableMap<String, MatsBrokerDestination> newOrUpdatedDestinations,
-                boolean statsEventOriginatedOnThisNode) {
+        public UpdateEventImpl(String correlationId, boolean isFullUpdate,
+                NavigableMap<String, MatsBrokerDestination> eventDestinations,
+                boolean statsEventOriginatedOnThisNode,
+                String originatingNodeId) {
             _correlationId = correlationId;
             _isFullUpdate = isFullUpdate;
-            _newOrUpdatedDestinations = newOrUpdatedDestinations;
+            _eventDestinations = eventDestinations;
             _statsEventOriginatedOnThisNode = statsEventOriginatedOnThisNode;
+            _originatingNodeId = originatingNodeId;
         }
 
         @Override
@@ -337,12 +372,23 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
         @Override
         public NavigableMap<String, MatsBrokerDestination> getEventDestinations() {
-            return _newOrUpdatedDestinations;
+            return _eventDestinations;
         }
 
         @Override
         public boolean isStatsEventOriginatedOnThisNode() {
             return _statsEventOriginatedOnThisNode;
+        }
+
+        @Override
+        public String toString() {
+            return "UpdateEventImpl{" +
+                    "correlationId='" + _correlationId + '\'' +
+                    ", isFullUpdate=" + _isFullUpdate +
+                    ", eventDestinations=" + _eventDestinations.size() +
+                    ", statsEventOriginatedOnThisNode=" + _statsEventOriginatedOnThisNode +
+                    ", originatingNodeId='" + _originatingNodeId + '\'' +
+                    '}';
         }
     }
 
@@ -458,9 +504,10 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         TreeMap<String, MatsBrokerDestination> eventDestinations = isFullUpdate
                 ? matsDestinationsMap
                 : matsDestinationsMapNonZero;
-        DestinationUpdateEventImpl update = new DestinationUpdateEventImpl(event.getCorrelationId().orElse(null),
-                isFullUpdate, eventDestinations, event.isStatsEventOriginatedOnThisNode());
-        for (Consumer<DestinationUpdateEvent> listener : _listeners) {
+        UpdateEventImpl update = new UpdateEventImpl(event.getCorrelationId().orElse(null),
+                isFullUpdate, eventDestinations, event.isStatsEventOriginatedOnThisNode(),
+                event.getOriginatingNodeId().orElse(null));
+        for (Consumer<UpdateEvent> listener : _listeners) {
             try {
                 listener.accept(update);
             }
