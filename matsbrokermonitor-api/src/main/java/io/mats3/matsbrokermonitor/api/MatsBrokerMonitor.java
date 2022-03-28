@@ -4,7 +4,6 @@ import java.io.Closeable;
 import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.OptionalLong;
-import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.function.Consumer;
 
 /**
@@ -54,6 +53,12 @@ public interface MatsBrokerMonitor extends Closeable {
         OptionalLong getLastUpdateBrokerMillis();
 
         /**
+         * @return the number of milliseconds between the statistics request(s) were started, to the (last) response was
+         *         received.
+         */
+        double getStatsRequestReplyLatencyMillis();
+
+        /**
          * @return a Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination}] for currently known Mats-relevant
          *         destinations.
          */
@@ -82,7 +87,8 @@ public interface MatsBrokerMonitor extends Closeable {
 
     interface DestinationUpdateEvent {
         /**
-         * A full update might be sent periodically.
+         * A full update might be sent periodically, and when {@link #forceUpdate(String, boolean)} was invoked with the
+         * 'full' parameter set to <code>true</code>.
          *
          * @return whether this is a full update (<code>true</code>), in which case the receiver should consider the
          *         {@link #getEventDestinations()} as authoritative information about all currently known destinations
@@ -101,6 +107,11 @@ public interface MatsBrokerMonitor extends Closeable {
          *         destinations, or if {@link #isFullUpdate()} is true, all destinations.
          */
         NavigableMap<String, MatsBrokerDestination> getEventDestinations();
+
+        /**
+         * @return <code>true</code> if this event was the result from a request sent from this node.
+         */
+        boolean isStatsEventOriginatedOnThisNode();
     }
 
     interface MatsBrokerDestination {

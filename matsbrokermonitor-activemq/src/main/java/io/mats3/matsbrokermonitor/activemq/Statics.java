@@ -16,7 +16,7 @@ public interface Statics {
     // :: Two different scavenge intervals - first the primary source, then "follower".
 
     int SCAVENGE_OLD_STATS_SECONDS = 10 * 60;
-    int SCAVENGE_OLD_DESTINATIONS_SECONDS = 12 * 60;
+    int MAX_NUMBER_OF_OUTSTANDING_CORRELATION_IDS = 150;
 
     // :: For ActiveMqBrokerStatsQuerierImpl:
 
@@ -28,6 +28,11 @@ public interface Statics {
 
     // Time between each logline we want logged
     long LOGLINE_SUPPRESSION_MILLIS = 15 * 60 * 1000;
+
+    // :: For ActiveMqMatsBrokerMonitor:
+
+    // Time between automatic full updates from
+    long FULL_UPDATE_INTERVAL = 20 * 60 * 1000;
 
     String QUERY_REQUEST_BROKER = "ActiveMQ.Statistics.Broker";
     /**

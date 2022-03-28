@@ -140,11 +140,21 @@ public class MatsBrokerMonitor_TestJettyServer {
             MatsBrokerMonitor matsBrokerMonitor1 = ActiveMqMatsBrokerMonitor.create(connFactory, "endre:");
             // Register a dummy listener
             matsBrokerMonitor1.registerListener(destinationUpdateEvent -> {
-                log.info("Listener at TestJettyServer: Got update! " + destinationUpdateEvent);
+                log.info("Listener #1 at TestJettyServer: Got update! " + destinationUpdateEvent);
                 destinationUpdateEvent.getEventDestinations().forEach((fqName, matsBrokerDestination) -> log
-                        .info(".. new/updated: [" + fqName + "] = [" + matsBrokerDestination + "]"));
+                        .info(".. event destinations (non-zero): [" + fqName + "] = [" + matsBrokerDestination + "]"));
             });
             matsBrokerMonitor1.start();
+
+            MatsBrokerMonitor matsBrokerMonitor2 = ActiveMqMatsBrokerMonitor.create(connFactory, "endre:");
+            // Register a dummy listener
+            matsBrokerMonitor2.registerListener(destinationUpdateEvent -> {
+                log.info("Listener #2 at TestJettyServer: Got update! " + destinationUpdateEvent);
+                destinationUpdateEvent.getEventDestinations().forEach((fqName, matsBrokerDestination) -> log
+                        .info(".. event destinations (non-zero): [" + fqName + "] = [" + matsBrokerDestination + "]"));
+            });
+            matsBrokerMonitor2.start();
+
             // Put it in ServletContext, for shutdown
             sc.setAttribute("matsBrokerMonitor1", matsBrokerMonitor1);
 

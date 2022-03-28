@@ -4,7 +4,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentNavigableMap;
@@ -36,12 +35,17 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
     private static final Logger log = LoggerFactory.getLogger(ActiveMqBrokerStatsQuerierImpl.class);
 
+    private static final String CORRELATION_ID_PREFIX_SCHEDULED = "Scheduled";
+    private static final String CORRELATION_ID_PREFIX_FORCED = "Forced";
+    private static final String CORRELATION_ID_PARAMETER_FULL_UPDATE = "fullUpdate";
+    private static final String CORRELATION_ID_PARAMETER_NODE = "node";
+
+    private final String _syntheticNodeId = Long.toString(Math.abs(ThreadLocalRandom.current().nextLong()), 36)
+            + Long.toString(Math.abs(ThreadLocalRandom.current().nextLong()), 36);
+
     private final ConnectionFactory _connectionFactory;
 
     private final Clock _clock;
-
-    private static final String NORMAL_CORRELATION_ID_PREFIX = "Scheduled:";
-    private static final String FORCED_CORRELATION_ID_PREFIX = "Forced:";
 
     static ActiveMqBrokerStatsQuerierImpl create(ConnectionFactory connectionFactory) {
         return new ActiveMqBrokerStatsQuerierImpl(connectionFactory, Clock.systemUTC());
@@ -70,6 +74,10 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     private volatile Thread _sendStatsRequestMessages_Thread;
     private volatile Thread _receiveDestinationsStatsReplyMessages_Thread;
     private volatile Connection _receiveDestinationsStatsReplyMessages_Connection;
+
+    private volatile long _lastFullUpdatePropagatedMillis;
+
+    private volatile long _lastStatsUpdateMessageReceived = System.currentTimeMillis();
 
     private final AtomicInteger _countOfDestinationsReceivedAfterRequest = new AtomicInteger();
     private volatile long _nanosAtStart_RequestQuery = 0;
@@ -172,16 +180,55 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         _listeners.add(listener);
     }
 
+    private String constructCorrelationIdToSend(boolean forced, boolean fullUpdate, String correlationId) {
+        return (forced ? CORRELATION_ID_PREFIX_FORCED : CORRELATION_ID_PREFIX_SCHEDULED)
+                + ":" + CORRELATION_ID_PARAMETER_FULL_UPDATE + "." + fullUpdate
+                + ":" + CORRELATION_ID_PARAMETER_NODE + "." + _syntheticNodeId
+                + ":" + correlationId;
+    }
+
+    private static CorrSplit splitCorrelation(String sentCorrelationid) {
+        int firstColon = sentCorrelationid.indexOf(':');
+        String prefix = sentCorrelationid.substring(0, firstColon);
+        int secondColon = sentCorrelationid.indexOf(':', firstColon + 1);
+        String full = sentCorrelationid.substring(firstColon + 1, secondColon);
+        int thirdColon = sentCorrelationid.indexOf(':', secondColon + 1);
+        String node = sentCorrelationid.substring(secondColon + 1, thirdColon);
+        String correlationId = sentCorrelationid.substring(thirdColon + 1);
+
+        boolean forced = CORRELATION_ID_PREFIX_FORCED.equals(prefix);
+        boolean fullUpdate = full.contains("true");
+        String syntheticNodeId = node.substring(CORRELATION_ID_PARAMETER_NODE.length() + 1);
+
+        return new CorrSplit(forced, fullUpdate, syntheticNodeId, correlationId);
+    }
+
+    private static class CorrSplit {
+        final boolean forced;
+        final boolean fullUpdate;
+        final String synthethicNodeId;
+        final String correlationId;
+
+        public CorrSplit(boolean forced, boolean fullUpdate, String synthethicNodeId, String correlationId) {
+            this.forced = forced;
+            this.fullUpdate = fullUpdate;
+            this.synthethicNodeId = synthethicNodeId;
+            this.correlationId = correlationId;
+        }
+    }
+
     @Override
-    public void forceUpdate(String correlationId) {
+    public void forceUpdate(String correlationId, boolean fullUpdate) {
         synchronized (_waitObject_And_ForceUpdateOutstandingCorrelationIds) {
-            _waitObject_And_ForceUpdateOutstandingCorrelationIds.add(correlationId);
+            _waitObject_And_ForceUpdateOutstandingCorrelationIds.add(constructCorrelationIdToSend(true, fullUpdate, correlationId));
             // ?: Are there WAY too many outstanding correlation Ids?
-            if (_waitObject_And_ForceUpdateOutstandingCorrelationIds.size() > 150) {
+            if (_waitObject_And_ForceUpdateOutstandingCorrelationIds
+                    .size() > MAX_NUMBER_OF_OUTSTANDING_CORRELATION_IDS) {
                 // -> Yes, so then we're actually screwed - there are obviously no response from the broker
-                log.error("We have 150 outstanding forced updates with correlationIds, which implies that the broker"
-                        + " does not respond. We'll just ditch them all to prevent OOME; you need to figure out the"
-                        + " problem: Probably the Statistics[Broker]Plugin is not installed on the ActiveMQ server.");
+                log.error("We have " + MAX_NUMBER_OF_OUTSTANDING_CORRELATION_IDS + " outstanding forced updates with"
+                        + " correlationIds, which implies that the broker does not respond. We'll just ditch them all"
+                        + " to prevent OOME; you need to figure out the problem: Probably the"
+                        + " Statistics[Broker]Plugin is not installed on the ActiveMQ server.");
                 _waitObject_And_ForceUpdateOutstandingCorrelationIds.clear();
             }
             _waitObject_And_ForceUpdateOutstandingCorrelationIds.notifyAll();
@@ -189,16 +236,37 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     }
 
     private static class ActiveMqBrokerStatsEventImpl implements ActiveMqBrokerStatsEvent {
-
         private final String _correlationId;
+        private final boolean _fullUpdate;
+        private final double _requestReplyLatencyMillis;
+        private final boolean _statsEventOriginatedOnThisNode;
 
-        public ActiveMqBrokerStatsEventImpl(String correlationId) {
+        public ActiveMqBrokerStatsEventImpl(String correlationId, boolean fullUpdate, double requestReplyLatencyMillis,
+                boolean statsEventOriginatedOnThisNode) {
             _correlationId = correlationId;
+            _fullUpdate = fullUpdate;
+            _requestReplyLatencyMillis = requestReplyLatencyMillis;
+            _statsEventOriginatedOnThisNode = statsEventOriginatedOnThisNode;
         }
 
         @Override
         public Optional<String> getCorrelationId() {
             return Optional.ofNullable(_correlationId);
+        }
+
+        @Override
+        public boolean isFullUpdate() {
+            return _fullUpdate;
+        }
+
+        @Override
+        public double getStatsRequestReplyLatencyMillis() {
+            return _requestReplyLatencyMillis;
+        }
+
+        @Override
+        public boolean isStatsEventOriginatedOnThisNode() {
+            return _statsEventOriginatedOnThisNode;
         }
     }
 
@@ -294,16 +362,12 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
                 // Chill a small tad before sending first request, so that receivers hopefully have started.
                 // Notice: It isn't particularly bad if they haven't, they'll just miss the first request/reply.
-                chill(CHILL_MILLIS_BEFORE_FIRST_STATS_REQUEST);
+                chill((long) (CHILL_MILLIS_BEFORE_FIRST_STATS_REQUEST
+                        * (1 + ThreadLocalRandom.current().nextDouble())));
 
-                String correlationId = null;
+                String correlationIdToSend = null;
 
                 while (_runStatus == RunStatus.RUNNING) {
-
-                    // TODO: Do NOT send such request if we've already received a reply (from other node's request)
-                    // within short period.
-
-                    if (log.isDebugEnabled()) log.debug("Sending stats queries to ActiveMQ.");
                     // :: Request stats for Broker
                     Message requestBrokerMsg = session.createMessage();
                     requestBrokerMsg.setJMSReplyTo(replyStatisticsTopic);
@@ -350,10 +414,14 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     }
 
                     // Do we currently have a specific correlationId?
-                    if (correlationId == null) {
+                    if (correlationIdToSend == null) {
                         // -> No specific correlation Id, so make a "normal" Scheduled correlationId.
-                        correlationId = NORMAL_CORRELATION_ID_PREFIX + Long.toString(ThreadLocalRandom.current()
-                                .nextLong(), 36);
+                        // Should we do a full-update, since long time since last full update?
+                        boolean timeBasedFullUpdate = (System.currentTimeMillis()
+                                - _lastFullUpdatePropagatedMillis) > FULL_UPDATE_INTERVAL;
+                        // A random correlationId. Not really used.
+                        String random = Long.toString(ThreadLocalRandom.current().nextLong(), 36);
+                        correlationIdToSend = constructCorrelationIdToSend(false, timeBasedFullUpdate, random);
                     }
 
                     // Send the null-termination query (query w/o any destination replies, only the null-terminator)
@@ -361,38 +429,63 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     requestNullTermination.setJMSReplyTo(replyStatisticsTopic);
                     // .. set the special property which directs the StatisticsPlugin to "empty terminate" the replies.
                     requestNullTermination.setBooleanProperty(QUERY_REQUEST_DENOTE_END_LIST, true);
-                    requestNullTermination.setJMSCorrelationID(correlationId);
+                    requestNullTermination.setJMSCorrelationID(correlationIdToSend);
                     producer.send(requestQueuesQueue_zeroQueuesMatchWithNullTermination, requestNullTermination);
 
                     // We've done this job, clear out correlationId
-                    correlationId = null;
+                    correlationIdToSend = null;
 
                     // :: Chill and loop
                     synchronized (_waitObject_And_ForceUpdateOutstandingCorrelationIds) {
-                        // ?: Exiting?
-                        if (_runStatus != RunStatus.RUNNING) {
-                            // -> Yes, exiting, so shortcut out, avoiding going into wait.
-                            break;
-                        }
-                        // ?: Do we have a force update already waiting?
-                        if (!_waitObject_And_ForceUpdateOutstandingCorrelationIds.isEmpty()) {
-                            // -> Yes, so pop the force update correlationId and immediately do the new request.
-                            correlationId = FORCED_CORRELATION_ID_PREFIX
-                                    + _waitObject_And_ForceUpdateOutstandingCorrelationIds.remove();
-                            continue;
-                        }
-                        // Go into wait - either interval, or force update.
-                        _waitObject_And_ForceUpdateOutstandingCorrelationIds.wait(
-                                INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS);
+                        // :: Go into wait: Either we're waking by interval, or by forced update
+                        // Loop till we decide that we should do request.
+                        while (_runStatus == RunStatus.RUNNING) {
+                            // ?: Do we have a forced update waiting?
+                            if (!_waitObject_And_ForceUpdateOutstandingCorrelationIds.isEmpty()) {
+                                // -> Yes, so pop the force update correlationId before looping.
+                                correlationIdToSend = _waitObject_And_ForceUpdateOutstandingCorrelationIds.remove();
+                                // Break out of wait-loop
+                                break;
+                            }
+                            // E-> No forced waiting, so calculate how long to wait
+                            // 5% randomness
+                            long randomRange = (long) Math.max(150, INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS * .05d);
+                            long currentRandom = Math.round(ThreadLocalRandom.current().nextDouble() * randomRange);
+                            long halfRandomRange = randomRange / 2;
+                            long currentWait = INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS - halfRandomRange + currentRandom;
 
-                        // NOTE: If this was a "we are going down!"-wakeup, the loop conditional takes care of it.
+                            log.info(_syntheticNodeId + ": Current wait: " + currentWait);
+                            _waitObject_And_ForceUpdateOutstandingCorrelationIds.wait(currentWait);
+                            log.info(_syntheticNodeId + ": wakeup!");
 
-                        // ?: Was this a force update wakeup?
-                        if (!_waitObject_And_ForceUpdateOutstandingCorrelationIds.isEmpty()) {
-                            // -> Yes, so pop the force update correlationId before looping.
-                            correlationId = FORCED_CORRELATION_ID_PREFIX
-                                    + _waitObject_And_ForceUpdateOutstandingCorrelationIds.remove();
+                            // ?: Not running anymore?
+                            if (_runStatus != RunStatus.RUNNING) {
+                                // -> Break out of wait loop (and then all the way, due to loop conditionals.).
+                                break;
+                            }
+                            // ?: Forced update waiting?
+                            if (!_waitObject_And_ForceUpdateOutstandingCorrelationIds.isEmpty()) {
+                                // -> Loop (waitloop) to get correlationId (and then break).
+                                continue;
+                            }
+
+                            // :: Check if we actually should do the request, or if the other node has already done it.
+
+                            // ?: Is the last received stats message is older than 75% of our interval?
+                            // If it is older, then it is probably we that requested the last.
+                            // If it is not older, then it is probably the other node having requested the last.
+                            if (_lastStatsUpdateMessageReceived < (System.currentTimeMillis()
+                                    - (INTERVAL_MILLIS_BETWEEN_STATS_REQUESTS * 0.75d))) {
+                                // -> Yes, the message is overdue enough, so let's do the request
+                                log.info(_syntheticNodeId + ": We should do the request!");
+                                // Break out of wait-loop
+                                break;
+                            }
+                            else {
+                                log.info(_syntheticNodeId + ": The OTHER NODE has done the request!");
+                            }
                         }
+
                     }
                 }
             }
@@ -417,6 +510,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         msg.setBooleanProperty(QUERY_REQUEST_DESTINATION_INCLUDE_FIRST_MESSAGE_TIMESTAMP, true);
     }
 
+    // Only used within receiveStatisticsReplyMessagesRunnable-thread.
     private long _millisAtLastLogline;
     private int _numberOfSuppressedLoglines;
     private long _numberOfNanosTotalBetweenRequestAndEvent;
@@ -491,8 +585,8 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                                         + _countOfDestinationsReceivedAfterRequest.get()
                                         + "] destination stats messages, current number of destinations ["
                                         + _currentDestinationStatsDtos.size()
-                                        + "], time taken between request sent and last message of reply batch received: ["
-                                        + nanos3(nanosBetweenQueryAndLastMessageOfBatch)
+                                        + "], time taken between request sent and last message of reply batch received:"
+                                        + " [" + nanos3(nanosBetweenQueryAndLastMessageOfBatch)
                                         + "] ms - this logline is [" + nanos3(nanosBetweenQueryAndNow)
                                         + "] ms since request. Notifying listeners.");
                                 // Zero out suppression-counts
@@ -508,9 +602,10 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             }
 
                             // :: Scavenge old statistics no longer getting updates (i.e. not existing anymore).
-                            long longAgo = System.currentTimeMillis() - SCAVENGE_OLD_STATS_SECONDS * 1000;
+                            long longAgo = nowMillis - SCAVENGE_OLD_STATS_SECONDS * 1000;
                             Iterator<DestinationStatsDto> currentStatsIterator = _currentDestinationStatsDtos
                                     .values().iterator();
+                            boolean destinationsScavenged = false;
                             while (currentStatsIterator.hasNext()) {
                                 DestinationStatsDto stats = currentStatsIterator.next();
                                 if (stats.statsReceived.toEpochMilli() < longAgo) {
@@ -518,20 +613,40 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                                             + SCAVENGE_OLD_STATS_SECONDS
                                             + "] seconds: [" + stats.destinationName + "]");
                                     currentStatsIterator.remove();
+                                    destinationsScavenged = true;
                                 }
                             }
 
-                            // :: Find CorrelationId if it was a Forced update.
+                            // :: Find CorrelationId if it was a Forced update, and whether fullUpdate.
                             String correlationId = null;
+                            // If destinationsScavenged, we'll force update. This might be out of synch on the
+                            // different nodes, but deletion of destinations shouldn't happen too often, and the
+                            // result if the nodes aren't totally synched wrt. when they realize that destinations
+                            // are deleted is just a few full updates too much. No problem.
+                            boolean isFullUpdate = destinationsScavenged;
+                            boolean requestSentFromThisNode = false;
                             if (replyMsg != null) {
                                 String raw = replyMsg.getJMSCorrelationID();
-                                if (raw.startsWith(FORCED_CORRELATION_ID_PREFIX)) {
-                                    correlationId = raw.substring(FORCED_CORRELATION_ID_PREFIX.length());
+                                if (raw != null) {
+                                    CorrSplit corrSplit = splitCorrelation(raw);
+                                    correlationId = corrSplit.forced ? corrSplit.correlationId : null;
+                                    isFullUpdate = corrSplit.fullUpdate;
+                                    requestSentFromThisNode = _syntheticNodeId.equals(corrSplit.synthethicNodeId);
                                 }
+                            }
+
+                            // :: If this turns out to be a full update, then note this.
+                            // We do this on ActiveMq _replies received_ side, so that if the other node did the
+                            // full update _request_, all nodes will notice and agree.
+                            // (Will automatically tag request as full-update if > X mins since last)
+                            if (isFullUpdate) {
+                                _lastFullUpdatePropagatedMillis = nowMillis;
                             }
 
                             // :: Notify listeners
-                            ActiveMqBrokerStatsEventImpl event = new ActiveMqBrokerStatsEventImpl(correlationId);
+                            ActiveMqBrokerStatsEventImpl event = new ActiveMqBrokerStatsEventImpl(correlationId,
+                                    isFullUpdate, nanosBetweenQueryAndNow / 1_000_000d,
+                                    requestSentFromThisNode);
                             for (Consumer<ActiveMqBrokerStatsEvent> listener : _listeners) {
                                 listener.accept(event);
                             }
@@ -543,7 +658,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
                         // ----- So, either startup, or we've finished a batch of messages:
                         // Go into indefinite receive: Waiting for _next batch_ of messages triggered by _next stats
-                        // request_.
+                        // request_. (Or null message, resulting from outside close due to shutdown)
                         replyMsg = (MapMessage) consumer.receive();
                     }
 
@@ -567,13 +682,17 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                         nanosAtEnd_lastMessageReceived = System.nanoTime();
 
                         DestinationStatsDto destinationStatsDto = mapMessageToDestinationStatsDto(replyMsg);
-                        log.debug("God DestinationStats: " + destinationStatsDto);
                         _currentDestinationStatsDtos.put(destinationStatsDto.destinationName, destinationStatsDto);
+                        // Update that we've gotten a stats-message
+                        _lastStatsUpdateMessageReceived = System.currentTimeMillis();
+                        if (log.isTraceEnabled()) log.trace("Got DestinationStats: " + destinationStatsDto);
                     }
                     else if (replyMsg.getObject("storeUsage") != null) {
                         // -> Broker stats
                         _currentBrokerStatsDto = mapMessageToBrokerStatsDto(replyMsg);
-                        log.debug("Got BrokerStats: " + _currentBrokerStatsDto);
+                        // Update that we've gotten a stats-message
+                        _lastStatsUpdateMessageReceived = System.currentTimeMillis();
+                        if (log.isTraceEnabled()) log.trace("Got BrokerStats: " + _currentBrokerStatsDto);
                     }
                     else {
                         log.warn("Got a JMS Message that was neither destination stats nor broker stats:\n" + replyMsg);
@@ -664,20 +783,6 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         dto.averageMessageSize = (long) mm.getObject("averageMessageSize");
 
         dto.messagesCached = (long) mm.getObject("messagesCached");
-    }
-
-    @SuppressWarnings("unchecked")
-    private StringBuilder produceTextRepresentationOfMapMessage(MapMessage replyMsg) throws JMSException {
-        StringBuilder buf = new StringBuilder();
-        for (Enumeration<String> e = (Enumeration<String>) replyMsg.getMapNames(); e.hasMoreElements();) {
-            String name = e.nextElement();
-            buf.append(name);
-            buf.append(" = ");
-            Object object = replyMsg.getObject(name);
-            buf.append(object.toString());
-            buf.append(" (").append(object.getClass().getSimpleName()).append(") - ");
-        }
-        return buf;
     }
 
     private static class UnexpectedNullMessageReceivedException extends Exception {

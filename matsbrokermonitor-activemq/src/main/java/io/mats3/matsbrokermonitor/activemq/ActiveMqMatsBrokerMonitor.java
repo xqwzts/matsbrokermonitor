@@ -93,8 +93,6 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         _matsDestinationIndividualDlqPrefix = INDIVIDUAL_DLQ_PREFIX + matsDestinationPrefix;
     }
 
-    private final CopyOnWriteArrayList<Consumer<DestinationUpdateEvent>> _listeners = new CopyOnWriteArrayList<>();
-
     @Override
     public void registerListener(Consumer<DestinationUpdateEvent> listener) {
         _listeners.add(listener);
@@ -102,8 +100,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
     @Override
     public void forceUpdate(String correlationId, boolean full) {
-        // TODO: Implement full update
-        _querier.forceUpdate(correlationId);
+        _querier.forceUpdate(correlationId, full);
     }
 
     @Override
@@ -123,6 +120,8 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
     // ===== IMPLEMENTATION
 
+    private final CopyOnWriteArrayList<Consumer<DestinationUpdateEvent>> _listeners = new CopyOnWriteArrayList<>();
+
     private volatile BrokerSnapshotImpl _brokerSnapshot;
 
     private static class BrokerSnapshotImpl implements BrokerSnapshot {
@@ -130,14 +129,16 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         private final long _lastUpdateBrokerMillis;
         private final NavigableMap<String, MatsBrokerDestination> _matsDestinations;
         private final BrokerInfo _brokerInfo; // nullable
+        private final double _requestReplyLatencyMillis;
 
-        public BrokerSnapshotImpl(long lastUpdateLocalMillis, Long lastUpdateBrokerMillis,
+        public BrokerSnapshotImpl(long lastUpdateLocalMillis, long lastUpdateBrokerMillis,
                 NavigableMap<String, MatsBrokerDestination> matsDestinations,
-                BrokerInfo brokerInfo) {
+                BrokerInfo brokerInfo, double requestReplyLatencyMillis) {
             _lastUpdateLocalMillis = lastUpdateLocalMillis;
             _lastUpdateBrokerMillis = lastUpdateBrokerMillis;
             _matsDestinations = matsDestinations;
             _brokerInfo = brokerInfo;
+            _requestReplyLatencyMillis = requestReplyLatencyMillis;
         }
 
         @Override
@@ -148,6 +149,11 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         @Override
         public OptionalLong getLastUpdateBrokerMillis() {
             return OptionalLong.of(_lastUpdateBrokerMillis);
+        }
+
+        @Override
+        public double getStatsRequestReplyLatencyMillis() {
+            return _requestReplyLatencyMillis;
         }
 
         @Override
@@ -308,12 +314,15 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         private final String _correlationId; // nullable
         private final boolean _isFullUpdate;
         private final NavigableMap<String, MatsBrokerDestination> _newOrUpdatedDestinations;
+        private final boolean _statsEventOriginatedOnThisNode;
 
         public DestinationUpdateEventImpl(String correlationId, boolean isFullUpdate,
-                NavigableMap<String, MatsBrokerDestination> newOrUpdatedDestinations) {
+                NavigableMap<String, MatsBrokerDestination> newOrUpdatedDestinations,
+                boolean statsEventOriginatedOnThisNode) {
             _correlationId = correlationId;
             _isFullUpdate = isFullUpdate;
             _newOrUpdatedDestinations = newOrUpdatedDestinations;
+            _statsEventOriginatedOnThisNode = statsEventOriginatedOnThisNode;
         }
 
         @Override
@@ -330,6 +339,11 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         public NavigableMap<String, MatsBrokerDestination> getEventDestinations() {
             return _newOrUpdatedDestinations;
         }
+
+        @Override
+        public boolean isStatsEventOriginatedOnThisNode() {
+            return _statsEventOriginatedOnThisNode;
+        }
     }
 
     private void eventFromQuerier(ActiveMqBrokerStatsEvent event) {
@@ -338,8 +352,8 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
         long latestUpdateBrokerMillis = 0;
 
-        TreeMap<String, MatsBrokerDestination> destinationsMap = new TreeMap<>();
-        TreeMap<String, MatsBrokerDestination> destinationsMapNonZero = new TreeMap<>();
+        TreeMap<String, MatsBrokerDestination> matsDestinationsMap = new TreeMap<>();
+        TreeMap<String, MatsBrokerDestination> matsDestinationsMapNonZero = new TreeMap<>();
 
         for (Entry<String, DestinationStatsDto> entry : destStatsDtos.entrySet()) {
             String fqDestinationName = entry.getKey();
@@ -388,12 +402,11 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
             DestinationStatsDto stats = entry.getValue();
 
-            long lastUpdateMillis = stats.statsReceived.toEpochMilli();
-
             long numberOfQueuedMessages = stats.size;
 
             long numberOfInflightMessages = stats.inflightCount;
 
+            long lastUpdateMillis = stats.statsReceived.toEpochMilli();
             long lastUpdateBrokerMillis = stats.brokerTime.toEpochMilli();
 
             latestUpdateBrokerMillis = Math.max(latestUpdateBrokerMillis, lastUpdateBrokerMillis);
@@ -404,26 +417,22 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
                     : lastUpdateMillis) - instant.toEpochMilli())
                     .orElse(0L);
 
-            if (log.isTraceEnabled()) log.trace("FQ Name: " + fqDestinationName + ", destinationName:["
-                    + destinationName + "], matsStageId:[" + matsStageId + "], destinationType:[" + destinationType
-                    + "], isDlq:[" + isDlq + "], queuedMessages:[" + numberOfQueuedMessages + "]");
-
             // Create the representation
             MatsBrokerDestinationImpl matsBrokerDestination = new MatsBrokerDestinationImpl(lastUpdateMillis,
                     lastUpdateBrokerMillis, fqDestinationName, destinationName, matsStageId, destinationType, isDlq,
                     isGlobalDlq, numberOfQueuedMessages, numberOfInflightMessages, headMessageAgeMillis);
             // Put it in the map.
-            destinationsMap.put(fqDestinationName, matsBrokerDestination);
+            matsDestinationsMap.put(fqDestinationName, matsBrokerDestination);
+            // ?: Does it has non-zero queue count?
             if (matsBrokerDestination.getNumberOfQueuedMessages() > 0) {
-                destinationsMapNonZero.put(fqDestinationName, matsBrokerDestination);
+                // -> Yes, non-zero queue count.
+                matsDestinationsMapNonZero.put(fqDestinationName, matsBrokerDestination);
             }
         }
 
         // ----- We've parsed the update from the Querier.
 
-        // TODO: At most log.debug
-        log.info("Got event for [" + destStatsDtos.size() + "] destinations, [" + destinationsMap.size() + "] of them"
-                + " was Mats-relevant, [" + destinationsMapNonZero.size() + "] was non-zero. Notifying listeners.");
+        long nowMillis = System.currentTimeMillis();
 
         // :: Create the BrokerInfo object, if we have info
         BrokerInfoImpl brokerInfo = _querier.getCurrentBrokerStatsDto()
@@ -432,24 +441,31 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
                         brokerStatsDto.toJson()))
                 .orElse(null);
 
-        // :: Create the new BrokerSnapshot
-        _brokerSnapshot = new BrokerSnapshotImpl(System.currentTimeMillis(), latestUpdateBrokerMillis, destinationsMap,
-                brokerInfo);
+        // :: Create the new BrokerSnapshot, store it in volatile field.
+        _brokerSnapshot = new BrokerSnapshotImpl(nowMillis, latestUpdateBrokerMillis, matsDestinationsMap, brokerInfo,
+                event.getStatsRequestReplyLatencyMillis());
+
+        // ::: Notify listeners
+
+        // :: Is this a full update?
+        boolean isFullUpdate = event.isFullUpdate();
+
+        if (log.isTraceEnabled()) log.trace("Got event for [" + destStatsDtos.size() + "] destinations, ["
+                + matsDestinationsMap.size() + "] of them was Mats-relevant, [" + matsDestinationsMapNonZero.size()
+                + "] was non-zero. Notifying listeners, isFullUpdate:[" + isFullUpdate + "]");
 
         // :: Construct and send the update event to listeners.
-        // TODO: Fix isFullUpdate (both on forced, and every 20 mins or so).
-        boolean isFullUpdate = false;
         TreeMap<String, MatsBrokerDestination> eventDestinations = isFullUpdate
-                ? destinationsMap
-                : destinationsMapNonZero;
+                ? matsDestinationsMap
+                : matsDestinationsMapNonZero;
         DestinationUpdateEventImpl update = new DestinationUpdateEventImpl(event.getCorrelationId().orElse(null),
-                isFullUpdate, eventDestinations);
+                isFullUpdate, eventDestinations, event.isStatsEventOriginatedOnThisNode());
         for (Consumer<DestinationUpdateEvent> listener : _listeners) {
             try {
                 listener.accept(update);
             }
             catch (Throwable t) {
-                log.error("The listener [" + listener.getClass().getName() + "] threw when being invoked."
+                log.error("The listener of class [" + listener.getClass().getName() + "] threw when being invoked."
                         + " Ignoring.", t);
             }
         }

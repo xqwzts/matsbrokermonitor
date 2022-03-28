@@ -19,10 +19,39 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
     void registerListener(Consumer<ActiveMqBrokerStatsEvent> listener);
 
     interface ActiveMqBrokerStatsEvent {
+        /**
+         * @return the correlationId if this is an event in response to an invocation of
+         *         {@link #forceUpdate(String, boolean)}
+         */
         Optional<String> getCorrelationId();
+
+        /**
+         * @return <code>true</code> if this is an event in response to an invocation of
+         *         {@link #forceUpdate(String, boolean)}, and the 'fullUpdate' parameter was true.
+         */
+        boolean isFullUpdate();
+
+        /**
+         * @return the number of milliseconds between the statistics request(s) were started, to the (last) response was
+         *         received.
+         */
+        double getStatsRequestReplyLatencyMillis();
+
+        /**
+         * @return <code>true</code> if this event was the result from a request sent from this node.
+         */
+        boolean isStatsEventOriginatedOnThisNode();
     }
 
-    void forceUpdate(String correlationId);
+    /**
+     * Requests ASAP update.
+     *
+     * @param correlationId
+     *            this is only used to propagate through to the update event.
+     * @param fullUpdate
+     *            this is only used to propagate through to the update event.
+     */
+    void forceUpdate(String correlationId, boolean fullUpdate);
 
     Optional<BrokerStatsDto> getCurrentBrokerStatsDto();
 

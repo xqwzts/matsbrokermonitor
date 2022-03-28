@@ -66,28 +66,67 @@ public class TestStatsQuerier {
         // Create the StatsQuerier
         ActiveMqBrokerStatsQuerierImpl statsQuerier = ActiveMqBrokerStatsQuerierImpl.create(connectionFactory);
 
-        String correlationId = UUID.randomUUID().toString();
-
-        CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch[] latchX = new CountDownLatch[1];
+        String[] correlationIdX = new String[1];
+        boolean[] fullUpdateX = new boolean[1];
+        boolean[] sameNode = new boolean[1];
         Consumer<ActiveMqBrokerStatsEvent> eventListener = statsEvent -> {
-            log.info("### EVENT, correlationId: [" + statsEvent.getCorrelationId()
-                    + "], what we sent:[" + correlationId + "]");
-            if (statsEvent.getCorrelationId().isPresent() && correlationId.equals(statsEvent.getCorrelationId()
-                    .get())) {
-                latch.countDown();
-            }
+            log.info("### EVENT, correlationId: [" + statsEvent.getCorrelationId() + "].");
+            correlationIdX[0] = statsEvent.getCorrelationId().orElse(null);
+            fullUpdateX[0] = statsEvent.isFullUpdate();
+            latchX[0].countDown();
+            sameNode[0] = statsEvent.isStatsEventOriginatedOnThisNode();
         };
         statsQuerier.registerListener(eventListener);
         statsQuerier.start();
-        statsQuerier.forceUpdate(correlationId);
 
-        boolean await = latch.await(20, TimeUnit.SECONDS);
+        // :: ASSERT
+
+        // We should get an update ASAP, and this should be a full, since none has ever been sent.
+        latchX[0] = new CountDownLatch(1);
+        boolean await = latchX[0].await(20, TimeUnit.SECONDS);
         Assert.assertTrue("Didn't get update from StatsQuerier.", await);
+
+        Assert.assertNull(correlationIdX[0]);
+        Assert.assertTrue(fullUpdateX[0]);
+        Assert.assertTrue(sameNode[0]);
+
+        // :: ACT
+
+        // Force update, non-full
+        latchX[0] = new CountDownLatch(1);
+        String correlationId = UUID.randomUUID().toString();
+        statsQuerier.forceUpdate(correlationId, false);
+
+        // :: ASSERT
+
+        await = latchX[0].await(20, TimeUnit.SECONDS);
+        Assert.assertTrue("Didn't get update from StatsQuerier.", await);
+
+        Assert.assertEquals(correlationId, correlationIdX[0]);
+        Assert.assertFalse(fullUpdateX[0]);
+        Assert.assertTrue(sameNode[0]);
+
+        // :: ACT
+
+        // Force update, full
+        latchX[0] = new CountDownLatch(1);
+        correlationId = UUID.randomUUID().toString();
+        statsQuerier.forceUpdate(correlationId, true);
+
+        // :: ASSERT
+
+        await = latchX[0].await(20, TimeUnit.SECONDS);
+        Assert.assertTrue("Didn't get update from StatsQuerier.", await);
+
+        Assert.assertEquals(correlationId, correlationIdX[0]);
+        Assert.assertTrue(fullUpdateX[0]);
+        Assert.assertTrue(sameNode[0]);
 
         log.info("Got event from StatsQuerier");
         statsQuerier.close();
 
-        // :: ASSERT
+        // :: ASSERT contents.
 
         Optional<BrokerStatsDto> brokerStatsO = statsQuerier.getCurrentBrokerStatsDto();
         Assert.assertTrue("BrokerStats not present", brokerStatsO.isPresent());
