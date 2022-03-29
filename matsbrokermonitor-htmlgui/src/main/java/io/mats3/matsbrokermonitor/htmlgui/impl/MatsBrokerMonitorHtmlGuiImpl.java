@@ -89,20 +89,28 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             throws IOException {
         Outputter out = new Outputter(appendable);
         if (requestParameters.containsKey("browse")) {
-            String destinationId = getBrowseDestinationId(requestParameters, ac);
-            // ----- Passed Access Control for browse of specific destination, render it.
+            String queueId = getBrowseQueueId(requestParameters, ac);
+            // ----- Passed BROWSE Access Control for specific queueId.
 
             // move programmatically configured json-path over to static javascript:
             out.html("<script>window.matsbm_json_path = ").DATA(_jsonUrlPath != null
                     ? "'" + _jsonUrlPath + "'"
-                    : "null").html(";</script>");
+                    : "null").html(";</script>\n");
 
-            BrowseQueue.gui_BrowseQueue(_matsBrokerMonitor, _matsBrokerBrowseAndActions, out, destinationId, ac);
+            BrowseQueue.gui_BrowseQueue(_matsBrokerMonitor, _matsBrokerBrowseAndActions, out, queueId, ac);
             return;
         }
 
         else if (requestParameters.containsKey("examineMessage")) {
-            String destinationId = getBrowseDestinationId(requestParameters, ac);
+            String queueId = getBrowseQueueId(requestParameters, ac);
+            // ----- Passed BROWSE Access Control for specific queueId.
+
+            // ACCESS CONTROL: examine message
+            if (!ac.examineMessage(queueId)) {
+                throw new AccessDeniedException("Not allowed to examine message!");
+            }
+
+            // ----- Passed EXAMINE MESSAGE Access Control for specific queueId.
 
             String[] messageSystemIds = requestParameters.get("messageSystemId");
             if (messageSystemIds == null) {
@@ -116,23 +124,24 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             // move programmatically configured json-path over to static javascript:
             out.html("<script>window.matsbm_json_path = ").DATA(_jsonUrlPath != null
                     ? "'" + _jsonUrlPath + "'"
-                    : "null").html(";</script>");
+                    : "null").html(";</script>\n");
 
             ExamineMessage.gui_ExamineMessage(_matsBrokerMonitor, _matsBrokerBrowseAndActions, _matsSerializer,
-                    out, destinationId, messageSystemId);
+                    out, queueId, messageSystemId);
             return;
         }
 
         // E-> No special argument, assume broker overview
-        boolean overview = ac.overview();
-        if (!overview) {
+
+        // ACCESS CONTROL: examine message
+        if (!ac.overview()) {
             throw new AccessDeniedException("Not allowed to see broker overview!");
         }
         // ----- Passed Access Control for overview, render it.
         BrokerOverview.gui_BrokerOverview(_matsBrokerMonitor, out, requestParameters, ac);
     }
 
-    private String getBrowseDestinationId(Map<String, String[]> requestParameters, AccessControl ac) {
+    private String getBrowseQueueId(Map<String, String[]> requestParameters, AccessControl ac) {
         String[] destinationIds = requestParameters.get("destinationId");
         if (destinationIds == null) {
             throw new IllegalArgumentException("Missing destinationId");
@@ -144,11 +153,19 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
         if (!(destinationId.startsWith("queue:") || destinationId.startsWith("topic:"))) {
             throw new IllegalArgumentException("the browse arg should start with queue: or topic:");
         }
-        boolean browseAllowed = ac.browse(destinationId);
-        if (!browseAllowed) {
-            throw new AccessDeniedException("Not allowed to browse destination!");
+
+        boolean queue = destinationId.startsWith("queue:");
+        if (!queue) {
+            throw new IllegalArgumentException("Cannot browse anything other than queues!");
         }
-        return destinationId;
+        String queueId = destinationId.substring("queue:".length());
+
+        // :: ACCESS CONTROL
+        boolean browseAllowed = ac.browse(queueId);
+        if (!browseAllowed) {
+            throw new AccessDeniedException("Not allowed to browse queue!");
+        }
+        return queueId;
     }
 
     private static final ObjectMapper MAPPER = Statics.createMapper();
@@ -180,14 +197,16 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             List<String> affectedMsgSysMsgIds;
             Map<String, String> reissuedMsgSysMsgIds = null;
             if ("delete".equals(command.action)) {
-                if (!ac.deleteMessages(command.queueId)) {
+                // ACCESS CONTROL: delete message
+                if (!ac.deleteMessage(command.queueId)) {
                     throw new AccessDeniedException("Not allowed to delete messages from queue.");
                 }
                 affectedMsgSysMsgIds = _matsBrokerBrowseAndActions.deleteMessages(command.queueId,
                         command.msgSysMsgIds);
             }
             else if ("reissue".equals(command.action)) {
-                if (!ac.reissueMessages(command.queueId)) {
+                // ACCESS CONTROL: reissue message
+                if (!ac.reissueMessage(command.queueId)) {
                     throw new AccessDeniedException("Not allowed to reissue messages from DLQ.");
                 }
                 reissuedMsgSysMsgIds = _matsBrokerBrowseAndActions.reissueMessages(command.queueId,

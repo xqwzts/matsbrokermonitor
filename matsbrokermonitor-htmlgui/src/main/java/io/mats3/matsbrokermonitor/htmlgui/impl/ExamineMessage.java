@@ -35,18 +35,13 @@ public class ExamineMessage {
 
     static void gui_ExamineMessage(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, MatsSerializer<?> matsSerializer,
-            Outputter out, String destinationId, String messageSystemId) throws IOException {
-        boolean queue = destinationId.startsWith("queue:");
-        if (!queue) {
-            throw new IllegalArgumentException("Cannot browse anything other than queues!");
-        }
+            Outputter out, String queueId, String messageSystemId) throws IOException {
         out.html("<div id='matsbm_page_examine_message' class='matsbm_report'>\n");
         out.html("<div class='matsbm_actionbuttons'>\n");
         out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview</a><br>\n");
-        out.html("<a id='matsbm_back_browse_queue' href='?browse&destinationId=").DATA(destinationId)
+        out.html("<a id='matsbm_back_browse_queue' href='?browse&destinationId=queue:").DATA(queueId)
                 .html("'>Back to Queue [Esc]</a> - ");
 
-        String queueId = destinationId.substring("queue:".length());
         out.DATA(queueId).html("<br>\n");
 
         // :: Verify that we have the queue in the stats

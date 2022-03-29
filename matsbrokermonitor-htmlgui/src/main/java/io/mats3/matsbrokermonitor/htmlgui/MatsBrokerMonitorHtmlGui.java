@@ -52,15 +52,19 @@ public interface MatsBrokerMonitorHtmlGui {
             return false;
         }
 
-        default boolean browse(String destinationId) {
+        default boolean browse(String queueId) {
             return false;
         }
 
-        default boolean deleteMessages(String fromQueueId) {
+        default boolean examineMessage(String fromQueueId) {
             return false;
         }
 
-        default boolean reissueMessages(String fromDeadLetterQueueId) {
+        default boolean deleteMessage(String fromQueueId) {
+            return false;
+        }
+
+        default boolean reissueMessage(String fromDeadLetterQueueId) {
             return false;
         }
     }
@@ -72,17 +76,22 @@ public interface MatsBrokerMonitorHtmlGui {
         }
 
         @Override
-        public boolean browse(String destinationId) {
+        public boolean browse(String queueId) {
             return true;
         }
 
         @Override
-        public boolean deleteMessages(String fromQueueId) {
+        public boolean examineMessage(String queueId) {
             return true;
         }
 
         @Override
-        public boolean reissueMessages(String fromDeadLetterQueueId)  {
+        public boolean deleteMessage(String fromQueueId) {
+            return true;
+        }
+
+        @Override
+        public boolean reissueMessage(String fromDeadLetterQueueId) {
             return true;
         }
     }

@@ -25,16 +25,10 @@ class BrowseQueue {
     private static final int MAX_MESSAGES_BROWSER = 2000;
 
     static void gui_BrowseQueue(MatsBrokerMonitor matsBrokerMonitor,
-            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, Outputter out, String destinationId,
+            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, Outputter out, String queueId,
             AccessControl ac) throws IOException {
-        boolean queue = destinationId.startsWith("queue:");
-        if (!queue) {
-            throw new IllegalArgumentException("Cannot browse anything other than queues!");
-        }
         out.html("<div id='matsbm_page_browse_queue' class='matsbm_report'>\n");
         out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview [Esc]</a><br>\n");
-
-        String queueId = destinationId.substring("queue:".length());
 
         Collection<MatsBrokerDestination> values = matsBrokerMonitor.getSnapshot()
                 .map(BrokerSnapshot::getMatsDestinations)
@@ -141,7 +135,7 @@ class BrowseQueue {
                 out.html("</div></td>");
 
                 out.html("<td><div class='matsbm_table_browse_nobreak'>");
-                out.html("<a href='?examineMessage&destinationId=").DATA(destinationId)
+                out.html("<a href='?examineMessage&destinationId=queue:").DATA(queueId)
                         .html("&messageSystemId=").DATA(matsMsg.getMessageSystemId()).html("'>");
                 Instant instant = Instant.ofEpochMilli(matsMsg.getTimestamp());
                 out.html(Statics.formatTimestampSpan(instant.toEpochMilli()));
