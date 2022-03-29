@@ -127,7 +127,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
 
             // NOTICE: This is not optimal in any way, but to avoid premature optimizations and more complex code
             // before it is needed, I'll just let it be like this: Single move, commit tx.
-            // Could have batched harder, both within transaction, and via the 'messageSelector', using an OR-construct.
+            // Could have batched harder, both within transaction, and via the 'messageSelector' using an OR-construct.
 
             Map<String, String> reissuedMessageIds = new LinkedHashMap<>(messageSystemIds.size());
             for (String messageSystemId : messageSystemIds) {

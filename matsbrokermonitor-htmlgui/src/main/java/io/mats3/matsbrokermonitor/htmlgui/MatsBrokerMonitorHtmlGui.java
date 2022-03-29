@@ -1,12 +1,12 @@
 package io.mats3.matsbrokermonitor.htmlgui;
 
+import java.io.IOException;
+import java.util.Map;
+
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.htmlgui.impl.MatsBrokerMonitorHtmlGuiImpl;
 import io.mats3.serial.MatsSerializer;
-
-import java.io.IOException;
-import java.util.Map;
 
 /**
  * @author Endre Stølsvik 2022-01-02 12:19 - http://stolsvik.com/, endre@stolsvik.com
@@ -23,8 +23,6 @@ public interface MatsBrokerMonitorHtmlGui {
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions) {
         return create(matsBrokerMonitor, matsBrokerBrowseAndActions, null);
     }
-
-
 
     /**
      * Note: The return from this method is static, and should only be included once per HTML page.
@@ -62,7 +60,7 @@ public interface MatsBrokerMonitorHtmlGui {
             return false;
         }
 
-        default boolean moveMessages(String sourceQueueId, String targetQueueId) {
+        default boolean reissueMessages(String fromDeadLetterQueueId) {
             return false;
         }
     }
@@ -84,7 +82,7 @@ public interface MatsBrokerMonitorHtmlGui {
         }
 
         @Override
-        public boolean moveMessages(String sourceQueueId, String targetQueueId) {
+        public boolean reissueMessages(String fromDeadLetterQueueId)  {
             return true;
         }
     }

@@ -150,7 +150,8 @@ class BrowseQueue {
 
                 // Found MessageSystemId to be pretty irrelevant in this overview.
 
-                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(matsMsg.getTraceId()).html("</div></td>");
+                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(matsMsg.getTraceId()).html(
+                        "</div></td>");
 
                 out.html("<td><div class='matsbm_table_browse_breakall'>");
                 out.DATA(matsMsg.getInitializingApp() != null ? matsMsg.getInitializingApp() : "{missing init app}");
@@ -160,18 +161,23 @@ class BrowseQueue {
                 out.DATA(matsMsg.getInitiatorId() != null ? matsMsg.getInitiatorId() : "{missing init id}");
                 out.html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(matsMsg.getMessageType()).html(" from").html("</div></td>");
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(matsMsg.getMessageType()).html(" from")
+                        .html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(matsMsg.getFromStageId()).html("</div></td>");
+                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(matsMsg.getFromStageId()).html(
+                        "</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(matsMsg.isPersistent() ? "Persistent" : "Non-Persistent").html("</div></td>");
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(matsMsg.isPersistent()
+                        ? "Persistent"
+                        : "<b>Non-Persistent</b>").html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(matsMsg.isInteractive() ? "Interactive" : "Non-Interactive").html("</div></td>");
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(matsMsg.isInteractive()
+                        ? "<b>Interactive</b>"
+                        : "Non-Interactive").html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>");
-                out.DATA(matsMsg.getExpirationTimestamp() == 0
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(matsMsg.getExpirationTimestamp() == 0
                         ? "Never expires"
-                        : Statics.formatTimestampSpan(matsMsg.getExpirationTimestamp()));
+                        : "<b>" + Statics.formatTimestampSpan(matsMsg.getExpirationTimestamp()) + "</b>");
                 out.html("</div></td>");
 
                 out.html("</tr>\n");

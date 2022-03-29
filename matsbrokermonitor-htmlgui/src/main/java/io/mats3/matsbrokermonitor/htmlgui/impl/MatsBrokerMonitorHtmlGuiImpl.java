@@ -180,10 +180,16 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             List<String> affectedMsgSysMsgIds;
             Map<String, String> reissuedMsgSysMsgIds = null;
             if ("delete".equals(command.action)) {
+                if (!ac.deleteMessages(command.queueId)) {
+                    throw new AccessDeniedException("Not allowed to delete messages from queue.");
+                }
                 affectedMsgSysMsgIds = _matsBrokerBrowseAndActions.deleteMessages(command.queueId,
                         command.msgSysMsgIds);
             }
             else if ("reissue".equals(command.action)) {
+                if (!ac.reissueMessages(command.queueId)) {
+                    throw new AccessDeniedException("Not allowed to reissue messages from DLQ.");
+                }
                 reissuedMsgSysMsgIds = _matsBrokerBrowseAndActions.reissueMessages(command.queueId,
                         command.msgSysMsgIds);
                 affectedMsgSysMsgIds = new ArrayList<>(reissuedMsgSysMsgIds.keySet());

@@ -172,82 +172,80 @@ public class ExamineMessage {
             initiatorId = brokerMsg.getInitiatorId();
         }
 
-        out.html("<tr>");
-        out.html("<td>Initializing App @ Host</td>");
+        out.html("<tr><td>Initializing App @ Host</td>");
         out.html("<td>").DATA(initializingApp);
         if (matsTrace != null) {
             out.html(" @ ").DATA(matsTrace.getInitializingHost());
         }
         out.html("</td></tr>\n");
 
-        out.html("<tr>");
-        out.html("<td>Initiator Id</td>");
-        out.html("<td>").DATA(initiatorId).html("</td>");
-        out.html("</tr>\n");
+        out.html("<tr><td>Initiator Id</td>");
+        out.html("<td>").DATA(initiatorId);
+        out.html("</td></tr>\n");
 
         if (matsTrace != null) {
-            out.html("<tr>");
-            out.html("<td>Init debug info</td>");
-            out.html("<td>").html(debugInfoToHtml(matsTrace.getDebugInfo())).html("</td>");
-            out.html("</tr>\n");
+            out.html("<tr><td>Init debug info</td>");
+            out.html("<td>").html(debugInfoToHtml(matsTrace.getDebugInfo()));
+            out.html("</td></tr>\n");
         }
 
         if (matsTrace != null) {
-            out.html("<tr>");
-            out.html("<td>Mats Flow Id</td>");
-            out.html("<td>").DATA(matsTrace.getFlowId()).html("</td>");
-            out.html("</tr>\n");
+            out.html("<tr><td>Mats Flow Id</td>");
+            out.html("<td>").DATA(matsTrace.getFlowId());
+            out.html("</td></tr>\n");
         }
 
         if (matsTrace != null) {
-            out.html("<tr>");
-            out.html("<td>Mats Flow Initialized Timestamp</td>");
-            out.html("<td>").DATA(Statics.formatTimestampSpan(matsTrace.getInitializedTimestamp())).html("</td>");
-            out.html("</tr>\n");
+            out.html("<tr><td>Mats Flow Initialized Timestamp</td>");
+            out.html("<td>").DATA(Statics.formatTimestampSpan(matsTrace.getInitializedTimestamp()));
+            out.html("</td></tr>\n");
         }
 
         if (matsTrace != null) {
-            out.html("<tr>");
-            out.html("<td>Parent Mats Message Id</td>");
-            out.html("<td>").DATA(matsTrace.getParentMatsMessageId() != null
-                    ? matsTrace.getParentMatsMessageId()
-                    : "<i>-no parent-</i>").html("</td>");
-            out.html("</tr>\n");
+            out.html("<tr><td>Parent Mats Message Id</td>");
+            out.html("<td>");
+            if (matsTrace.getParentMatsMessageId() != null) {
+                out.DATA(matsTrace.getParentMatsMessageId());
+            }
+            else {
+                out.html("<i>-no parent-</i>");
+            }
+            out.html("</td></tr>\n");
         }
 
         // .. MatsTrace props
         if (matsTrace != null) {
-            out.html("<tr>");
-            out.html("<td>&nbsp;&nbsp;KeepMatsTrace</td>");
-            out.html("<td>").DATA(matsTrace.getKeepTrace().toString()).html(" MatsTrace</td>");
-            out.html("</tr>\n");
-            out.html("<tr>");
+            out.html("<tr><td>&nbsp;&nbsp;KeepMatsTrace</td>");
+            out.html("<td>").DATA(matsTrace.getKeepTrace().toString());
+            out.html(" MatsTrace</td></tr>\n");
         }
 
-        out.html("<tr>");
-        out.html("<td>&nbsp;&nbsp;Persistent</td>");
-        out.html("<td>").DATA(brokerMsg.isPersistent() ? "Persistent" : "Non-Persistent").html("</td>");
-        out.html("</tr>\n");
+        out.html("<tr><td>&nbsp;&nbsp;Persistent</td>");
+        out.html("<td>").html(brokerMsg.isPersistent()
+                ? "Persistent <i>(default)</i>"
+                : "<b>Non-Persistent</b> <i>(non-default)</i>");
+        out.html("</td></tr>\n");
 
-        out.html("<tr>");
-        out.html("<td>&nbsp;&nbsp;Interactive</td>");
-        out.html("<td>").DATA(brokerMsg.isInteractive() ? "Interactive" : "Non-Interactive").html("</td>");
-        out.html("</tr>\n");
+        out.html("<tr><td>&nbsp;&nbsp;Interactive</td>");
+        out.html("<td>").html(brokerMsg.isInteractive()
+                ? "<b>Interactive</b> <i>(non-default)</i>"
+                : "Non-Interactive <i>(default)</i>");
+        out.html("</td></tr>\n");
 
         if (matsTrace != null) {
-            out.html("<tr>");
-            out.html("<td>&nbsp;&nbsp;TimeToLive</td>");
-            out.html("<td>").DATA(matsTrace.getTimeToLive() == 0 ? "Live Forever"
-                    : matsTrace.getTimeToLive() + " ms").html("</td>");
-            out.html("</tr>\n");
-            out.html("<tr>");
+            out.html("<tr><td>&nbsp;&nbsp;TimeToLive</td>");
+            out.html("<td>").html(matsTrace.getTimeToLive() == 0
+                    ? "Live Forever <i>(default)</i>"
+                    : "<b>" + matsTrace.getTimeToLive() + " ms</b> <i>(non-default)</i>");
+            out.html("</td></tr>\n");
         }
 
         if (matsTrace != null) {
-            out.html("<tr>");
-            out.html("<td>&nbsp;&nbsp;Audit</td>");
-            out.html("<td>").DATA(matsTrace.isNoAudit() ? "No audit" : "Audit").html("</td>");
-            out.html("</tr>\n");
+            out.html("<tr><td>&nbsp;&nbsp;Audit</td>");
+            out.html("<td>").html(matsTrace.isNoAudit()
+                    ? "<b>No audit</b> <i>non-default</i>"
+                    : "Audit <i>(default)</i>");
+            out.html("</td></tr>\n");
         }
 
         out.html("</tbody>");
@@ -292,7 +290,7 @@ public class ExamineMessage {
             out.html("<td>Call debug info</td>");
             String debugInfo = matsTrace.getCurrentCall().getDebugInfo();
             // ?: Is this the initial call, and there is no info on the call (which is expected)
-            if (((debugInfo == null) || (debugInfo.trim().isEmpty())) && (matsTrace.getCallNumber() == 1) ) {
+            if (((debugInfo == null) || (debugInfo.trim().isEmpty())) && (matsTrace.getCallNumber() == 1)) {
                 // -> Yes, initial, and call.debugInfo missing: Use info from init.
                 debugInfo = matsTrace.getDebugInfo();
             }
