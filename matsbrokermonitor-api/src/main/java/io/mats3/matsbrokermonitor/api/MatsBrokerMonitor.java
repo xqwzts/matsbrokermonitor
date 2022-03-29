@@ -3,6 +3,7 @@ package io.mats3.matsbrokermonitor.api;
 import java.io.Closeable;
 import java.util.NavigableMap;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.OptionalLong;
 import java.util.function.Consumer;
 
@@ -53,10 +54,11 @@ public interface MatsBrokerMonitor extends Closeable {
         OptionalLong getLastUpdateBrokerMillis();
 
         /**
-         * @return the number of milliseconds between the statistics request(s) were started, to the (last) response was
-         *         received.
+         * @return the number of milliseconds it took to gather these statistics, e.g. between the statistics request(s)
+         *         were started, to the (last) response was received (Only available on the node which performed the
+         *         job).
          */
-        double getStatsRequestReplyLatencyMillis();
+        OptionalDouble getStatisticsUpdateMillis();
 
         /**
          * @return a Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination}] for currently known Mats-relevant
@@ -117,9 +119,11 @@ public interface MatsBrokerMonitor extends Closeable {
         NavigableMap<String, MatsBrokerDestination> getEventDestinations();
 
         /**
-         * @return <code>true</code> if this event was the result from a request sent from this node.
+         * @return <code>true</code> if this event was originated on this node - if you are to forward or record the
+         *         statistics, the node having <code>true</code> here would be the correct node to do it on, as there
+         *         will only be one node that has <code>true</code>, all others have <code>false</code>.
          */
-        boolean isStatsEventOriginatedOnThisNode();
+        boolean isUpdateEventOriginatedOnThisNode();
     }
 
     interface MatsBrokerDestination {

@@ -79,9 +79,13 @@ class BrokerOverview {
                 .html("</b>, Topics: <b>").DATA(topics)
                 .html("</b>, Dead Letter Queues: <b>").DATA(dlqs)
                 .html("</b>, Total Mats relevant destinations: <b>").DATA(queues + topics + dlqs)
-                .html("</b> - Stats update time: <b>")
-                .DATA(Math.round(snapshot.getStatsRequestReplyLatencyMillis() * 100d) / 100d)
-                .html(" ms</b>)</i><br>");
+                .html("</b>");
+        if (snapshot.getStatisticsUpdateMillis().isPresent()) {
+            out.html(" - Stats update time: <b>")
+                    .DATA(Math.round(snapshot.getStatisticsUpdateMillis().getAsDouble() * 100d) / 100d)
+                    .html(" ms</b>");
+        }
+        out.html(")</i><br>");
 
         // :: Summary
 

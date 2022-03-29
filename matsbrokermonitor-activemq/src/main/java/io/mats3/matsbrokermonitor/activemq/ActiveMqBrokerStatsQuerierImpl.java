@@ -6,6 +6,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -250,17 +251,18 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     private static class ActiveMqBrokerStatsEventImpl implements ActiveMqBrokerStatsEvent {
         private final String _correlationId;
         private final boolean _fullUpdate;
-        private final double _requestReplyLatencyMillis;
         private final boolean _statsEventOriginatedOnThisNode;
         private final String _originatingNodeId;
+        private final double _requestReplyLatencyMillis;
 
-        public ActiveMqBrokerStatsEventImpl(String correlationId, boolean fullUpdate, double requestReplyLatencyMillis,
-                boolean statsEventOriginatedOnThisNode, String originatingNodeId) {
+        public ActiveMqBrokerStatsEventImpl(String correlationId, boolean fullUpdate,
+                boolean statsEventOriginatedOnThisNode,
+                String originatingNodeId, double requestReplyLatencyMillis) {
             _correlationId = correlationId;
             _fullUpdate = fullUpdate;
-            _requestReplyLatencyMillis = requestReplyLatencyMillis;
             _statsEventOriginatedOnThisNode = statsEventOriginatedOnThisNode;
             _originatingNodeId = originatingNodeId;
+            _requestReplyLatencyMillis = requestReplyLatencyMillis;
         }
 
         @Override
@@ -274,11 +276,6 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         }
 
         @Override
-        public double getStatsRequestReplyLatencyMillis() {
-            return _requestReplyLatencyMillis;
-        }
-
-        @Override
         public boolean isStatsEventOriginatedOnThisNode() {
             return _statsEventOriginatedOnThisNode;
         }
@@ -286,6 +283,13 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         @Override
         public Optional<String> getOriginatingNodeId() {
             return Optional.ofNullable(_originatingNodeId);
+        }
+
+        @Override
+        public OptionalDouble getStatsRequestReplyLatencyMillis() {
+            return _requestReplyLatencyMillis >= 0
+                    ? OptionalDouble.of(_requestReplyLatencyMillis)
+                    : OptionalDouble.empty();
         }
     }
 
@@ -466,13 +470,14 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                                 // Break out of wait-loop
                                 break;
                             }
-                            // E-> No forced waiting, so calculate how long to wait
+                            // E-> No forced update, so calculate how long to wait
                             // 5% randomness
                             long randomRange = (long) Math.max(150, _updateIntervalMillis * .05d);
                             long currentRandom = Math.round(ThreadLocalRandom.current().nextDouble() * randomRange);
                             long halfRandomRange = randomRange / 2;
                             long currentWait = _updateIntervalMillis - halfRandomRange + currentRandom;
 
+                            // Do wait.
                             _waitObject_And_ForceUpdateOutstandingCorrelationIds.wait(currentWait);
 
                             // ?: Not running anymore?
@@ -488,9 +493,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
                             // :: Check if we actually should do the request, or if the other node has already done it.
 
-                            // ?: Is the last received stats message is older than 75% of our interval?
-                            // If it is older, then it is probably we that requested the last.
-                            // If it is not older, then it is probably the other node having requested the last.
+                            // ?: Is the last received stats message older than 75% of our interval?
                             if (_lastStatsUpdateMessageReceived < (System.currentTimeMillis()
                                     - (_updateIntervalMillis * 0.75d))) {
                                 // -> Yes, the message is overdue enough, so let's do the request
@@ -498,7 +501,6 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                                 break;
                             }
                         }
-
                     }
                 }
             }
@@ -526,6 +528,8 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     // Only used within receiveStatisticsReplyMessagesRunnable-thread.
     private long _millisAtLastLogline;
     private int _numberOfSuppressedLoglines;
+
+    private int _numberOfRequestRepliesOnThisNode;
     private long _numberOfNanosTotalBetweenRequestAndEvent;
 
     @SuppressWarnings("unchecked")
@@ -577,31 +581,58 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     if (((replyMsg == null) || (replyMsg.getObject("brokerName") == null))
                             && (_runStatus == RunStatus.RUNNING)) {
                         // -> null or empty, but runStatus==RUNNING, so this was a timeout or "terminator".
+
+                        // :: Extract information from the JMS Message's CorrelationId.
+                        String correlationId = null;
+                        boolean isFullUpdate = false;
+                        String originatingNodeId = null;
+                        boolean requestSameNode = false;
+                        if (replyMsg != null) {
+                            String raw = replyMsg.getJMSCorrelationID();
+                            if (raw != null) {
+                                CorrSplit corrSplit = splitCorrelation(raw);
+                                // Only use the correlationId if it was supplied via a forceUpdate.
+                                correlationId = corrSplit.forced ? corrSplit.correlationId : null;
+                                isFullUpdate = corrSplit.fullUpdate;
+                                originatingNodeId = corrSplit.nodeId;
+                                requestSameNode = _nodeId.equals(originatingNodeId);
+                            }
+                        }
+
                         // ?: Have we gotten (bunch of) stats messages by now?
                         if (_countOfDestinationsReceivedAfterRequest.get() > 0) {
                             // -> We've gotten 1 or more stats messages.
                             // We've now (hopefully) received a full set of destination stats.
-                            long nanosBetweenQueryAndLastMessageOfBatch = nanosAtEnd_lastMessageReceived
-                                    - _nanosAtStart_RequestQuery;
-                            long nanosBetweenQueryAndNow = System.nanoTime() - _nanosAtStart_RequestQuery;
                             long nowMillis = System.currentTimeMillis();
+                            long nanosBetweenQueryAndNow = System.nanoTime() - _nanosAtStart_RequestQuery;
+
                             // ?: Should we log this logline, or suppress it?
                             if ((nowMillis - _millisAtLastLogline) > LOGLINE_SUPPRESSION_MILLIS) {
                                 // -> Log it!
-                                long averageNanos = _numberOfSuppressedLoglines > 0
-                                        ? _numberOfNanosTotalBetweenRequestAndEvent / _numberOfSuppressedLoglines
-                                        : -1;
-                                log.info("Statistics updates received! [Suppressed loglines since last: '"
-                                        + _numberOfSuppressedLoglines
-                                        + "', average time for each request-to-last-message-of-batch: '"
-                                        + nanos3(averageNanos) + "'] -- We've received a batch of ["
+                                String msg = "Statistics updates received! [Suppressed loglines since last: '"
+                                        + _numberOfSuppressedLoglines + "'";
+                                if (_numberOfRequestRepliesOnThisNode > 0) {
+                                    long averageNanos = _numberOfNanosTotalBetweenRequestAndEvent
+                                            / _numberOfRequestRepliesOnThisNode;
+                                    msg += ", average time for each request-to-last-message-of-batch: '"
+                                            + nanos3(averageNanos);
+                                }
+                                msg += "] -- We've received a batch of ["
                                         + _countOfDestinationsReceivedAfterRequest.get()
                                         + "] destination stats messages, current number of destinations ["
                                         + _currentDestinationStatsDtos.size()
-                                        + "], time taken between request sent and last message of reply batch received:"
-                                        + " [" + nanos3(nanosBetweenQueryAndLastMessageOfBatch)
-                                        + "] ms - this logline is [" + nanos3(nanosBetweenQueryAndNow)
-                                        + "] ms since request. Notifying listeners.");
+                                        + "]";
+                                if (requestSameNode) {
+                                    long nanosBetweenQueryAndLastMessageOfBatch = nanosAtEnd_lastMessageReceived
+                                            - _nanosAtStart_RequestQuery;
+
+                                    msg += ", time taken between request sent and last message of reply batch received:"
+                                            + " [" + nanos3(nanosBetweenQueryAndLastMessageOfBatch)
+                                            + "] ms - this logline is [" + nanos3(nanosBetweenQueryAndNow)
+                                            + "] ms since request. Notifying listeners.";
+                                }
+                                log.info(msg);
+
                                 // Zero out suppression-counts
                                 _numberOfNanosTotalBetweenRequestAndEvent = 0;
                                 _numberOfSuppressedLoglines = 0;
@@ -611,14 +642,33 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             else {
                                 // -> No, suppress log line. Increase "suppression-stats".
                                 _numberOfSuppressedLoglines++;
-                                _numberOfNanosTotalBetweenRequestAndEvent += nanosBetweenQueryAndLastMessageOfBatch;
+                                if (requestSameNode) {
+                                    _numberOfRequestRepliesOnThisNode++;
+                                    _numberOfNanosTotalBetweenRequestAndEvent += nanosBetweenQueryAndNow;
+                                }
                             }
 
-                            // :: Scavenge old statistics no longer getting updates (i.e. not existing anymore).
+                            /*
+                             * :: If this is a full update, then note this. We decide whether full update on the
+                             * request-sending side, and note the last full update on ActiveMq _replies received_ side,
+                             * so that if the other node did the full update _request_, all nodes will notice and agree
+                             * on when the last full update was propagated. (The sender will automatically tag request
+                             * as full-update if > X mins since last)
+                             */
+                            if (isFullUpdate) {
+                                _lastFullUpdatePropagatedMillis = nowMillis;
+                            }
+
+                            /*
+                             * Clean out old destinations by scavenging stats which no longer is getting updates (i.e.
+                             * not existing anymore). Would have been nice to force-fullupdate when this happens, but
+                             * that can't be guaranteed since it may happen at different times on the different nodes,
+                             * possibly not on the node that did the request (i.e. "same node"), so just don't bother.
+                             * It will be propagated once the next full update kicks in.
+                             */
                             long longAgo = nowMillis - SCAVENGE_OLD_STATS_SECONDS * 1000;
                             Iterator<DestinationStatsDto> currentStatsIterator = _currentDestinationStatsDtos
                                     .values().iterator();
-                            boolean destinationsScavenged = false;
                             while (currentStatsIterator.hasNext()) {
                                 DestinationStatsDto stats = currentStatsIterator.next();
                                 if (stats.statsReceived.toEpochMilli() < longAgo) {
@@ -626,42 +676,13 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                                             + SCAVENGE_OLD_STATS_SECONDS
                                             + "] seconds: [" + stats.destinationName + "]");
                                     currentStatsIterator.remove();
-                                    destinationsScavenged = true;
                                 }
-                            }
-
-                            // :: Find CorrelationId if it was a Forced update, and whether fullUpdate.
-                            String correlationId = null;
-                            // If destinationsScavenged, we'll force update. This might be out of synch on the
-                            // different nodes, but deletion of destinations shouldn't happen too often, and the
-                            // result if the nodes aren't totally synched wrt. when they realize that destinations
-                            // are deleted is just a few full updates too much. No problem.
-                            boolean isFullUpdate = destinationsScavenged;
-                            boolean requestSentFromThisNode = false;
-                            String originatingSyntheticNodeId = null;
-                            if (replyMsg != null) {
-                                String raw = replyMsg.getJMSCorrelationID();
-                                if (raw != null) {
-                                    CorrSplit corrSplit = splitCorrelation(raw);
-                                    correlationId = corrSplit.forced ? corrSplit.correlationId : null;
-                                    isFullUpdate = corrSplit.fullUpdate;
-                                    requestSentFromThisNode = _nodeId.equals(corrSplit.nodeId);
-                                    originatingSyntheticNodeId = corrSplit.nodeId;
-                                }
-                            }
-
-                            // :: If this turns out to be a full update, then note this.
-                            // We do this on ActiveMq _replies received_ side, so that if the other node did the
-                            // full update _request_, all nodes will notice and agree.
-                            // (Will automatically tag request as full-update if > X mins since last)
-                            if (isFullUpdate) {
-                                _lastFullUpdatePropagatedMillis = nowMillis;
                             }
 
                             // :: Notify listeners
                             ActiveMqBrokerStatsEventImpl event = new ActiveMqBrokerStatsEventImpl(correlationId,
-                                    isFullUpdate, nanosBetweenQueryAndNow / 1_000_000d,
-                                    requestSentFromThisNode, originatingSyntheticNodeId);
+                                    isFullUpdate, requestSameNode, originatingNodeId,
+                                    requestSameNode ? nanosBetweenQueryAndNow / 1_000_000d : -1);
                             for (Consumer<ActiveMqBrokerStatsEvent> listener : _listeners) {
                                 listener.accept(event);
                             }

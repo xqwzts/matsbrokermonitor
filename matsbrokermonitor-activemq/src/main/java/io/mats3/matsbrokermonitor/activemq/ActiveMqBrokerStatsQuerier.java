@@ -3,6 +3,7 @@ package io.mats3.matsbrokermonitor.activemq;
 import java.io.Closeable;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.function.Consumer;
 
@@ -42,12 +43,6 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
         boolean isFullUpdate();
 
         /**
-         * @return the number of milliseconds between the statistics request(s) were started, to the (last) response was
-         *         received.
-         */
-        double getStatsRequestReplyLatencyMillis();
-
-        /**
          * @return <code>true</code> if this event was the result from a request sent from this node.
          */
         boolean isStatsEventOriginatedOnThisNode();
@@ -57,6 +52,12 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
          *         string unless set using {@link ActiveMqBrokerStatsQuerier#setNodeId(String)}.
          */
         Optional<String> getOriginatingNodeId();
+
+        /**
+         * @return the number of milliseconds between the statistics request(s) were started, to the (last) response was
+         *         received.
+         */
+        OptionalDouble getStatsRequestReplyLatencyMillis();
     }
 
     /**

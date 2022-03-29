@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.OptionalLong;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentNavigableMap;
@@ -161,11 +162,11 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         private final long _lastUpdateBrokerMillis;
         private final NavigableMap<String, MatsBrokerDestination> _matsDestinations;
         private final BrokerInfo _brokerInfo; // nullable
-        private final double _requestReplyLatencyMillis;
+        private final OptionalDouble _requestReplyLatencyMillis;
 
         public BrokerSnapshotImpl(long lastUpdateLocalMillis, long lastUpdateBrokerMillis,
                 NavigableMap<String, MatsBrokerDestination> matsDestinations,
-                BrokerInfo brokerInfo, double requestReplyLatencyMillis) {
+                BrokerInfo brokerInfo, OptionalDouble requestReplyLatencyMillis) {
             _lastUpdateLocalMillis = lastUpdateLocalMillis;
             _lastUpdateBrokerMillis = lastUpdateBrokerMillis;
             _matsDestinations = matsDestinations;
@@ -184,7 +185,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         }
 
         @Override
-        public double getStatsRequestReplyLatencyMillis() {
+        public OptionalDouble getStatisticsUpdateMillis() {
             return _requestReplyLatencyMillis;
         }
 
@@ -376,7 +377,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         }
 
         @Override
-        public boolean isStatsEventOriginatedOnThisNode() {
+        public boolean isUpdateEventOriginatedOnThisNode() {
             return _statsEventOriginatedOnThisNode;
         }
 
