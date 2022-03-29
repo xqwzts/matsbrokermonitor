@@ -48,8 +48,8 @@ class BrowseQueue {
             }
         }
         if (matsBrokerDestination == null) {
-            out.html("<h1>No info on destination!</h1><br>\n");
-            out.html("Destination: ").DATA(destinationId).html("<br>\n");
+            out.html("<h1>No info about queue!</h1><br>\n");
+            out.html("<b>Queue:</b> ").DATA(queueId).html("<br>\n");
             out.html("</div>");
             return;
         }

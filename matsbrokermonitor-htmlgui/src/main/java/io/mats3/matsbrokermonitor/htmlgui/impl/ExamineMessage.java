@@ -2,11 +2,14 @@ package io.mats3.matsbrokermonitor.htmlgui.impl;
 
 import java.io.IOException;
 import java.util.ArrayDeque;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
+import java.util.SortedMap;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,6 +17,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerSnapshot;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.DestinationType;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.serial.MatsSerializer;
 import io.mats3.serial.MatsSerializer.DeserializedMatsTrace;
 import io.mats3.serial.MatsTrace;
@@ -43,13 +49,35 @@ public class ExamineMessage {
         String queueId = destinationId.substring("queue:".length());
         out.DATA(queueId).html("<br>\n");
 
+        // :: Verify that we have the queue in the stats
+        // (Otherwise we'll make the queue by just browsing for the message)
+        Collection<MatsBrokerDestination> values = matsBrokerMonitor.getSnapshot()
+                .map(BrokerSnapshot::getMatsDestinations)
+                .map(SortedMap::values)
+                .orElseGet(Collections::emptySet);
+
+        MatsBrokerDestination matsBrokerDestination = null;
+        for (MatsBrokerDestination dest : values) {
+            if ((dest.getDestinationType() == DestinationType.QUEUE) && queueId.equals(dest.getDestinationName())) {
+                matsBrokerDestination = dest;
+            }
+        }
+        if (matsBrokerDestination == null) {
+            out.html("</div>");
+            out.html("<h1>Can't look up message, because no info about the queue!</h1><br>\n");
+            out.html("<b>MessageSystemId:</b> ").DATA(messageSystemId).html(".<br>\n");
+            out.html("<b>Queue:</b> ").DATA(queueId).html("<br>\n");
+            out.html("</div>");
+            return;
+        }
+
         Optional<MatsBrokerMessageRepresentation> matsBrokerMessageRepresentationO = matsBrokerBrowseAndActions
                 .examineMessage(queueId, messageSystemId);
         if (!matsBrokerMessageRepresentationO.isPresent()) {
-            out.html("<h1>No such message!</h1><br>\n");
-            out.html("MessageSystemId: [").DATA(messageSystemId).html("].<br>\n");
-            out.html("Queue:[").DATA(queueId).html("]<br>\n");
             out.html("</div>");
+            out.html("<h1>No such message!</h1><br>\n");
+            out.html("<b>MessageSystemId:</b> ").DATA(messageSystemId).html(".<br>\n");
+            out.html("<b>Queue:</b> ").DATA(queueId).html("<br>\n");
             out.html("</div>");
             return;
         }

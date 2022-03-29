@@ -128,8 +128,12 @@ function matsbm_reissue_bulk(event, queueId) {
 
 function matsbm_is_delete_confirm_bulk_active() {
     // Return whether the "Confirm Delete" button is non-hidden
-    return !document.getElementById("matsbm_delete_confirm_bulk")
-        .classList.contains('matsbm_button_hidden');
+    const confirmDeleteButton = document.getElementById("matsbm_delete_confirm_bulk");
+    if (!confirmDeleteButton) {
+        return false;
+    }
+    return !confirmDeleteButton.classList.contains('matsbm_button_hidden');
+
 }
 
 function matsbm_delete_propose_bulk(event) {
@@ -363,8 +367,11 @@ function matsbm_delete_confirmed_single(event, queueId, msgSysMsgId) {
 
 function matsbm_is_delete_confirm_single_active() {
     // Return whether the "Confirm Delete" button is non-hidden
-    return !document.getElementById("matsbm_delete_confirm_single")
-        .classList.contains('matsbm_button_hidden');
+    const confirmDeleteButton = document.getElementById("matsbm_delete_confirm_single");
+    if (!confirmDeleteButton) {
+        return false;
+    }
+    return !confirmDeleteButton.classList.contains('matsbm_button_hidden');
 }
 
 function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
