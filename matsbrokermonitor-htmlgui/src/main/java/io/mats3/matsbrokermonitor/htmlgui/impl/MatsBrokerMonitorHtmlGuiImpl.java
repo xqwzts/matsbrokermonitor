@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -34,6 +35,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
 
     private final MatsBrokerMonitor _matsBrokerMonitor;
     private final MatsBrokerBrowseAndActions _matsBrokerBrowseAndActions;
+    private final List<? super MonitorAddition> _monitorAdditions;
     private final MatsSerializer<?> _matsSerializer;
 
     /**
@@ -41,10 +43,13 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
      */
     public MatsBrokerMonitorHtmlGuiImpl(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions,
+            List<? super MonitorAddition> monitorAdditions,
             MatsSerializer<?> matsSerializer) {
         _matsBrokerMonitor = matsBrokerMonitor;
         _matsBrokerBrowseAndActions = matsBrokerBrowseAndActions;
+        _monitorAdditions = monitorAdditions == null ? Collections.emptyList() : monitorAdditions;
         _matsSerializer = matsSerializer;
+
     }
 
     private String _jsonUrlPath = null;
@@ -97,7 +102,8 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
                     ? "'" + _jsonUrlPath + "'"
                     : "null").html(";</script>\n");
 
-            BrowseQueue.gui_BrowseQueue(_matsBrokerMonitor, _matsBrokerBrowseAndActions, out, queueId, ac);
+            BrowseQueue.gui_BrowseQueue(_matsBrokerMonitor, _matsBrokerBrowseAndActions, _monitorAdditions, out,
+                    queueId, ac);
             return;
         }
 
@@ -127,7 +133,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
                     : "null").html(";</script>\n");
 
             ExamineMessage.gui_ExamineMessage(_matsBrokerMonitor, _matsBrokerBrowseAndActions, _matsSerializer,
-                    out, queueId, messageSystemId);
+                    _monitorAdditions, out, queueId, messageSystemId);
             return;
         }
 
@@ -161,7 +167,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
         String queueId = destinationId.substring("queue:".length());
 
         // :: ACCESS CONTROL
-        boolean browseAllowed = ac.browse(queueId);
+        boolean browseAllowed = ac.browseQueue(queueId);
         if (!browseAllowed) {
             throw new AccessDeniedException("Not allowed to browse queue!");
         }

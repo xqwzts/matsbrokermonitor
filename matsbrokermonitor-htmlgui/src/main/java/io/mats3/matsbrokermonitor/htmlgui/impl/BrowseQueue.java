@@ -4,7 +4,10 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.SortedMap;
+import java.util.stream.Collectors;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.BrokerIOException;
@@ -15,6 +18,8 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerSnapshot;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.DestinationType;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl;
+import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.BrowseQueueTableAddition;
+import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.MonitorAddition;
 
 /**
  * @author Endre Stølsvik 2022-03-13 23:33 - http://stolsvik.com/, endre@stolsvik.com
@@ -25,8 +30,8 @@ class BrowseQueue {
     private static final int MAX_MESSAGES_BROWSER = 2000;
 
     static void gui_BrowseQueue(MatsBrokerMonitor matsBrokerMonitor,
-            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, Outputter out, String queueId,
-            AccessControl ac) throws IOException {
+            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, List<? super MonitorAddition> monitorAdditions,
+            Outputter out, String queueId, AccessControl ac) throws IOException {
         out.html("<div id='matsbm_page_browse_queue' class='matsbm_report'>\n");
         out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview [Esc]</a><br>\n");
 
@@ -88,6 +93,8 @@ class BrowseQueue {
         }
         out.html("<br>\n");
 
+        // :: BUTTONS: REISSUE, DELETE
+
         out.html("<input type='button' id='matsbm_reissue_bulk' value='Reissue [R]'"
                 + " class='matsbm_button matsbm_button_reissue matsbm_button_disabled'"
                 + " onclick='matsbm_reissue_bulk(event, \"").DATA(queueId).html("\")'>");
@@ -105,7 +112,9 @@ class BrowseQueue {
 
         out.html("<br>\n");
 
-        boolean anyMessages = false;
+        // :: TABLE
+
+
         out.html("<div class='matsbm_table_browse_queue_container'>"); // To make room for text "number of messages"
         out.html("<table id='matsbm_table_browse_queue'>");
         out.html("<thead>");
@@ -113,6 +122,22 @@ class BrowseQueue {
                 + " onchange='matsbm_checkall(event)'></th>");
         out.html("<th><input type='button' value='\u2b05 Invert' id='matsbm_checkinvert'"
                 + " onclick='matsbm_checkinvert(event)'> Sent</th>");
+        out.html("<th>View</th>");
+
+        // :: Include the "additions" table cells for the message.
+        List<BrowseQueueTableAddition> tableAdditions = monitorAdditions.stream()
+                .filter(o -> o instanceof BrowseQueueTableAddition)
+                .map(o -> (BrowseQueueTableAddition) o)
+                .collect(Collectors.toList());
+        // Store for whether this column want to be included for this queue.
+        IdentityHashMap<BrowseQueueTableAddition, Boolean> additionsIncluded = new IdentityHashMap<>();
+        for (BrowseQueueTableAddition tableAddition : tableAdditions) {
+            String columnHeadingHtml = tableAddition.getColumnHeadingHtml(queueId);
+            // Want to be included?
+            boolean include = columnHeadingHtml != null;
+            additionsIncluded.put(tableAddition, include);
+            out.html(include ? columnHeadingHtml : "");
+        }
         out.html("<th>TraceId</th>");
         out.html("<th>Init App</th>");
         out.html("<th>InitatorId</th>");
@@ -123,61 +148,72 @@ class BrowseQueue {
         out.html("<th>Expires</th>");
         out.html("</thead>");
         out.html("<tbody>");
-        int count = 0;
+        int messageCount = 0;
         try (MatsBrokerMessageIterable messages = matsBrokerBrowseAndActions.browseQueue(queueId)) {
-            for (MatsBrokerMessageRepresentation matsMsg : messages) {
-                anyMessages = true;
-                out.html("<tr id='matsbm_msgid_").DATA(matsMsg.getMessageSystemId()).html("'>");
+            for (MatsBrokerMessageRepresentation msgRepr : messages) {
+                out.html("<tr id='matsbm_msgid_").DATA(msgRepr.getMessageSystemId()).html("'>");
 
                 out.html("<td><div class='matsbm_table_browse_nobreak'>");
                 out.html("<input type='checkbox' class='matsbm_checkmsg' autocomplete='off' data-msgid='")
-                        .DATA(matsMsg.getMessageSystemId()).html("' onchange='matsbm_checkmsg(event)'>");
+                        .DATA(msgRepr.getMessageSystemId()).html("' onchange='matsbm_checkmsg(event)'>");
                 out.html("</div></td>");
 
                 out.html("<td><div class='matsbm_table_browse_nobreak'>");
-                out.html("<a href='?examineMessage&destinationId=queue:").DATA(queueId)
-                        .html("&messageSystemId=").DATA(matsMsg.getMessageSystemId()).html("'>");
-                Instant instant = Instant.ofEpochMilli(matsMsg.getTimestamp());
+                Instant instant = Instant.ofEpochMilli(msgRepr.getTimestamp());
                 out.html(Statics.formatTimestampSpan(instant.toEpochMilli()));
-                out.html("</a>");
                 out.html("</div></td>");
 
-                // Found MessageSystemId to be pretty irrelevant in this overview.
+                // View/Examine-button
+                out.html("<td><div class='matsbm_table_browse_nobreak'>");
+                out.html("<a class='matsbm_table_examinemsg' href='?examineMessage&destinationId=queue:").DATA(queueId)
+                        .html("&messageSystemId=").DATA(msgRepr.getMessageSystemId()).html("'>");
+                out.html("View</a>");
+                out.html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(matsMsg.getTraceId()).html(
+                // :: Include the "additions" table cells for the message.
+                for (BrowseQueueTableAddition tableAddition : tableAdditions) {
+                    // ?: Did it choose to be included?
+                    if (additionsIncluded.get(tableAddition)) {
+                        // -> Yes, so include it.
+                        String html = tableAddition.convertMessageToHtml(msgRepr);
+                        out.html(html != null ? html : "<td><div></div></td>");
+                    }
+                }
+
+                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(msgRepr.getTraceId()).html(
                         "</div></td>");
 
                 out.html("<td><div class='matsbm_table_browse_breakall'>");
-                out.DATA(matsMsg.getInitializingApp() != null ? matsMsg.getInitializingApp() : "{missing init app}");
+                out.DATA(msgRepr.getInitializingApp() != null ? msgRepr.getInitializingApp() : "{missing init app}");
                 out.html("</div></td>");
 
                 out.html("<td><div class='matsbm_table_browse_breakall'>");
-                out.DATA(matsMsg.getInitiatorId() != null ? matsMsg.getInitiatorId() : "{missing init id}");
+                out.DATA(msgRepr.getInitiatorId() != null ? msgRepr.getInitiatorId() : "{missing init id}");
                 out.html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(matsMsg.getMessageType()).html(" from")
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(msgRepr.getMessageType()).html(" from")
                         .html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(matsMsg.getFromStageId()).html(
+                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(msgRepr.getFromStageId()).html(
                         "</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(matsMsg.isPersistent()
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(msgRepr.isPersistent()
                         ? "Persistent"
                         : "<b>Non-Persistent</b>").html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(matsMsg.isInteractive()
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(msgRepr.isInteractive()
                         ? "<b>Interactive</b>"
                         : "Non-Interactive").html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(matsMsg.getExpirationTimestamp() == 0
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(msgRepr.getExpirationTimestamp() == 0
                         ? "Never expires"
-                        : "<b>" + Statics.formatTimestampSpan(matsMsg.getExpirationTimestamp()) + "</b>");
+                        : "<b>" + Statics.formatTimestampSpan(msgRepr.getExpirationTimestamp()) + "</b>");
                 out.html("</div></td>");
 
                 out.html("</tr>\n");
 
                 // Max out
-                if (++count >= MAX_MESSAGES_BROWSER) {
+                if (++messageCount >= MAX_MESSAGES_BROWSER) {
                     break;
                 }
 
@@ -188,13 +224,17 @@ class BrowseQueue {
         }
         out.html("</tbody>");
         out.html("</table>");
-        out.html("<div id='matsbm_num_messages_shown'>Browsing ").DATA(count).html(" messages directly from queue.");
-        if (count > 200) {
+
+        // This text is displayed above the table. THE MAGIC OF CSS!!!
+        out.html("<div id='matsbm_num_messages_shown'>Browsing ").DATA(messageCount).html(" messages directly from queue.");
+        if (messageCount > 200) {
             out.html(" <i>(Note: Our max is ").DATA(MAX_MESSAGES_BROWSER).html(
                     ", but the message broker might have a smaller max browse. ActiveMQ default is 400)</i>\n");
         }
         out.html("</div></div>");
-        if (!anyMessages) {
+
+        // If there are no messages, say so.
+        if (messageCount == 0) {
             out.html("<h1>No messages!</h1>");
         }
         out.html("</div>");

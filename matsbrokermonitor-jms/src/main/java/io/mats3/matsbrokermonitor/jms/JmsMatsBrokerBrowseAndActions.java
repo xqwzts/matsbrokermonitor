@@ -302,6 +302,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         private final Message _jmsMessage;
 
         private final String _messageSystemId;
+        private final String _matsMessageId;
         private final long _timestamp;
         private final String _traceId;
         private final String _messageType;
@@ -330,6 +331,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             _jmsMessage = message;
 
             _messageSystemId = message.getJMSMessageID();
+            _matsMessageId = message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID);
             _timestamp = message.getJMSTimestamp();
             _traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
             _messageType = message.getStringProperty(JMS_MSG_PROP_MESSAGE_TYPE);
@@ -359,6 +361,11 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         @Override
         public String getMessageSystemId() {
             return _messageSystemId;
+        }
+
+        @Override
+        public String getMatsMessageId() {
+            return _matsMessageId;
         }
 
         @Override

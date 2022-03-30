@@ -98,7 +98,29 @@
 
 /* Common Action message */
 #matsbm_action_message {
-    font-size: 16px;
+    font-size: 16pt;
+    border-radius: 3px;
+    margin-left: 2em;
+    padding-left: 1em;
+    padding-right: 1em;
+}
+
+.matsbm_action_reissued {
+    background-color: #4CAF50;
+    color: white;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.matsbm_action_deleted {
+    background-color: #f44336;
+    color: white;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.matsbm_action_error {
+    background-color: red;
+    color: white;
+    transition: background-color 0.3s, color 0.3s;
 }
 
 /* ===================== */
@@ -440,9 +462,21 @@
 
 /* boxes */
 
+/* .. invert all check boxes */
+
 #matsbm_checkinvert {
     padding: 0 0.3em 0 0.3em;
     float: left;
+}
+
+/* .. examine/view link */
+.matsbm_table_examinemsg {
+    background-image: linear-gradient(#0d90ea, #0d60ea);
+    border-radius: 6px;
+    box-shadow: rgba(0, 0, 0, 0.5) 0 3px 8px;
+    color: #FFFFFF;
+    display: inline-block;
+    padding: 1px 10px;
 }
 
 /* TABLE: Browse queue */
@@ -488,6 +522,7 @@
 
 .matsbm_table_browse_breakall {
     word-break: break-all;
+    overflow: hidden;
 }
 
 /* :: Transition when messages have been reissued or deleted */
@@ -495,7 +530,6 @@
 /* .. for transition, need fixed max-height */
 #matsbm_table_browse_queue div {
     max-height: 5em;
-    overflow: hidden;
 }
 
 #matsbm_table_browse_queue .matsbm_deleted {
@@ -524,7 +558,6 @@
     max-height: 0;
     transition: max-height 0.5s;
 }
-
 
 /* :: displaying the actual number of messages shown, above table */
 .matsbm_table_browse_queue_container {

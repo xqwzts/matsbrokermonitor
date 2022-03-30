@@ -10,6 +10,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 import java.util.SortedMap;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,6 +21,9 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerSnapshot;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.DestinationType;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
+import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.BrowseQueueTableAddition;
+import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.ExamineMessageAddition;
+import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.MonitorAddition;
 import io.mats3.serial.MatsSerializer;
 import io.mats3.serial.MatsSerializer.DeserializedMatsTrace;
 import io.mats3.serial.MatsTrace;
@@ -35,6 +39,7 @@ public class ExamineMessage {
 
     static void gui_ExamineMessage(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, MatsSerializer<?> matsSerializer,
+            List<? super MonitorAddition> monitorAdditions,
             Outputter out, String queueId, String messageSystemId) throws IOException {
         out.html("<div id='matsbm_page_examine_message' class='matsbm_report'>\n");
         out.html("<div class='matsbm_actionbuttons'>\n");
@@ -77,14 +82,14 @@ public class ExamineMessage {
             return;
         }
 
-        MatsBrokerMessageRepresentation matsMsg = matsBrokerMessageRepresentationO.get();
+        MatsBrokerMessageRepresentation msgRepr = matsBrokerMessageRepresentationO.get();
 
         MatsTrace<?> matsTrace = null;
         int matsTraceDecompressedLength = 0;
         if ((matsSerializer != null)
-                && matsMsg.getMatsTraceBytes().isPresent() && matsMsg.getMatsTraceMeta().isPresent()) {
-            byte[] matsTraceBytes = matsMsg.getMatsTraceBytes().get();
-            String matsTraceMeta = matsMsg.getMatsTraceMeta().get();
+                && msgRepr.getMatsTraceBytes().isPresent() && msgRepr.getMatsTraceMeta().isPresent()) {
+            byte[] matsTraceBytes = msgRepr.getMatsTraceBytes().get();
+            String matsTraceMeta = msgRepr.getMatsTraceMeta().get();
             DeserializedMatsTrace<?> deserializedMatsTrace = matsSerializer.deserializeMatsTrace(matsTraceBytes,
                     matsTraceMeta);
             matsTraceDecompressedLength = deserializedMatsTrace.getSizeDecompressed();
@@ -107,19 +112,26 @@ public class ExamineMessage {
                 + " class='matsbm_button matsbm_button_delete matsbm_button_hidden'"
                 + " onclick='matsbm_delete_confirmed_single(event,\"")
                 .DATA(queueId).html("\",\"").DATA(messageSystemId).html("\")'>");
+        List<ExamineMessageAddition> examineAdditions = monitorAdditions.stream()
+                .filter(o -> o instanceof ExamineMessageAddition)
+                .map(o -> (ExamineMessageAddition) o)
+                .collect(Collectors.toList());
+        for (ExamineMessageAddition examineAddition : examineAdditions) {
+            out.html(examineAddition.convertMessageToHtml(msgRepr));
+        }
         out.html("<span id='matsbm_action_message'></span>");
         out.html("</div>");
         out.html("<br>");
 
         // :: FLOW AND MESSAGE PROPERTIES
 
-        part_FlowAndMessageProperties(out, matsMsg, matsTrace, matsTraceDecompressedLength);
+        part_FlowAndMessageProperties(out, msgRepr, matsTrace, matsTraceDecompressedLength);
 
         // :: MATS TRACE!
 
         if (matsTrace == null) {
             // -> No MatsTrace, why?
-            if (matsMsg.getMatsTraceBytes().isPresent()) {
+            if (msgRepr.getMatsTraceBytes().isPresent()) {
                 // -> Seemingly because we don't have a MatsSerializer, and thus cannot deserialize the present bytes.
                 out.html("<br><h2>NOTICE! There is a serialized MatsTrace byte array in the message, but I am"
                         + " constructed without a MatsSerializer, so I can't decipher it!</h2><br>\n");
@@ -152,7 +164,7 @@ public class ExamineMessage {
         }
 
         out.html("Here's matsMessage.toString(), which should include the raw info from the broker:<br>\n");
-        out.html(matsMsg.toString().replace("<", "&lt;").replace(">", "&gt;"));
+        out.html(msgRepr.toString().replace("<", "&lt;").replace(">", "&gt;"));
 
         out.html("</div>");
     }

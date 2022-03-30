@@ -272,11 +272,15 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
         .then(response => {
             if (!response.ok) {
                 console.error("Response not OK", response);
-                document.getElementById('matsbm_action_message').textContent = "Error! HTTP Status: " + response.status;
+                let actionMessage = document.getElementById('matsbm_action_message');
+                actionMessage.textContent = "Error! HTTP Status: " + response.status;
+                actionMessage.classList.add('matsbm_action_error');
                 return;
             }
             response.json().then(result => {
-                document.getElementById('matsbm_action_message').textContent = "Done, " + result.numberOfAffectedMessages + " message" + (result.numberOfAffectedMessages > 1 ? "s" : "") + " " + actionPast + (action === 'reissue' ? " (Check console for new message ids)." : ".");
+                let actionMessage = document.getElementById('matsbm_action_message');
+                actionMessage.textContent = "Done, " + result.numberOfAffectedMessages + " message" + (result.numberOfAffectedMessages > 1 ? "s" : "") + " " + actionPast + (action === 'reissue' ? " (Check console for new message ids)." : ".");
+                actionMessage.classList.add(action === "reissue" ? 'matsbm_action_reissued' : 'matsbm_action_deleted')
                 for (const msgSysMsgId of result.msgSysMsgIds) {
                     const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
                     if (row) {
@@ -400,17 +404,20 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
         .then(response => {
             if (!response.ok) {
                 console.error("Response not OK", response);
-                document.getElementById('matsbm_action_message').textContent = "Error! HTTP Status: " + response.status;
+                let actionMessage = document.getElementById('matsbm_action_message');
+                actionMessage.textContent = "Error! HTTP Status: " + response.status;
+                actionMessage.classList.add('matsbm_action_error');
                 return;
             }
             response.json().then(result => {
-                let actionMessage;
+                let actionMessage = document.getElementById('matsbm_action_message');
                 if (result.numberOfAffectedMessages !== 1) {
-                    actionMessage = "Message wasn't " + actionPast + "! Already " + actionPast + "?"
+                    actionMessage.textContent = "Message wasn't " + actionPast + "! Already " + actionPast + "?";
+                    actionMessage.classList.add('matsbm_action_error');
                 } else {
-                    actionMessage = "Message " + actionPast + "!"
+                    actionMessage.textContent = "Message " + actionPast + "!" + (action === 'reissue' ? " (Check console for new message id)" : "");
+                    actionMessage.classList.add(action === 'reissue' ? 'matsbm_action_reissued' : 'matsbm_action_deleted')
                 }
-                document.getElementById('matsbm_action_message').textContent = actionMessage + (action === 'reissue' ? " (Check console for new message id)." : "");
                 if (action === "reissue") {
                     console.log("Reissued MsgSysMsgIds:", result.reissuedMsgSysMsgIds);
                 }

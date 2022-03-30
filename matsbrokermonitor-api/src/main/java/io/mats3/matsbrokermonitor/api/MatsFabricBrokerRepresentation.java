@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.stream.Stream;
 
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerSnapshot;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.matsbrokermonitor.api.impl.MatsFabricArranger;
 
@@ -22,7 +23,7 @@ public interface MatsFabricBrokerRepresentation extends MatsFabricAggregates {
 
     /**
      * @param matsDestinations
-     *            the output from {@link MatsBrokerMonitor#getMatsDestinations()}.values().
+     *            the output from {@link BrokerSnapshot#getMatsDestinations()}.values().
      * @return a Mats-relevant representation.
      */
     static MatsFabricBrokerRepresentation stack(Collection<MatsBrokerDestination> matsDestinations) {

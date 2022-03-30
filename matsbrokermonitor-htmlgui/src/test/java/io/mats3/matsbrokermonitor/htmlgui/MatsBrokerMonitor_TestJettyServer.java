@@ -3,7 +3,9 @@ package io.mats3.matsbrokermonitor.htmlgui;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -56,8 +58,12 @@ import io.mats3.localinspect.LocalHtmlInspectForMatsFactory;
 import io.mats3.localinspect.LocalStatsMatsInterceptor;
 import io.mats3.matsbrokermonitor.activemq.ActiveMqMatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
+import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AllowAllAccessControl;
+import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.BrowseQueueTableAddition;
+import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.ExamineMessageAddition;
+import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.MonitorAddition;
 import io.mats3.matsbrokermonitor.htmlgui.SetupTestMatsEndpoints.DataTO;
 import io.mats3.matsbrokermonitor.htmlgui.SetupTestMatsEndpoints.StateTO;
 import io.mats3.matsbrokermonitor.htmlgui.impl.MatsBrokerMonitorHtmlGuiImpl;
@@ -77,6 +83,8 @@ public class MatsBrokerMonitor_TestJettyServer {
     private static final String CONTEXT_ATTRIBUTE_PORTNUMBER = "ServerPortNumber";
 
     private static final Logger log = LoggerFactory.getLogger(MatsBrokerMonitor_TestJettyServer.class);
+
+    public static final String MATS_DESTINATION_PREFIX = "endre:";
 
     private static String SERVICE = "MatsTestBrokerMonitor";
     private static String SERVICE_1 = SERVICE + ".FirstSubService";
@@ -114,7 +122,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             Integer portNumber = (Integer) sc.getAttribute(CONTEXT_ATTRIBUTE_PORTNUMBER);
             factoryConfig.setName(getClass().getSimpleName() + "_" + portNumber);
             factoryConfig.setNodename(factoryConfig.getNodename() + "_" + portNumber);
-            factoryConfig.setMatsDestinationPrefix("endre:");
+            factoryConfig.setMatsDestinationPrefix(MATS_DESTINATION_PREFIX);
             // Put it in ServletContext, for servlet to get
             sc.setAttribute(JmsMatsFactory.class.getName(), _matsFactory);
 
@@ -137,7 +145,8 @@ public class MatsBrokerMonitor_TestJettyServer {
             sc.setAttribute(LocalHtmlInspectForMatsFactory.class.getName(), inspect);
 
             // :: Create the MatsBrokerMonitor #1
-            MatsBrokerMonitor matsBrokerMonitor1 = ActiveMqMatsBrokerMonitor.create(connFactory, "endre:", 15_000);
+            MatsBrokerMonitor matsBrokerMonitor1 = ActiveMqMatsBrokerMonitor
+                    .createWithDestinationPrefix(connFactory, MATS_DESTINATION_PREFIX, 15_000);
             // Register a dummy listener
             matsBrokerMonitor1.registerListener(destinationUpdateEvent -> {
                 log.info("Listener #1 at TestJettyServer: Got update! " + destinationUpdateEvent);
@@ -146,25 +155,57 @@ public class MatsBrokerMonitor_TestJettyServer {
             });
             matsBrokerMonitor1.start();
 
-            MatsBrokerMonitor matsBrokerMonitor2 = ActiveMqMatsBrokerMonitor.create(connFactory, "endre:", 15_000);
+            // :: Create the MatsBrokerMonitor #2
+            MatsBrokerMonitor matsBrokerMonitor2 = ActiveMqMatsBrokerMonitor
+                    .createWithDestinationPrefix(connFactory, MATS_DESTINATION_PREFIX, 15_000);
             // Register a dummy listener
             matsBrokerMonitor2.registerListener(destinationUpdateEvent -> {
                 log.info("Listener #2 at TestJettyServer: Got update! " + destinationUpdateEvent);
-                destinationUpdateEvent.getEventDestinations().forEach((fqName, matsBrokerDestination) -> log
-                        .info(".. event destinations (non-zero): [" + fqName + "] = [" + matsBrokerDestination + "]"));
             });
             matsBrokerMonitor2.start();
 
             // Put it in ServletContext, for shutdown
             sc.setAttribute("matsBrokerMonitor1", matsBrokerMonitor1);
 
+            List<? super MonitorAddition> monitorAdditions = new ArrayList<>();
+            monitorAdditions.add(new BrowseQueueTableAddition() {
+                @Override
+                public String getColumnHeadingHtml(String queueId) {
+//                    return null;
+                    return "<th>test table heading: " + queueId.substring(0, 4) + "</th>";
+                }
+
+                @Override
+                public String convertMessageToHtml(MatsBrokerMessageRepresentation message) {
+                    return "<td><div>test table action ["+message.getMatsMessageId().hashCode()+"]</div></td>";
+                }
+            });
+            monitorAdditions.add(new BrowseQueueTableAddition() {
+                @Override
+                public String getColumnHeadingHtml(String queueId) {
+                    return "<th style='background:blue'>Heading</th>";
+                }
+
+                @Override
+                public String convertMessageToHtml(MatsBrokerMessageRepresentation message) {
+//                    return null;
+                    return "<td style='background: green'><div>Cell</div></td>";
+                }
+            });
+            monitorAdditions.add(new ExamineMessageAddition() {
+                @Override
+                public String convertMessageToHtml(MatsBrokerMessageRepresentation message) {
+                    return "<h1>Test Addition!!</h1>";
+                }
+            });
+
             // :: Create the MatsBrokerBrowserAndActions #1
-            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions1 = JmsMatsBrokerBrowseAndActions.create(connFactory,
-                    "endre:");
+            MatsBrokerBrowseAndActions matsBrokerBrowseAndActions1 = JmsMatsBrokerBrowseAndActions
+                    .create(connFactory, MATS_DESTINATION_PREFIX);
 
             // :: Create the MatsBrokerMonitorHtmlGui #1
-            MatsBrokerMonitorHtmlGuiImpl matsBrokerMonitorHtmlGui1 = MatsBrokerMonitorHtmlGui.create(
-                    matsBrokerMonitor1, matsBrokerBrowseAndActions1, matsSerializer);
+            MatsBrokerMonitorHtmlGuiImpl matsBrokerMonitorHtmlGui1 = MatsBrokerMonitorHtmlGui
+                    .create(matsBrokerMonitor1, matsBrokerBrowseAndActions1, monitorAdditions, matsSerializer);
 
             // For multiple ActiveMQs:
             // Either: an identifier of sorts, so that the MatsBrokerMonitor knows if it is talked to.

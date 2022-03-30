@@ -1,9 +1,11 @@
 package io.mats3.matsbrokermonitor.htmlgui;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
+import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.htmlgui.impl.MatsBrokerMonitorHtmlGuiImpl;
 import io.mats3.serial.MatsSerializer;
@@ -15,13 +17,15 @@ public interface MatsBrokerMonitorHtmlGui {
 
     static MatsBrokerMonitorHtmlGuiImpl create(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions,
+            List<? super MonitorAddition> monitorAdditions,
             MatsSerializer<?> matsSerializer) {
-        return new MatsBrokerMonitorHtmlGuiImpl(matsBrokerMonitor, matsBrokerBrowseAndActions, matsSerializer);
+        return new MatsBrokerMonitorHtmlGuiImpl(matsBrokerMonitor, matsBrokerBrowseAndActions, monitorAdditions,
+                matsSerializer);
     }
 
     static MatsBrokerMonitorHtmlGuiImpl create(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions) {
-        return create(matsBrokerMonitor, matsBrokerBrowseAndActions, null);
+        return create(matsBrokerMonitor, matsBrokerBrowseAndActions, null, null);
     }
 
     /**
@@ -47,12 +51,43 @@ public interface MatsBrokerMonitorHtmlGui {
     void html(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException, AccessDeniedException;
 
+    interface MonitorAddition {
+        String convertMessageToHtml(MatsBrokerMessageRepresentation message);
+    }
+
+    interface BrowseQueueTableAddition extends MonitorAddition {
+        /**
+         * @return the output wanted for this table column's heading, <b>which must include the <code>&lt;th&gt;</code>
+         *         and <code>&lt;/th&gt;</code> HTML</b>. If null is returned, the entire column is elided.
+         */
+        String getColumnHeadingHtml(String queueId);
+
+        /**
+         * @param message
+         *            the {@link MatsBrokerMessageRepresentation} being printed
+         * @return the output wanted for this table cell, raw HTML, <b>which must include the
+         *         "<code>&lt;td&gt;&lt;div&gt;</code><i>contents here</i><code>&lt;/div&gt;&lt;/td&gt;</code>" for the
+         *         table cell</b> - remember both the td and the inner div! If you return <code>null</code>, an empty
+         *         cell will be output.
+         */
+        String convertMessageToHtml(MatsBrokerMessageRepresentation message);
+    }
+
+    interface ExamineMessageAddition extends MonitorAddition {
+        /**
+         * @param message
+         *            the {@link MatsBrokerMessageRepresentation} being printed
+         * @return the output wanted for this message, raw HTML.
+         */
+        String convertMessageToHtml(MatsBrokerMessageRepresentation message);
+    }
+
     interface AccessControl {
         default boolean overview() {
             return false;
         }
 
-        default boolean browse(String queueId) {
+        default boolean browseQueue(String queueId) {
             return false;
         }
 
@@ -76,12 +111,12 @@ public interface MatsBrokerMonitorHtmlGui {
         }
 
         @Override
-        public boolean browse(String queueId) {
+        public boolean browseQueue(String queueId) {
             return true;
         }
 
         @Override
-        public boolean examineMessage(String queueId) {
+        public boolean examineMessage(String fromQueueId) {
             return true;
         }
 

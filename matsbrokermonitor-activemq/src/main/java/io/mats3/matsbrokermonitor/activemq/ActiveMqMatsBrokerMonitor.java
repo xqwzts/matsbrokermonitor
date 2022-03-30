@@ -43,62 +43,28 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
      *            the destination prefix that the MatsFactory is configured with.
      * @return the newly created instance.
      */
-    public static ActiveMqMatsBrokerMonitor create(ActiveMqBrokerStatsQuerier querier, String matsDestinationPrefix) {
+    public static ActiveMqMatsBrokerMonitor baseCreate(ActiveMqBrokerStatsQuerier querier,
+            String matsDestinationPrefix) {
         return new ActiveMqMatsBrokerMonitor(querier, matsDestinationPrefix);
     }
 
     /**
      * Convenience method where the {@link ActiveMqBrokerStatsQuerierImpl} is instantiated locally based on the supplied
-     * JMS {@link ConnectionFactory} and MatsDestinationPrefix.
-     *
-     * @param jmsConnectionFactory
-     *            the ConnectionFactory to the backing ActiveMQ.
-     * @param matsDestinationPrefix
-     *            the destination prefix that the MatsFactory is configured with.
-     * @return the newly created instance.
-     */
-    public static ActiveMqMatsBrokerMonitor create(ConnectionFactory jmsConnectionFactory,
-            String matsDestinationPrefix) {
-        ActiveMqBrokerStatsQuerier querier = ActiveMqBrokerStatsQuerierImpl.create(jmsConnectionFactory);
-        return create(querier, matsDestinationPrefix);
-    }
-
-    /**
-     * Convenience method where the {@link ActiveMqBrokerStatsQuerierImpl} is instantiated locally based on the supplied
-     * JMS {@link ConnectionFactory}, MatsDestinationPrefix, and updateIntervalMillisMillis.
-     *
-     * @param jmsConnectionFactory
-     *            the ConnectionFactory to the backing ActiveMQ.
-     * @param matsDestinationPrefix
-     *            the destination prefix that the MatsFactory is configured with.
-     * @param updateIntervalMillis
-     *            the interval between "stats requests", i.e. how often the statistics is updated.
-     * @return the newly created instance.
-     */
-    public static ActiveMqMatsBrokerMonitor create(ConnectionFactory jmsConnectionFactory,
-            String matsDestinationPrefix, long updateIntervalMillis) {
-        ActiveMqBrokerStatsQuerier querier = ActiveMqBrokerStatsQuerierImpl.create(jmsConnectionFactory,
-                updateIntervalMillis);
-        return create(querier, matsDestinationPrefix);
-    }
-
-    /**
-     * Convenience method where the {@link ActiveMqBrokerStatsQuerierImpl} is instantiated locally based on the supplied
-     * JMS {@link ConnectionFactory}, and where the MatsFactory is assumed to be set up with the default "mats."
-     * MatsDestinationPrefix.
+     * JMS {@link ConnectionFactory}, using default updateInterval of 1 minute, and where the MatsFactory is assumed to
+     * be set up with the default "mats." MatsDestinationPrefix.
      *
      * @param jmsConnectionFactory
      *            the ConnectionFactory to the backing ActiveMQ.
      * @return the newly created instance.
      */
     public static ActiveMqMatsBrokerMonitor create(ConnectionFactory jmsConnectionFactory) {
-        return create(jmsConnectionFactory, "mats.");
+        return createWithDestinationPrefix(jmsConnectionFactory, "mats.");
     }
 
     /**
      * Convenience method where the {@link ActiveMqBrokerStatsQuerierImpl} is instantiated locally based on the supplied
-     * JMS {@link ConnectionFactory} and updateIntervalMillis, and where the MatsFactory is assumed to be set up with the
-     * default "mats." MatsDestinationPrefix.
+     * JMS {@link ConnectionFactory}, and using supplied updateIntervalMillis, and where the MatsFactory is assumed to
+     * be set up with the default "mats." MatsDestinationPrefix.
      *
      * @param jmsConnectionFactory
      *            the ConnectionFactory to the backing ActiveMQ.
@@ -107,7 +73,43 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
      * @return the newly created instance.
      */
     public static ActiveMqMatsBrokerMonitor create(ConnectionFactory jmsConnectionFactory, long updateIntervalMillis) {
-        return create(jmsConnectionFactory, "mats.", updateIntervalMillis);
+        return createWithDestinationPrefix(jmsConnectionFactory, "mats.", updateIntervalMillis);
+    }
+
+    /**
+     * Convenience method where the {@link ActiveMqBrokerStatsQuerierImpl} is instantiated locally based on the supplied
+     * JMS {@link ConnectionFactory}, using default updateInterval of 1 minute, and using supplied
+     * MatsDestinationPrefix.
+     *
+     * @param jmsConnectionFactory
+     *            the ConnectionFactory to the backing ActiveMQ.
+     * @param matsDestinationPrefix
+     *            the destination prefix that the MatsFactory is configured with.
+     * @return the newly created instance.
+     */
+    public static ActiveMqMatsBrokerMonitor createWithDestinationPrefix(ConnectionFactory jmsConnectionFactory,
+            String matsDestinationPrefix) {
+        ActiveMqBrokerStatsQuerier querier = ActiveMqBrokerStatsQuerierImpl.create(jmsConnectionFactory);
+        return baseCreate(querier, matsDestinationPrefix);
+    }
+
+    /**
+     * Convenience method where the {@link ActiveMqBrokerStatsQuerierImpl} is instantiated locally based on the supplied
+     * JMS {@link ConnectionFactory}, and using supplied MatsDestinationPrefix and updateIntervalMillisMillis.
+     *
+     * @param jmsConnectionFactory
+     *            the ConnectionFactory to the backing ActiveMQ.
+     * @param matsDestinationPrefix
+     *            the destination prefix that the MatsFactory is configured with.
+     * @param updateIntervalMillis
+     *            the interval between "stats requests", i.e. how often the statistics is updated.
+     * @return the newly created instance.
+     */
+    public static ActiveMqMatsBrokerMonitor createWithDestinationPrefix(ConnectionFactory jmsConnectionFactory,
+            String matsDestinationPrefix, long updateIntervalMillis) {
+        ActiveMqBrokerStatsQuerier querier = ActiveMqBrokerStatsQuerierImpl.create(jmsConnectionFactory,
+                updateIntervalMillis);
+        return baseCreate(querier, matsDestinationPrefix);
     }
 
     private ActiveMqMatsBrokerMonitor(ActiveMqBrokerStatsQuerier querier, String matsDestinationPrefix) {
