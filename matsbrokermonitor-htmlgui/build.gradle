@@ -3,16 +3,19 @@
 
 dependencies {
     api project(":matsbrokermonitor-api")
-    api project(":matsbrokermonitor-activemq")
-    api project(":matsbrokermonitor-jms")
-    // MATS STUFF:
+
     // MatsSerializer - even though you might supply null.
     implementation "io.mats3:mats-serial:$matsVersion"
+    // Uses Jackson to try to pretty-print DTOs and STOs as JSON
     implementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
     // Logging.
     implementation "org.slf4j:slf4j-api:$slf4jVersion"
 
     // :: TESTING
+
+    // The testing uses the ActiveMQ and JMS interfaces.
+    testImplementation project(":matsbrokermonitor-activemq")
+    testImplementation project(":matsbrokermonitor-jms")
 
     // MATS STUFF:
     // Need the JMS Mats
