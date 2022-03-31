@@ -33,6 +33,8 @@ class BrowseQueue {
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, List<? super MonitorAddition> monitorAdditions,
             Outputter out, String queueId, AccessControl ac) throws IOException {
         out.html("<div id='matsbm_page_browse_queue' class='matsbm_report'>\n");
+        out.html("<div class='matsbm_actionbuttons'>\n");
+
         out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview [Esc]</a><br>\n");
 
         Collection<MatsBrokerDestination> values = matsBrokerMonitor.getSnapshot()
@@ -46,37 +48,42 @@ class BrowseQueue {
                 matsBrokerDestination = dest;
             }
         }
+
+        out.html("<div class='matsbm_heading'>");
         if (matsBrokerDestination == null) {
             out.html("<h1>No info about queue!</h1><br>\n");
             out.html("<b>Queue:</b> ").DATA(queueId).html("<br>\n");
             out.html("</div>");
+            out.html("</div>");
+            out.html("</div>");
             return;
         }
 
-        out.html("Broker Queue '").DATA(queueId).html("'");
         // ?: Is this the Global DLQ?
         if (matsBrokerDestination.isDefaultGlobalDlq()) {
             // -> Yes, global DLQ
-            out.html(" is the <b>Global DLQ</b>, fully qualified name: [")
-                    .DATA(matsBrokerDestination.getFqDestinationName())
-                    .html("]<br>\n");
+            out.html("Browsing the <h1>Global DLQ</h1>, fully qualified name: '")
+                    .DATA(matsBrokerDestination.getFqDestinationName()).html("'");
         }
         else {
             // -> No, not the Global DLQ
             // ?: Is this a MatsStage Queue or DLQ?
             if (matsBrokerDestination.getMatsStageId().isPresent()) {
                 // -> Mats stage queue.
-                out.html(" is the <b>");
+                out.html("<h1>Browsing ");
                 out.DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Incoming Queue");
-                out.html("</b> for Mats Stage '")
-                        .DATA(matsBrokerDestination.getMatsStageId().get()).html("'");
+                out.html(" for <div class='matsbm_stageid'>")
+                        .DATA(matsBrokerDestination.getMatsStageId().get()).html("</div></h1>");
             }
             else {
                 // -> Non-Mats Queue. Not really supported, but just to handle it.
-                out.html(" is a <b>").DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Queue").html("</b>");
+                out.html("<h1>Browsing ").DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Queue");
+                out.html(" named ").DATA(matsBrokerDestination.getDestinationName()).html("</h1>");
             }
-            out.html("<br>\n");
         }
+        out.html("</div>\n"); // /matsbm_heading
+
+        out.html("Broker Queue '").DATA(queueId).html("'<br>\n");
 
         out.html("At ").DATA(Statics.formatTimestampSpan(matsBrokerDestination.getLastUpdateLocalMillis()))
                 .html(" it had ").DATA(matsBrokerDestination.getNumberOfQueuedMessages()).html(" messages");
@@ -109,6 +116,7 @@ class BrowseQueue {
                 + " onclick='matsbm_delete_confirmed_bulk(event, \"").DATA(queueId).html("\")'>");
         out.html("<span id='matsbm_action_message'></span>");
         out.html("<br>");
+        out.html("</div>\n"); // /matsbm_actionbuttons
 
         out.html("<br>\n");
 

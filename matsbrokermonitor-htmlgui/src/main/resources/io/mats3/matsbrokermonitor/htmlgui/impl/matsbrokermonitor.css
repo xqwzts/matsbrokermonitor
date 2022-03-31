@@ -40,6 +40,13 @@
     margin: 0em 0em 0.5em 0em;
 }
 
+.matsbm_stageid {
+    display: inline-block;
+    background-color: rgba(0, 0, 255, 0.1);
+    border-radius: 3px;
+    padding: 0 0.5em;
+}
+
 /* Common boxes */
 
 #matsbm_page_broker_overview, #matsbm_page_browse_queue, #matsbm_page_examine_message {
@@ -52,6 +59,7 @@
 }
 
 /* Common action buttons */
+
 .matsbm_actionbuttons {
     position: sticky;
     top: 0;
@@ -97,6 +105,7 @@
 }
 
 /* Common Action message */
+
 #matsbm_action_message {
     font-size: 16pt;
     border-radius: 3px;
@@ -315,7 +324,7 @@
 
 /* epids and queue/topic labels */
 
-.matsbm_epid, .matsbm_label {
+.matsbm_bo_stageid, .matsbm_label {
     font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;;
     font-size: 1em;
     padding: 0 0.5em 0 0.5em;
@@ -325,40 +334,27 @@
     display: flex;
 }
 
-.matsbm_stage {
-    background: #f0f0f0;
-    display: inline-block;
-    border-radius: 3px;
-    box-sizing: border-box;
-    box-shadow: 2px 2px 2px 0 rgba(0, 0, 0, 0.37);
-    border-width: 1pt;
-    border-color: #a0a0a0;
-    border-style: solid;
-    margin: 0.1em 0.5em 0.2em 0;
-    padding: 0.2em 0.2em 1.5em 0.2em;
-}
-
 /* epid */
-.matsbm_epid_queue, .matsbm_epid_queue_private, .matsbm_epid_topic, .matsbm_epid_topic_private {
+.matsbm_bo_stageid_queue, .matsbm_bo_stageid_queue_private, .matsbm_bo_stageid_topic, .matsbm_bo_stageid_topic_private {
     min-width: 550px;
 }
 
-.matsbm_epid_queue {
+.matsbm_bo_stageid_queue {
     background-color: rgba(255, 255, 255, 0.4);
 }
 
-.matsbm_epid_queue_private {
+.matsbm_bo_stageid_queue_private {
     font-size: 0.85em;
     font-style: italic;
     background-color: rgba(0, 0, 0, 0.05);
     color: #313539;
 }
 
-.matsbm_epid_topic {
+.matsbm_bo_stageid_topic {
     background-color: rgba(255, 255, 255, 0.4);
 }
 
-.matsbm_epid_topic_private {
+.matsbm_bo_stageid_topic_private {
     font-size: 0.85em;
     font-style: italic;
     background-color: rgba(0, 0, 0, 0.05);
@@ -386,7 +382,21 @@
     background-color: #f0e040;
 }
 
-/* Stage with contents */
+/* Stage box with contents */
+
+.matsbm_stage_box {
+    background: #f0f0f0;
+    display: inline-block;
+    border-radius: 3px;
+    box-sizing: border-box;
+    box-shadow: 2px 2px 2px 0 rgba(0, 0, 0, 0.37);
+    border-width: 1pt;
+    border-color: #a0a0a0;
+    border-style: solid;
+    margin: 0.1em 0.5em 0.2em 0;
+    padding: 0.2em 0.2em 1.5em 0.2em;
+}
+
 .matsbm_stage_initial {
     min-width: 2.7em;
     display: inline-block;
@@ -490,7 +500,7 @@
 
 #matsbm_table_browse_queue thead th {
     position: sticky;
-    top: 0;
+    top: 11em;
     background-color: #009879;
     color: #ffffff;
 }
@@ -576,7 +586,8 @@
 /* ===================== */
 
 /* PARTS */
-#matsbm_part_flow_and_message_props, #matsbm_part_state_and_message, #matsbm_part_matstrace {
+#matsbm_part_flow_and_message_props, #matsbm_part_state_and_message, #matsbm_part_stack,
+#matsbm_part_matstrace, #matsbm_part_msgrepr_tostring {
     padding: 1em;
     margin-bottom: 1.5em;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
@@ -604,13 +615,12 @@
 
 .matsbm_table_message_props {
     border-collapse: collapse;
-    /*font-size: 0.9em;*/
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
 }
 
 .matsbm_table_message_props thead th {
     position: sticky;
-    top: 6em;
+    top: 9.7em;
     background-color: #009879;
     color: #ffffff;
 }
@@ -635,6 +645,40 @@
     border-bottom: thick solid #009879;
 }
 
+/* TABLE: ReplyTo Stack */
+
+.matsbm_table_replytostack {
+    border-collapse: collapse;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
+}
+
+.matsbm_table_replytostack thead th {
+    position: sticky;
+    top: 9.7em;
+    background-color: #009879;
+    color: #ffffff;
+}
+
+.matsbm_table_replytostack th, .matsbm_table_replytostack td {
+    padding: 0.5em 0.5em 0.5em 0.5em;
+}
+
+.matsbm_table_replytostack tbody tr {
+    border-bottom: thin solid #dddddd;
+}
+
+.matsbm_table_replytostack tbody tr:nth-of-type(even) {
+    background-color: #f3f3f3;
+}
+
+.matsbm_table_replytostack tbody tr:hover {
+    background-color: #ffff99;
+}
+
+.matsbm_table_replytostack tbody tr:last-of-type {
+    border-bottom: thick solid #009879;
+}
+
 /* TABLE: MatsTrace */
 
 .matsbm_table_matstrace {
@@ -646,7 +690,7 @@
 
 .matsbm_table_matstrace thead th {
     position: sticky;
-    top: 6em;
+    top: 9.7em;
     background-color: #009879;
     color: #ffffff;
 }

@@ -36,7 +36,7 @@ class Outputter {
         if (data == null) {
             return "null";
         }
-        return data.replace("<", "&lt")
+        return data.replace("<", "&lt;")
                 .replace(">", "&gt;")
                 .replace("&", "&amp;")
                 .replace("\"", "&#x22;")

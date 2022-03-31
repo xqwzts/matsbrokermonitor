@@ -21,7 +21,6 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerSnapshot;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.DestinationType;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
-import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.BrowseQueueTableAddition;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.ExamineMessageAddition;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.MonitorAddition;
 import io.mats3.serial.MatsSerializer;
@@ -29,6 +28,7 @@ import io.mats3.serial.MatsSerializer.DeserializedMatsTrace;
 import io.mats3.serial.MatsTrace;
 import io.mats3.serial.MatsTrace.Call;
 import io.mats3.serial.MatsTrace.Call.CallType;
+import io.mats3.serial.MatsTrace.Call.Channel;
 import io.mats3.serial.MatsTrace.KeepMatsTrace;
 import io.mats3.serial.MatsTrace.StackState;
 
@@ -41,13 +41,13 @@ public class ExamineMessage {
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, MatsSerializer<?> matsSerializer,
             List<? super MonitorAddition> monitorAdditions,
             Outputter out, String queueId, String messageSystemId) throws IOException {
+        long nanosAsStart_fullRender = System.nanoTime();
         out.html("<div id='matsbm_page_examine_message' class='matsbm_report'>\n");
         out.html("<div class='matsbm_actionbuttons'>\n");
         out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview</a><br>\n");
         out.html("<a id='matsbm_back_browse_queue' href='?browse&destinationId=queue:").DATA(queueId)
-                .html("'>Back to Queue [Esc]</a> - ");
+                .html("'>Back to Queue [Esc]</a>").html("<br>\n");
 
-        out.DATA(queueId).html("<br>\n");
 
         // :: Verify that we have the queue in the stats
         // (Otherwise we'll make the queue by just browsing for the message)
@@ -81,6 +81,32 @@ public class ExamineMessage {
             out.html("</div>");
             return;
         }
+
+        out.html("<div class='matsbm_heading'>");
+        // ?: Is this the Global DLQ?
+        if (matsBrokerDestination.isDefaultGlobalDlq()) {
+            // -> Yes, global DLQ
+            out.html("<h1>Examine Message from Global DLQ</h1>, fully qualified name: '")
+                    .DATA(matsBrokerDestination.getFqDestinationName()).html("'");
+        }
+        else {
+            // -> No, not the Global DLQ
+            // ?: Is this a MatsStage Queue or DLQ?
+            if (matsBrokerDestination.getMatsStageId().isPresent()) {
+                // -> Mats stage queue.
+                out.html("<h1>Examine Message from ");
+                out.DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Incoming Queue");
+                out.html(" for <div class='matsbm_stageid'>")
+                        .DATA(matsBrokerDestination.getMatsStageId().get()).html("</div></h1>");
+            }
+            else {
+                // -> Non-Mats Queue. Not really supported, but just to handle it.
+                out.html("<h1>Examine message from ").DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Queue");
+                out.html(" named ").DATA(matsBrokerDestination.getDestinationName()).html("</h1>");
+            }
+        }
+
+        out.html("</div>\n"); // /matsbm_heading
 
         MatsBrokerMessageRepresentation msgRepr = matsBrokerMessageRepresentationO.get();
 
@@ -149,6 +175,10 @@ public class ExamineMessage {
 
             part_StateAndMessage(out, matsTrace);
 
+            // :: REPLY_TO STACK
+
+            part_ReplyToStack(out, matsTrace);
+
             // :: MATSTRACE ITSELF (all calls)
 
             part_MatsTrace(out, matsTrace);
@@ -161,12 +191,23 @@ public class ExamineMessage {
                 out.html(matsTrace.toString().replace("<", "&lt;").replace(">", "&gt;"));
                 out.html("</pre>");
             }
+
+            // TODO: MISSING: SpanId-stack. (This is not yet publicly accessible).
         }
 
-        out.html("Here's matsMessage.toString(), which should include the raw info from the broker:<br>\n");
-        out.html(msgRepr.toString().replace("<", "&lt;").replace(">", "&gt;"));
+        // :: MATSMESSAGE.toString()
 
-        out.html("</div>");
+        out.html("<div id='matsbm_part_msgrepr_tostring'>");
+        out.html("<h2>Raw broker message info</h2><br>\n");
+        out.html("Here's matsMessageRepresentation.toString(), which should include the raw info from the broker:"
+                + "<br><br>\n");
+        out.html("<code>").DATA(msgRepr.toString()).html("</code>");
+        out.html("</div>\n");
+
+        long nanosTaken_fullRender = System.nanoTime() - nanosAsStart_fullRender;
+        out.html("Render time: ").DATA(Math.round(nanosTaken_fullRender / 1000d) / 1000d).html(" ms.");
+
+        out.html("</div>\n");
     }
 
     private static void part_FlowAndMessageProperties(Outputter out,
@@ -289,6 +330,7 @@ public class ExamineMessage {
         out.html("</td>\n"); // end Flow information cell
 
         // :: MESSAGE PROPERTIES
+
         out.html("<td>\n"); // start Message information cell
         out.html("<h2>Message information (\"Current call\")</h2>");
         out.html("<table class=\"matsbm_table_message_props\">");
@@ -317,7 +359,7 @@ public class ExamineMessage {
 
         out.html("<tr>");
         out.html("<td>From</td>");
-        out.html("<td>").DATA(brokerMsg.getFromStageId()).html("</td>");
+        out.html("<td><div class='matsbm_stageid'>").DATA(brokerMsg.getFromStageId()).html("</div></td>");
         out.html("</tr>\n");
 
         if (matsTrace != null) {
@@ -350,7 +392,7 @@ public class ExamineMessage {
 
         out.html("<tr>");
         out.html("<td>To (this)</td>");
-        out.html("<td>").DATA(brokerMsg.getToStageId()).html("</td>");
+        out.html("<td><div class='matsbm_stageid'>").DATA(brokerMsg.getToStageId()).html("</div></td>");
         out.html("</tr>\n");
 
         if (matsTrace != null) {
@@ -397,6 +439,41 @@ public class ExamineMessage {
         out.html("</td>\n"); // end Message information cell
         out.html("</tr></table>"); // end Flow/Message table
 
+        out.html("</div>");
+    }
+
+    private static void part_ReplyToStack(Outputter out, MatsTrace<?> matsTrace) throws IOException {
+        out.html("<div id='matsbm_part_stack'>");
+        out.html("<h2>ReplyTo Stack</h2><br>\n");
+
+        out.html("Current ReplyTo stack (frames below us):<br>");
+        List<Channel> stack = matsTrace.getCurrentCall().getReplyStack();
+        if (stack.isEmpty()) {
+            out.html("<h3><i>stack is empty</i></h3> (terminator-level, cannot reply)<br>");
+        }
+        else {
+            List<? extends StackState<?>> stateStack = matsTrace.getStateStack();
+            out.html("<table class='matsbm_table_replytostack'>");
+            out.html("<thead><tr>");
+            out.html("<th>Height</th>");
+            out.html("<th>ReplyTo</th>");
+            out.html("<th>State</th>");
+            out.html("</tr></thead>");
+
+            out.html("<tbody>");
+            for (int i = stack.size() - 1; i >= 0; i--) {
+                Channel channel = stack.get(i);
+                out.html("<tr>");
+                out.html("<td>").DATA(Integer.toString(i));
+                out.html("<td>").DATA(channel.getMessagingModel().toString()).html(": ").DATA(channel.getId())
+                        .html("</td>\n");
+                out.html("<td>");
+                out_displaySerializedRepresentation(out, stateStack.get(i).getState());
+                out.html("</td>\n");
+                out.html("</tr>");
+            }
+            out.html("</tbody></table>");
+        }
         out.html("</div>");
     }
 
@@ -768,13 +845,6 @@ public class ExamineMessage {
         }
         out.html("</div>");
 
-        // TEMP:
-        out.html("<br><br><br><br>");
-        out.html("Temporary! MatsTrace.toString()");
-        out.html("<pre>");
-        out.html(matsTrace.toString());
-        out.html("</pre>");
-
         out.html("</div>");
     }
 
@@ -805,13 +875,17 @@ public class ExamineMessage {
      * If String, try to display as JSON, if not just raw. If byte, just display array size.
      */
     private static void out_displaySerializedRepresentation(Outputter out, Object data) throws IOException {
-        if (data instanceof String) {
+        if (data == null) {
+            out.html("<i>null</i><br>\n");
+            out.html("<div class='matsbm_box_call_or_state_div'><i>null</i></div>\n");
+        }
+        else if (data instanceof String) {
             String stringData = (String) data;
             out.html("String[").DATA(stringData.length()).html(" chars]<br>\n");
 
             try {
                 String jsonData = new ObjectMapper().readTree(stringData).toPrettyString();
-                out.html("<div class='matsbm_box_call_or_state_div'>").DATA(jsonData).html("</div>");
+                out.html("<div class='matsbm_box_call_or_state_div'>").DATA(jsonData).html("</div>\n");
             }
             catch (JsonProcessingException e) {
                 out.html("Couldn't parse incoming String as json (thus no pretty printing),"
@@ -819,7 +893,7 @@ public class ExamineMessage {
                 out.DATA(stringData);
             }
         }
-        if (data instanceof byte[]) {
+        else if (data instanceof byte[]) {
             byte[] byteData = (byte[]) data;
             out.html("byte[").DATA(byteData.length).html(" bytes]<br>\n");
         }

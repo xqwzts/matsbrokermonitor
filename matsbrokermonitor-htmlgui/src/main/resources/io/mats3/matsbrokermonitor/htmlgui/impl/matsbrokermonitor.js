@@ -415,7 +415,7 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
                     actionMessage.textContent = "Message wasn't " + actionPast + "! Already " + actionPast + "?";
                     actionMessage.classList.add('matsbm_action_error');
                 } else {
-                    actionMessage.textContent = "Message " + actionPast + "!" + (action === 'reissue' ? " (Check console for new message id)" : "");
+                    actionMessage.textContent = "Done, message " + actionPast + "!" + (action === 'reissue' ? " (Check console for new message id)" : "");
                     actionMessage.classList.add(action === 'reissue' ? 'matsbm_action_reissued' : 'matsbm_action_deleted')
                 }
                 if (action === "reissue") {

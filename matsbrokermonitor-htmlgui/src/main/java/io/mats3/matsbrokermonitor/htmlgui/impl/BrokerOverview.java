@@ -33,6 +33,8 @@ class BrokerOverview {
         Optional<BrokerSnapshot> snapshotO = matsBrokerMonitor.getSnapshot();
         if (!snapshotO.isPresent()) {
             out.html("<h1>Have not gotten an update from the broker yet!</h1>");
+            out.html("</div>\n");
+            out.html("</div>\n");
             return;
         }
 
@@ -47,7 +49,7 @@ class BrokerOverview {
         else {
             out.html("<h2>Unknown broker</h2>");
         }
-        out.html("</div>\n");
+        out.html("</div>\n"); // /matsbm_heading
 
         Collection<MatsBrokerDestination> destinations = snapshot.getMatsDestinations().values();
 
@@ -200,13 +202,13 @@ class BrokerOverview {
                     .html(startWithBad && !hasDlqMsgs ? " matsbm_marker_hidden_row" : "")
                     .html("'>");
             out.html("<td>");
-            out.html("<div class='matsbm_epid matsbm_epid_queue'>")
+            out.html("<div class='matsbm_bo_stageid matsbm_bo_stageid_queue'>")
                     .DATA(globalDlq.getDestinationName())
                     .html("</div>");
             out.html("</td><td><div class='matsbm_label matsbm_label_queue'>Queue</div></td>");
 
             out.html("<td>");
-            out.html("<div class='matsbm_stage'>")
+            out.html("<div class='matsbm_stage_box'>")
                     .DATA(globalDlq.getFqDestinationName());
             out_queueCount(out, globalDlq);
             out.html("</div>");
@@ -260,15 +262,13 @@ class BrokerOverview {
                 boolean privateEp = endpointId.contains(".private.");
                 boolean queue = firstDestinationOrDlq.getDestinationType() == DestinationType.QUEUE;
 
-                out.html("<td><div class='matsbm_epid matsbm_epid")
-                        .html(queue ? "_queue" : "_topic")
-                        .html(privateEp ? "_private" : "")
+                out.html("<td><div class='matsbm_bo_stageid")
+                        .html(" matsbm_bo_stageid").html(queue ? "_queue" : "_topic").html(privateEp ? "_private" : "")
                         .html("'>")
                         .DATA(endpointId).html("</div></td>");
 
-                out.html("<td><div class='matsbm_label matsbm_label")
-                        .html(queue ? "_queue" : "_topic")
-                        .html(privateEp ? "_private" : "")
+                out.html("<td><div class='matsbm_label")
+                        .html(" matsbm_label").html(queue ? "_queue" : "_topic").html(privateEp ? "_private" : "")
                         .html("'>")
                         .DATA(queue ? "Queue" : "Topic").html("</div></td>");
 
@@ -277,7 +277,7 @@ class BrokerOverview {
                 boolean single = (stages.size() == 1) && (stages.values().iterator().next().getStageIndex() == 0);
                 for (MatsStageBrokerRepresentation stage : stages.values()) {
                     boolean initial = stage.getStageIndex() == 0;
-                    out.html("<div class='matsbm_stage'>");
+                    out.html("<div class='matsbm_stage_box'>");
                     out.html(initial
                             ? ("<div class='matsbm_stage_initial'>" + (single ? "single" : "initial") + "</div>")
                             : "S" + stage.getStageIndex());
@@ -290,7 +290,7 @@ class BrokerOverview {
                     if (dlqDest.isPresent()) {
                         out_queueCount(out, dlqDest.get());
                     }
-                    out.html("</div>"); // /matsbm_stage
+                    out.html("</div>"); // /matsbm_stage_box
                 }
                 out.html("</td>");
                 out.html("</tr>\n");
