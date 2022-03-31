@@ -73,7 +73,8 @@
 }
 
 .matsbm_button {
-    color: white;
+    color: #212529;
+    background-color: #d8d8d8;
     padding: 0.5em 2em 0.5em 2em;
     text-align: center;
     text-decoration: none;
@@ -85,17 +86,25 @@
 }
 
 .matsbm_button_reissue {
+    color: white;
     background-color: #4CAF50;
     transition: background-color 0.3s, color 0.3s;
 }
 
 .matsbm_button_delete {
+    color: white;
     background-color: #f44336;
-    transition: background-color 0.3s, color 0.3s;
+    transform: scale(1);
+    max-width: 250px;
+    transition: background-color 0.3s, color 0.3s, transform 0.3s, padding 0.3s, margin 0.3s, max-width 0.3s;
 }
 
 .matsbm_button_delete_cancel {
-    background-color: #008CBA;;
+    color: white;
+    transform: scale(1);
+    background-color: #008CBA;
+    max-width: 250px;
+    transition: background-color 0.3s, color 0.3s, transform 0.3s, padding 0.3s, margin 0.3s, max-width 0.3s;
 }
 
 .matsbm_button_disabled {
@@ -106,7 +115,12 @@
 }
 
 .matsbm_button_hidden {
-    display: none;
+    padding: 0.5em 0 0.5em 0;
+    border: 0;
+    margin: 4px 0;
+    max-width: 0;
+    transform: scaleX(0);
+    transition: background-color 0.3s, color 0.3s, transform 0.3s, padding 0.3s, margin 0.3s, max-width 0.3s;
 }
 
 /* Common Action message */
@@ -519,7 +533,7 @@
 }
 
 #matsbm_table_browse_queue tbody tr:nth-of-type(even) {
-    background-color: #f3f3f3;
+    background-color: rgba(255, 255, 255, 0.5);
 }
 
 #matsbm_table_browse_queue tbody tr:hover {
@@ -597,14 +611,25 @@
     margin-bottom: 1.5em;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
 }
+
 #matsbm_part_msgrepr_tostring {
     margin-bottom: 0.3em;
 }
-.matsbm_part_hidden {
+
+.matsbm_part_hidden_reissue {
+    background-color: #4CAF50;
     opacity: 0;
     visibility: hidden;
     transform: scaleX(0.8) scaleY(0.8);
-    transition: visibility 0s linear 1s, opacity 1s 0s, transform 1s;
+    transition: visibility 0s linear 1s, opacity 1s 0s, transform 1s, background-color 1s;
+}
+
+.matsbm_part_hidden_delete {
+    opacity: 0;
+    background-color: #f44336;
+    visibility: hidden;
+    transform: scaleX(0.5) scaleY(0.5);
+    transition: visibility 0s linear 1s, opacity 1s 0s, transform 1s, background-color 1s;
 }
 
 /* TABLE: Two columns: Flow and Message properties */
@@ -641,7 +666,7 @@
 }
 
 .matsbm_table_message_props tbody tr:nth-of-type(even) {
-    background-color: #f3f3f3;
+    background-color: rgba(255, 255, 255, 0.5);
 }
 
 .matsbm_table_message_props tbody tr:hover {
@@ -675,7 +700,7 @@
 }
 
 .matsbm_table_replytostack tbody tr:nth-of-type(even) {
-    background-color: #f3f3f3;
+    background-color: rgba(255, 255, 255, 0.5);
 }
 
 .matsbm_table_replytostack tbody tr:hover {

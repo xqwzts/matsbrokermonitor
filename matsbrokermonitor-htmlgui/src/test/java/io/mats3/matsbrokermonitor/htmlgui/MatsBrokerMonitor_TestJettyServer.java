@@ -172,12 +172,12 @@ public class MatsBrokerMonitor_TestJettyServer {
                 @Override
                 public String getColumnHeadingHtml(String queueId) {
                     // return null;
-                    return "<th>test table heading: " + queueId.substring(0, 4) + "</th>";
+                    return "<th>Added table heading: " + queueId.substring(0, 4) + "</th>";
                 }
 
                 @Override
                 public String convertMessageToHtml(MatsBrokerMessageRepresentation message) {
-                    return "<td><div>test table action [" + (message.getMatsMessageId() != null
+                    return "<td><div>Added table cell [" + (message.getMatsMessageId() != null
                             ? message.getMatsMessageId().hashCode()
                             : "null") + "]</div></td>";
                 }
@@ -185,19 +185,26 @@ public class MatsBrokerMonitor_TestJettyServer {
             monitorAdditions.add(new BrowseQueueTableAddition() {
                 @Override
                 public String getColumnHeadingHtml(String queueId) {
-                    return "<th style='background:blue'>Heading</th>";
+                    return "<th style='background:blue'>Added: Head</th>";
                 }
 
                 @Override
                 public String convertMessageToHtml(MatsBrokerMessageRepresentation message) {
                     // return null;
-                    return "<td style='background: green'><div>Cell</div></td>";
+                    return "<td style='background: green'><div>Added: Cell</div></td>";
                 }
             });
             monitorAdditions.add(new ExamineMessageAddition() {
                 @Override
                 public String convertMessageToHtml(MatsBrokerMessageRepresentation message) {
-                    return "<h1>Test Addition!!</h1>";
+                    return "<h2>Added h2-text!!</h2>";
+                }
+            });
+
+            monitorAdditions.add(new ExamineMessageAddition() {
+                @Override
+                public String convertMessageToHtml(MatsBrokerMessageRepresentation message) {
+                    return "<input type='button' value='Added button!' class='matsbm_button'></input>";
                 }
             });
 
@@ -297,7 +304,6 @@ public class MatsBrokerMonitor_TestJettyServer {
                                     .keepTrace(KeepTrace.FULL)
                                     .from("/sendRequestInitiated")
                                     .to(SERVICE_1 + SetupTestMatsEndpoints.SERVICE_MAIN)
-                                    // .nonPersistent()
                                     .replyTo(SERVICE_1 + SetupTestMatsEndpoints.TERMINATOR, sto)
                                     .request(dto, new StateTO(1, 2));
                         }
@@ -307,6 +313,18 @@ public class MatsBrokerMonitor_TestJettyServer {
             out.println();
 
             // :: Send a message to a non-existent endpoint, to have an endpoint with a non-consumed message
+            matsFactory.getDefaultInitiator().initiateUnchecked(
+                    (msg) -> {
+                        msg.traceId(MatsTestHelp.traceId() + "_nonExistentEndpoint")
+                                .keepTrace(KeepTrace.FULL)
+                                .nonPersistent(60_000)
+                                .noAudit()
+                                .interactive()
+                                .from("/sendRequestInitiated")
+                                .to(SERVICE + ".NonExistentService.nonExistentMethod")
+                                .send(dto, new StateTO(1, 2));
+                    });
+
             matsFactory.getDefaultInitiator().initiateUnchecked(
                     (msg) -> {
                         msg.traceId(MatsTestHelp.traceId() + "_nonExistentEndpoint")

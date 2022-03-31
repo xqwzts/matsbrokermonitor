@@ -65,7 +65,8 @@ public class ExamineMessage {
             out.html("<h1>Can't look up message, because no info about the queue!</h1><br>\n");
             out.html("<b>MessageSystemId:</b> ").DATA(messageSystemId).html(".<br>\n");
             out.html("<b>Queue:</b> ").DATA(queueId).html("<br>\n");
-            out.html("</div>");
+            out.html("<br>");
+            // Don't output last </div>, as caller does it.
             return;
         }
 
@@ -76,7 +77,8 @@ public class ExamineMessage {
             out.html("<h1>No such message!</h1><br>\n");
             out.html("<b>MessageSystemId:</b> ").DATA(messageSystemId).html(".<br>\n");
             out.html("<b>Queue:</b> ").DATA(queueId).html("<br>\n");
-            out.html("</div>");
+            out.html("<br>");
+            // Don't output last </div>, as caller does it.
             return;
         }
 
@@ -177,14 +179,17 @@ public class ExamineMessage {
 
             part_ReplyToStack(out, matsTrace);
 
-            // :: MATSTRACE ITSELF (all calls)
+            // :: MATS_TRACE ITSELF (all calls)
 
             part_MatsTrace(out, matsTrace, matsBrokerDestination.isDlq());
 
-            // ?: Is this not a MatsTrace<String>? Okay then, toString() it.
-            if (!(matsTrace.getCurrentCall().getData() instanceof String)) {
-                out.html("<h2>NOTICE: couldn't resolve MatsTrace to MatsTrace&lt;String&gt;!</h2>");
-                out.html("Here's matsTrace.toString() of the MatsTrace present:");
+            // ?: Is this not a MatsTrace<String>? (Also checking for null, since currentCall.getData() may be null, but
+            // still the MatsTrace is String)
+            if (!((matsTrace.getCurrentCall().getData() == null)
+                    || (matsTrace.getCurrentCall().getData() instanceof String))) {
+                // -> No, not MatsTrace<String>: Okay then, toString() it.
+                out.html("<h2>NOTICE: couldn't resolve MatsTrace to MatsTrace&lt;String&gt;!</h2><br>");
+                out.html(" Here's matsTrace.toString() of the MatsTrace present:<br>\n");
                 out.html("<pre>");
                 out.html(matsTrace.toString().replace("<", "&lt;").replace(">", "&gt;"));
                 out.html("</pre>");
@@ -193,7 +198,7 @@ public class ExamineMessage {
             // TODO: MISSING: SpanId-stack. (This is not yet publicly accessible).
         }
 
-        // :: MATSMESSAGE.toString()
+        // :: MATS_MESSAGE_REPRESENTATION.toString()
 
         out.html("<div id='matsbm_part_msgrepr_tostring'>");
         out.html("<h2>Raw broker message info</h2><br>\n");
@@ -314,7 +319,7 @@ public class ExamineMessage {
         if (matsTrace != null) {
             out.html("<tr><td>&nbsp;&nbsp;Audit</td>");
             out.html("<td>").html(matsTrace.isNoAudit()
-                    ? "<b>No audit</b> <i>non-default</i>"
+                    ? "<b>No audit</b> <i>(non-default)</i>"
                     : "Audit <i>(default)</i>");
             out.html("</td></tr>\n");
         }
@@ -608,13 +613,21 @@ public class ExamineMessage {
         out.html("<div id='matsbm_part_matstrace'>");
 
         out.html("<h2>MatsTrace</h2><br>\n");
-        out.html("<b>Remember that the MatsTrace, and the rows in this table, refers to the <i>calls, i.e. the"
-                + " messages from one stage to the next in a flow</i>, not the processing on the stages"
-                + " themselves.</b><br>\n");
-        out.html("Thus, it is the REQUEST, REPLY and NEXT rows (the calls) in the table that are the real info"
-                + " carriers - the <i>\"Processed on\"</i> rows are synthesized with stageId taken from the previous"
-                + " call's \"to\", and the <i>app/host</i> and <i>DebugInfo</i> from current call -"
-                + " just to aid your intuition.<br>\n");
+        if (matsTrace.getKeepTrace() != KeepMatsTrace.MINIMAL) {
+            out.html("<b>Remember that the MatsTrace, and the rows in this table, refers to the <i>calls, i.e. the"
+                    + " messages from one stage to the next in a flow</i>, not the processing on the stages"
+                    + " themselves.</b><br>\n");
+            out.html("Thus, it is the REQUEST, REPLY and NEXT rows (the calls) in the table that are the real info"
+                    + " carriers - the <i>\"Processed on\"</i> rows are synthesized with stageId taken from the previous"
+                    + " call's \"to\", and the <i>app/host</i> and <i>DebugInfo</i> from current call -"
+                    + " just to aid your intuition.<br>\n");
+        }
+        else {
+            out.html("<b>NOTICE!! This Mats Flow was initiated with KeepTrace.MINIMAL, which removes all information"
+                    + " about all calls other than the current to save space (hopefully you've increased performance).</b><br>\n");
+            out.html("You'll have to use your centralized logging system and search with either the FlowId or TraceId"
+                    + " to piece together what lead up to the current call.<br>\n");
+        }
 
         // .. SVG-sprite: Arrow down (slanted and colored using CSS)
         // (from font-awesome, via https://leungwensen.github.io/svg-icon/#awesome)
@@ -662,7 +675,8 @@ public class ExamineMessage {
         if (matsTrace.getKeepTrace() == KeepMatsTrace.MINIMAL) {
             int currentCallNumber = matsTrace.getCallNumber();
             for (int i = 0; i < currentCallNumber - 1; i++) {
-                out.html("<tr><td colspan=100></td></tr>");
+                out.html("<tr class='processing'><td colspan=100><div style='height: 1pt;'></div></td></tr>");
+                out.html("<tr class='call'><td colspan=100><div style='height: 2pt;'></div></td></tr>");
             }
         }
 
@@ -696,16 +710,25 @@ public class ExamineMessage {
             out.html("<td></td>");
             out.html("<td></td>");
             out.html("<td></td>");
-            out.html(prevIndent).html("<td onclick='matsbm_callmodal(event)' colspan='").DATA(highestStackHeight
-                    - prevIndentLevel + 1).html("'>");
-            out.html("<i>Processed&nbsp;on&nbsp;</i>");
-            prevIndent = indent;
-            prevIndentLevel = indentLevel;
-            if (prevCall != null) {
-                out.html(prevCall.getTo().getId());
+            if (matsTrace.getKeepTrace() != KeepMatsTrace.MINIMAL) {
+                // -> KeepTrace.FULL or COMPACT
+                out.html(prevIndent).html("<td onclick='matsbm_callmodal(event)' colspan='").DATA(highestStackHeight
+                        - prevIndentLevel + 1).html("'>");
+                out.html("<i>Processed&nbsp;on&nbsp;</i>");
+                prevIndent = indent;
+                prevIndentLevel = indentLevel;
+                if (prevCall != null) {
+                    out.html(prevCall.getTo().getId());
+                }
+                else {
+                    out.html("Initiation");
+                }
             }
             else {
-                out.html("Initiation");
+                // -> KeepTrace.MINIMAL
+                out.html(indent).html("<td onclick='matsbm_callmodal(event)' colspan='").DATA(highestStackHeight
+                        - indentLevel + 1).html("'>");
+                out.html("<br>Processed on<br>");
             }
             out.html("<br>\n");
             out.html("</td>");
@@ -792,7 +815,7 @@ public class ExamineMessage {
                     .html("'>This message resides on a DLQ, which means that the final call failed processing on "
                             + " <div class='matsbm_stageid'>")
                     .DATA(matsTrace.getCurrentCall().getTo().getId())
-                    .html("</div> - You will have to use your logging system to understand what happened there.</td>");
+                    .html("</div> - You'll have to use your logging system to understand what happened there.</td>");
             out.html("</tr>");
         }
 
@@ -831,22 +854,29 @@ public class ExamineMessage {
                     .html("</b></h3><br>\n");
             previousTo = currentCall.getTo().getId();
             // State:
-            out.html("<div class='matsbm_box_call_or_state'>\n");
-            StackState<?> stackState = callToState.get(currentCall);
-            if (stackState != null) {
-                out.html("Incoming state: ");
-                out_displaySerializedRepresentation(out, stackState.getState());
+            if ((matsTrace.getKeepTrace() == KeepMatsTrace.FULL)
+                    || (i == (callFlow.size() - 1))) {
+                out.html("<div class='matsbm_box_call_or_state'>\n");
+                StackState<?> stackState = callToState.get(currentCall);
+                if (stackState != null) {
+                    out.html("Incoming state: ");
+                    out_displaySerializedRepresentation(out, stackState.getState());
+                }
+                else {
+                    out.html("<i>-no incoming state-</i>");
+                }
+                out.html("</div><br>\n");
+
+                // Message:
+                out.html("<div class='matsbm_box_call_or_state'>\n");
+                out.html("Incoming message: ");
+                out_displaySerializedRepresentation(out, currentCall.getData());
+                out.html("</div><br>\n");
             }
             else {
-                out.html("<i>-no incoming state-</i>");
+                out.html("<i><b>(Not KeepTrace.FULL, so state and message is only present on current"
+                        + " (last) call)</b></i>");
             }
-            out.html("</div><br>\n");
-
-            // Message:
-            out.html("<div class='matsbm_box_call_or_state'>\n");
-            out.html("Incoming message: ");
-            out_displaySerializedRepresentation(out, currentCall.getData());
-            out.html("</div><br>\n");
 
             out.html("</div><br>\n");
         }

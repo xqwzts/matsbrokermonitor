@@ -422,9 +422,11 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
                     console.log("Reissued MsgSysMsgIds:", result.reissuedMsgSysMsgIds);
                 }
                 setTimeout(() => {
-                    document.getElementById('matsbm_part_flow_and_message_props').classList.add('matsbm_part_hidden');
-                    document.getElementById('matsbm_part_state_and_message').classList.add('matsbm_part_hidden');
-                    document.getElementById('matsbm_part_matstrace').classList.add('matsbm_part_hidden');
+                    document.getElementById('matsbm_part_flow_and_message_props').classList.add('matsbm_part_hidden_'+action);
+                    document.getElementById('matsbm_part_state_and_message').classList.add('matsbm_part_hidden_'+action);
+                    document.getElementById('matsbm_part_stack').classList.add('matsbm_part_hidden_'+action);
+                    document.getElementById('matsbm_part_matstrace').classList.add('matsbm_part_hidden_'+action);
+                    document.getElementById('matsbm_part_msgrepr_tostring').classList.add('matsbm_part_hidden_'+action);
                     setTimeout(() => window.location = window.location.pathname + "?browse&destinationId=queue:" + queueId,
                         2000);
                 }, 750);

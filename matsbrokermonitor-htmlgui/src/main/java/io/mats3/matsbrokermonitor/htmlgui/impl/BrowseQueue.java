@@ -55,7 +55,6 @@ class BrowseQueue {
             out.html("<b>Queue:</b> ").DATA(queueId).html("<br>\n");
             out.html("</div>");
             out.html("</div>");
-            out.html("</div>");
             return;
         }
 
@@ -122,7 +121,6 @@ class BrowseQueue {
 
         // :: TABLE
 
-
         out.html("<div class='matsbm_table_browse_queue_container'>"); // To make room for text "number of messages"
         out.html("<table id='matsbm_table_browse_queue'>");
         out.html("<thead>");
@@ -157,6 +155,7 @@ class BrowseQueue {
         out.html("</thead>");
         out.html("<tbody>");
         int messageCount = 0;
+        // Note: AutoCloseable, try-with-resources
         try (MatsBrokerMessageIterable messages = matsBrokerBrowseAndActions.browseQueue(queueId)) {
             for (MatsBrokerMessageRepresentation msgRepr : messages) {
                 out.html("<tr id='matsbm_msgid_").DATA(msgRepr.getMessageSystemId()).html("'>");
@@ -188,8 +187,8 @@ class BrowseQueue {
                     }
                 }
 
-                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(msgRepr.getTraceId()).html(
-                        "</div></td>");
+                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(msgRepr.getTraceId())
+                        .html("</div></td>");
 
                 out.html("<td><div class='matsbm_table_browse_breakall'>");
                 out.DATA(msgRepr.getInitializingApp() != null ? msgRepr.getInitializingApp() : "{missing init app}");
@@ -199,11 +198,11 @@ class BrowseQueue {
                 out.DATA(msgRepr.getInitiatorId() != null ? msgRepr.getInitiatorId() : "{missing init id}");
                 out.html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(msgRepr.getMessageType()).html(" from")
-                        .html("</div></td>");
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(msgRepr.getMessageType())
+                        .html(" from</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(msgRepr.getFromStageId()).html(
-                        "</div></td>");
+                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(msgRepr.getFromStageId())
+                        .html("</div></td>");
 
                 out.html("<td><div class='matsbm_table_browse_nobreak'>").html(msgRepr.isPersistent()
                         ? "Persistent"
@@ -215,8 +214,8 @@ class BrowseQueue {
 
                 out.html("<td><div class='matsbm_table_browse_nobreak'>").html(msgRepr.getExpirationTimestamp() == 0
                         ? "Never expires"
-                        : "<b>" + Statics.formatTimestampSpan(msgRepr.getExpirationTimestamp()) + "</b>");
-                out.html("</div></td>");
+                        : "<b>" + Statics.formatTimestampSpan(msgRepr.getExpirationTimestamp()) + "</b>")
+                        .html("</div></td>");
 
                 out.html("</tr>\n");
 
@@ -224,7 +223,6 @@ class BrowseQueue {
                 if (++messageCount >= MAX_MESSAGES_BROWSER) {
                     break;
                 }
-
             }
         }
         catch (BrokerIOException e) {
@@ -234,7 +232,8 @@ class BrowseQueue {
         out.html("</table>");
 
         // This text is displayed above the table. THE MAGIC OF CSS!!!
-        out.html("<div id='matsbm_num_messages_shown'>Browsing ").DATA(messageCount).html(" messages directly from queue.");
+        out.html("<div id='matsbm_num_messages_shown'>Browsing ").DATA(messageCount).html(
+                " messages directly from queue.");
         if (messageCount > 200) {
             out.html(" <i>(Note: Our max is ").DATA(MAX_MESSAGES_BROWSER).html(
                     ", but the message broker might have a smaller max browse. ActiveMQ default is 400)</i>\n");
@@ -243,7 +242,7 @@ class BrowseQueue {
 
         // If there are no messages, say so.
         if (messageCount == 0) {
-            out.html("<h1>No messages!</h1>");
+            out.html("<h1>No messages!</h1><br>\n");
         }
 
         // Don't output last </div>, as caller does it.
