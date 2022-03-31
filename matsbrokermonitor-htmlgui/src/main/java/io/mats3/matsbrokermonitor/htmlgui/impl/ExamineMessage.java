@@ -41,13 +41,11 @@ public class ExamineMessage {
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, MatsSerializer<?> matsSerializer,
             List<? super MonitorAddition> monitorAdditions,
             Outputter out, String queueId, String messageSystemId) throws IOException {
-        long nanosAsStart_fullRender = System.nanoTime();
         out.html("<div id='matsbm_page_examine_message' class='matsbm_report'>\n");
         out.html("<div class='matsbm_actionbuttons'>\n");
         out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview</a><br>\n");
         out.html("<a id='matsbm_back_browse_queue' href='?browse&destinationId=queue:").DATA(queueId)
                 .html("'>Back to Queue [Esc]</a>").html("<br>\n");
-
 
         // :: Verify that we have the queue in the stats
         // (Otherwise we'll make the queue by just browsing for the message)
@@ -181,7 +179,7 @@ public class ExamineMessage {
 
             // :: MATSTRACE ITSELF (all calls)
 
-            part_MatsTrace(out, matsTrace);
+            part_MatsTrace(out, matsTrace, matsBrokerDestination.isDlq());
 
             // ?: Is this not a MatsTrace<String>? Okay then, toString() it.
             if (!(matsTrace.getCurrentCall().getData() instanceof String)) {
@@ -204,10 +202,7 @@ public class ExamineMessage {
         out.html("<code>").DATA(msgRepr.toString()).html("</code>");
         out.html("</div>\n");
 
-        long nanosTaken_fullRender = System.nanoTime() - nanosAsStart_fullRender;
-        out.html("Render time: ").DATA(Math.round(nanosTaken_fullRender / 1000d) / 1000d).html(" ms.");
-
-        out.html("</div>\n");
+        // Don't output last </div>, as caller does it.
     }
 
     private static void part_FlowAndMessageProperties(Outputter out,
@@ -477,7 +472,7 @@ public class ExamineMessage {
         out.html("</div>");
     }
 
-    private static void part_MatsTrace(Outputter out, MatsTrace<?> matsTrace) throws IOException {
+    private static void part_MatsTrace(Outputter out, MatsTrace<?> matsTrace, boolean isDlq) throws IOException {
 
         // TODO: ONLY DO IF KeepMatsTrace.FULL
 
@@ -790,6 +785,17 @@ public class ExamineMessage {
 
             out.html("</tr>");
         }
+        // If DLQ, then explanation-row about crashed processing
+        if (isDlq) {
+            out.html("<tr class='matsbm_table_matstrace_dlqrow'><td colspan=3></td>");
+            out.html("<td colspan='").DATA(highestStackHeight + 4)
+                    .html("'>This message resides on a DLQ, which means that the final call failed processing on "
+                            + " <div class='matsbm_stageid'>")
+                    .DATA(matsTrace.getCurrentCall().getTo().getId())
+                    .html("</div> - You will have to use your logging system to understand what happened there.</td>");
+            out.html("</tr>");
+        }
+
         out.html("</table>");
 
         // :: MODALS: Calls and optionally also state
@@ -818,7 +824,8 @@ public class ExamineMessage {
             out.html("This is a message from <b>").DATA(from)
                     .html("</b><br>on application <b>").DATA(appAndVer)
                     .html("</b><br>running on node <b>").DATA(host)
-                    .html("</b><br>.. and it is a<br>\n");
+                    .html("</b><br>").html(debugInfoToHtml(currentCall.getDebugInfo()))
+                    .html("</b><br><br>.. and it is a<br>\n");
             out.html("<h3>").DATA(currentCall.getCallType())
                     .html(" call to <b>").DATA(currentCall.getTo().getId())
                     .html("</b></h3><br>\n");

@@ -245,6 +245,7 @@ class BrowseQueue {
         if (messageCount == 0) {
             out.html("<h1>No messages!</h1>");
         }
-        out.html("</div>");
+
+        // Don't output last </div>, as caller does it.
     }
 }

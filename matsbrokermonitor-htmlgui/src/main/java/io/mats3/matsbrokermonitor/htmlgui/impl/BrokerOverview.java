@@ -34,7 +34,7 @@ class BrokerOverview {
         if (!snapshotO.isPresent()) {
             out.html("<h1>Have not gotten an update from the broker yet!</h1>");
             out.html("</div>\n");
-            out.html("</div>\n");
+            // Don't output last </div>, as caller does it.
             return;
         }
 
@@ -298,7 +298,7 @@ class BrokerOverview {
             out.html("</table>\n");
             out.html("</div>\n");
         }
-        out.html("</div>\n");
+        // Don't output last </div>, as caller does it.
     }
 
     private static void out_queueCount(Outputter out, MatsBrokerDestination destination) throws IOException {

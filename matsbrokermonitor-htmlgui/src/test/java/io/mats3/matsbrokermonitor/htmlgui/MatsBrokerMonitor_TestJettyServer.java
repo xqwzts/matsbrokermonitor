@@ -171,13 +171,15 @@ public class MatsBrokerMonitor_TestJettyServer {
             monitorAdditions.add(new BrowseQueueTableAddition() {
                 @Override
                 public String getColumnHeadingHtml(String queueId) {
-//                    return null;
+                    // return null;
                     return "<th>test table heading: " + queueId.substring(0, 4) + "</th>";
                 }
 
                 @Override
                 public String convertMessageToHtml(MatsBrokerMessageRepresentation message) {
-                    return "<td><div>test table action ["+message.getMatsMessageId().hashCode()+"]</div></td>";
+                    return "<td><div>test table action [" + (message.getMatsMessageId() != null
+                            ? message.getMatsMessageId().hashCode()
+                            : "null") + "]</div></td>";
                 }
             });
             monitorAdditions.add(new BrowseQueueTableAddition() {
@@ -188,7 +190,7 @@ public class MatsBrokerMonitor_TestJettyServer {
 
                 @Override
                 public String convertMessageToHtml(MatsBrokerMessageRepresentation message) {
-//                    return null;
+                    // return null;
                     return "<td style='background: green'><div>Cell</div></td>";
                 }
             });

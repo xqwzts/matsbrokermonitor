@@ -92,8 +92,11 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
     @Override
     public void gui(Appendable appendable, Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException {
+        long nanosAsStart_fullRender = System.nanoTime();
+
         Outputter out = new Outputter(appendable);
         if (requestParameters.containsKey("browse")) {
+            // -> Browse Queue
             String queueId = getBrowseQueueId(requestParameters, ac);
             // ----- Passed BROWSE Access Control for specific queueId.
 
@@ -104,10 +107,9 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
 
             BrowseQueue.gui_BrowseQueue(_matsBrokerMonitor, _matsBrokerBrowseAndActions, _monitorAdditions, out,
                     queueId, ac);
-            return;
         }
-
         else if (requestParameters.containsKey("examineMessage")) {
+            // -> Examine Message
             String queueId = getBrowseQueueId(requestParameters, ac);
             // ----- Passed BROWSE Access Control for specific queueId.
 
@@ -134,17 +136,22 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
 
             ExamineMessage.gui_ExamineMessage(_matsBrokerMonitor, _matsBrokerBrowseAndActions, _matsSerializer,
                     _monitorAdditions, out, queueId, messageSystemId);
-            return;
+        }
+        else {
+            // E-> No view argument: Broker Overview
+
+            // ACCESS CONTROL: examine message
+            if (!ac.overview()) {
+                throw new AccessDeniedException("Not allowed to see broker overview!");
+            }
+            // ----- Passed Access Control for overview, render it.
+
+            BrokerOverview.gui_BrokerOverview(_matsBrokerMonitor, out, requestParameters, ac);
         }
 
-        // E-> No special argument, assume broker overview
-
-        // ACCESS CONTROL: examine message
-        if (!ac.overview()) {
-            throw new AccessDeniedException("Not allowed to see broker overview!");
-        }
-        // ----- Passed Access Control for overview, render it.
-        BrokerOverview.gui_BrokerOverview(_matsBrokerMonitor, out, requestParameters, ac);
+        long nanosTaken_fullRender = System.nanoTime() - nanosAsStart_fullRender;
+        out.html("Render time: ").DATA(Math.round(nanosTaken_fullRender / 1000d) / 1000d).html(" ms.");
+        out.html("</div>");
     }
 
     private String getBrowseQueueId(Map<String, String[]> requestParameters, AccessControl ac) {

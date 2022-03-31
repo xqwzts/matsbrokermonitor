@@ -42,9 +42,11 @@
 
 .matsbm_stageid {
     display: inline-block;
-    background-color: rgba(0, 0, 255, 0.1);
+    background-color: #d8d8f2;
+    color: #212529;
     border-radius: 3px;
-    padding: 0 0.5em;
+    padding: 0 0.5em 0 0.35em;
+    line-height: 1.2em;
 }
 
 /* Common boxes */
@@ -62,7 +64,10 @@
 
 .matsbm_actionbuttons {
     position: sticky;
+    border-radius: 5px;
     top: 0;
+    margin: 0.5em 0 0 0;
+    padding: 0 0.3em;
     background: #d0d0d0;
     z-index: 1; /* Must be under modal-underlay */
 }
@@ -592,7 +597,9 @@
     margin-bottom: 1.5em;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
 }
-
+#matsbm_part_msgrepr_tostring {
+    margin-bottom: 0.3em;
+}
 .matsbm_part_hidden {
     opacity: 0;
     visibility: hidden;
@@ -782,6 +789,12 @@
     margin-top: -2em;
 }
 
+.matsbm_table_matstrace_dlqrow {
+    background-color: #f44336;
+    color: white;
+    line-height: 3em;
+}
+
 /* CALL MODAL */
 
 /* .. modal underlay ("gray out" when modal visible) */
@@ -841,7 +854,7 @@
 .matsbm_box_call_or_state_div {
     background: white;
     overflow: auto;
-    max-height: 500px;
+    max-height: 350px;
     white-space: pre;
     font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;;
     font-size: 0.9em;
