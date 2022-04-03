@@ -86,6 +86,38 @@ function matsbm_view_bad_destinations(event) {
     document.getElementById("matsbm_button_viewbad").classList.add('matsbm_button_active')
 }
 
+function matsbm_forceupdate(event) {
+    console.log("Force update")
+
+    let requestBody = {
+        action: 'update'
+    };
+
+    let jsonPath = window.matsbm_json_path ? window.matsbm_json_path : window.location.pathname;
+
+    fetch(jsonPath, {
+        method: 'PUT', headers: {
+            'Content-Type': 'application/json'
+        }, body: JSON.stringify(requestBody)
+    })
+        .then(response => {
+            if (!response.ok) {
+                console.error("Response not OK", response);
+                return;
+            }
+            response.json().then(result => {
+                console.log(result);
+                let actionMessage = document.getElementById('matsbm_action_message');
+                actionMessage.textContent = "Done!";
+            });
+        })
+        .catch(error => {
+            console.error("Fetch error", error);
+            document.getElementById('matsbm_action_message').textContent = "Error! " + error;
+        });
+
+}
+
 
 // ::: BROWSE QUEUE
 

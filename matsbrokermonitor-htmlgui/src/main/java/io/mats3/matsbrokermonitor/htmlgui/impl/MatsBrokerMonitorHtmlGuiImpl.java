@@ -12,6 +12,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +25,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.UpdateEvent;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui;
 import io.mats3.serial.MatsSerializer;
 
@@ -50,6 +56,22 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
         _monitorAdditions = monitorAdditions == null ? Collections.emptyList() : monitorAdditions;
         _matsSerializer = matsSerializer;
 
+        _matsBrokerMonitor.registerListener(new UpdateEventListener());
+    }
+
+    private final ConcurrentHashMap<String, CountDownLatch> _updateEventWaiters = new ConcurrentHashMap<>();
+
+    private class UpdateEventListener implements Consumer<UpdateEvent> {
+        @Override
+        public void accept(UpdateEvent updateEvent) {
+            if (updateEvent.getCorrelationId().isPresent()) {
+                CountDownLatch waitingLatch = _updateEventWaiters.get(updateEvent.getCorrelationId().get());
+                if (waitingLatch != null) {
+                    log.info("Got update event, found waiter for: " + updateEvent);
+                    waitingLatch.countDown();
+                }
+            }
+        }
     }
 
     private String _jsonUrlPath = null;
@@ -186,14 +208,12 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
     @Override
     public void json(Appendable out, Map<String, String[]> requestParameters, String requestBody,
             AccessControl ac) throws IOException, AccessDeniedException {
-        log.info("RequestBody: " + requestBody);
+        log.info("JSON RequestBody: " + requestBody);
         CommandDto command = MAPPER.readValue(requestBody, CommandDto.class);
 
         if (command.action == null) {
-            throw new IllegalArgumentException("command.action is null.");
+            throw new IllegalArgumentException("'command.action' is null.");
         }
-
-        // --- if delete or reissue
 
         if ("delete".equals(command.action) || "reissue".equals(command.action)) {
             if (command.queueId == null) {
@@ -214,6 +234,8 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
                 if (!ac.deleteMessage(command.queueId)) {
                     throw new AccessDeniedException("Not allowed to delete messages from queue.");
                 }
+                // ----- Passed Access Control for deleteMessage; Perform operation
+
                 affectedMsgSysMsgIds = _matsBrokerBrowseAndActions.deleteMessages(command.queueId,
                         command.msgSysMsgIds);
             }
@@ -222,6 +244,8 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
                 if (!ac.reissueMessage(command.queueId)) {
                     throw new AccessDeniedException("Not allowed to reissue messages from DLQ.");
                 }
+                // ----- Passed Access Control for reissueMessage; Perform operation
+
                 reissuedMsgSysMsgIds = _matsBrokerBrowseAndActions.reissueMessages(command.queueId,
                         command.msgSysMsgIds);
                 affectedMsgSysMsgIds = new ArrayList<>(reissuedMsgSysMsgIds.keySet());
@@ -237,6 +261,41 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             result.reissuedMsgSysMsgIds = reissuedMsgSysMsgIds;
             out.append(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(result));
         }
+        else if ("update".equals(command.action)) {
+            // ACCESS CONTROL: reissue message
+            if (!ac.overview()) {
+                throw new AccessDeniedException("Not allowed to see overview, thus not request update either.");
+            }
+            // ----- Passed Access Control for overview; Request update
+
+            boolean updated;
+            String correlationId = Long.toString(ThreadLocalRandom.current().nextLong(), 36);
+            try {
+                CountDownLatch countDownLatch = new CountDownLatch(1);
+                _updateEventWaiters.put(correlationId, countDownLatch);
+                log.info("Update: executing matsBrokerMonitor.forceUpdate(\"" + correlationId + "\", false);");
+                _matsBrokerMonitor.forceUpdate(correlationId, false);
+                long nanosAtStart_wait = System.nanoTime();
+                updated = countDownLatch.await(2500, TimeUnit.MILLISECONDS);
+                long nanosTaken_wait = System.nanoTime() - nanosAtStart_wait;
+                log.info("Update: updated: [" + updated + "] (waited [" + Math.round((nanosTaken_wait / 1000d) / 1000d)
+                        + "] ms).");
+            }
+            catch (InterruptedException e) {
+                log.info("Update: Got interrupted while waiting for matsBrokerMonitor.forceRefresh(" + correlationId
+                        + ", false) - assuming shutdown, trying to reply 'no can do'.");
+                updated = false;
+            }
+            finally {
+                _updateEventWaiters.remove(correlationId);
+            }
+            ResultDto result = new ResultDto();
+            result.result = updated ? "ok" : "not_ok";
+            out.append(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(result));
+        }
+        else {
+            throw new IllegalArgumentException("Don't understand that 'command.action'.");
+        }
     }
 
     private static class CommandDto {
@@ -250,12 +309,6 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
         int numberOfAffectedMessages;
         List<String> msgSysMsgIds;
         Map<String, String> reissuedMsgSysMsgIds;
-    }
-
-    @Override
-    public void html(Appendable out, Map<String, String[]> requestParameters,
-            AccessControl ac) throws IOException, AccessDeniedException {
-
     }
 
     static final DecimalFormatSymbols NF_SYMBOLS;

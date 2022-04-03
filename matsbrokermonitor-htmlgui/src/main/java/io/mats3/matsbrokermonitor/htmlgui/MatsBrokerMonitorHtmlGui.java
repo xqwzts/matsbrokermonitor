@@ -39,16 +39,12 @@ public interface MatsBrokerMonitorHtmlGui {
     void getJavaScript(Appendable out) throws IOException;
 
     /**
-     * The "main", embeddable HTML GUI. This might call to {@link #json(Appendable, Map, String, AccessControl)} and
-     * {@link #html(Appendable, Map, AccessControl)}.
+     * The "main", embeddable HTML GUI. This might call to {@link #json(Appendable, Map, String, AccessControl)}.
      */
     void gui(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException, AccessDeniedException;
 
     void json(Appendable out, Map<String, String[]> requestParameters, String requestBody, AccessControl ac)
-            throws IOException, AccessDeniedException;
-
-    void html(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException, AccessDeniedException;
 
     interface MonitorAddition {
