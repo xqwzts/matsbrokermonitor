@@ -146,7 +146,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                             String toQueueName = _matsDestinationPrefix + originalTo;
                             Queue toQueue = session.createQueue(toQueueName);
                             log.info("REISSUE MESSAGE: Received and reissued message from dlq [" + dlq
-                                    + "] to :[" + toQueue + "]!");
+                                    + "] to [" + toQueue + "]!");
 
                             genericProducer.send(toQueue, message);
                             reissuedMessageIds.put(messageSystemId, message.getJMSMessageID());

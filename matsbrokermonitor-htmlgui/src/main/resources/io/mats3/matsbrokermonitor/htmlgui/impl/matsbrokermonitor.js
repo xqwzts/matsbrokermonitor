@@ -24,9 +24,51 @@ document.addEventListener('keydown', (event) => {
 }, false);
 
 
+// Common force update button for Broker Overview and Browse Queue
+function matsbm_button_forceupdate(event) {
+    console.log("Force update")
+    document.getElementById('matsbm_button_forceupdate').classList.add('matsbm_button_disabled');
+
+    let actionMessage = document.getElementById('matsbm_action_message');
+    actionMessage.textContent = "Updating..";
+
+    let requestBody = {
+        action: 'update'
+    };
+
+    let jsonPath = window.matsbm_json_path ? window.matsbm_json_path : window.location.pathname;
+
+    fetch(jsonPath, {
+        method: 'PUT', headers: {
+            'Content-Type': 'application/json'
+        }, body: JSON.stringify(requestBody)
+    })
+        .then(response => {
+            if (!response.ok) {
+                console.error("Response not OK", response);
+                let actionMessage = document.getElementById('matsbm_action_message');
+                actionMessage.textContent = "Error! " + response.status + ": " + response.statusText;
+                actionMessage.classList.add('matsbm_action_error');
+                return;
+            }
+            response.json().then(result => {
+                console.log(result);
+                let actionMessage = document.getElementById('matsbm_action_message');
+                actionMessage.textContent = "Updated! Time taken: " + result.timeTakenMillis + " ms";
+                window.location.reload();
+            });
+        })
+        .catch(error => {
+            console.error("Fetch error", error);
+            document.getElementById('matsbm_action_message').textContent = "Error! " + error;
+        });
+}
+
+
+
 // ::: BROKER OVERVIEW
 
-function matsbm_view_all_destinations(event) {
+function matsbm_button_view_all_destinations(event) {
     console.log("view all")
     // :: ToC EndpointGroup
     for (const tocEpGroupRow of document.body.querySelectorAll(".matsbm_toc_endpointgroup")) {
@@ -50,7 +92,7 @@ function matsbm_view_all_destinations(event) {
     document.getElementById("matsbm_button_viewbad").classList.remove('matsbm_button_active')
 }
 
-function matsbm_view_bad_destinations(event) {
+function matsbm_button_view_bad_destinations(event) {
     console.log("view bad")
     // :: ToC EndpointGroup
     for (const tocEpGroupRow of document.body.querySelectorAll(".matsbm_toc_endpointgroup")) {
@@ -84,38 +126,6 @@ function matsbm_view_bad_destinations(event) {
 
     document.getElementById("matsbm_button_viewall").classList.remove('matsbm_button_active')
     document.getElementById("matsbm_button_viewbad").classList.add('matsbm_button_active')
-}
-
-function matsbm_forceupdate(event) {
-    console.log("Force update")
-
-    let requestBody = {
-        action: 'update'
-    };
-
-    let jsonPath = window.matsbm_json_path ? window.matsbm_json_path : window.location.pathname;
-
-    fetch(jsonPath, {
-        method: 'PUT', headers: {
-            'Content-Type': 'application/json'
-        }, body: JSON.stringify(requestBody)
-    })
-        .then(response => {
-            if (!response.ok) {
-                console.error("Response not OK", response);
-                return;
-            }
-            response.json().then(result => {
-                console.log(result);
-                let actionMessage = document.getElementById('matsbm_action_message');
-                actionMessage.textContent = "Done!";
-            });
-        })
-        .catch(error => {
-            console.error("Fetch error", error);
-            document.getElementById('matsbm_action_message').textContent = "Error! " + error;
-        });
-
 }
 
 
@@ -290,6 +300,8 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
     const actionPast = action === "reissue" ? "reissued" : "deleted";
     const operation = action === "reissue" ? "PUT" : "DELETE";
 
+    console.log(actionPresent + " bulk message(s)")
+
     document.getElementById('matsbm_action_message').textContent = actionPresent + " " + msgSysMsgIds.length + " message" + (msgSysMsgIds.length > 1 ? "s" : "") + ".";
 
     let jsonPath = window.matsbm_json_path ? window.matsbm_json_path : window.location.pathname;
@@ -305,13 +317,17 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
             if (!response.ok) {
                 console.error("Response not OK", response);
                 let actionMessage = document.getElementById('matsbm_action_message');
-                actionMessage.textContent = "Error! HTTP Status: " + response.status;
+                actionMessage.textContent = "Error! " + response.status + ": " + response.statusText;
                 actionMessage.classList.add('matsbm_action_error');
                 return;
             }
             response.json().then(result => {
+                console.log(result);
                 let actionMessage = document.getElementById('matsbm_action_message');
-                actionMessage.textContent = "Done, " + result.numberOfAffectedMessages + " message" + (result.numberOfAffectedMessages > 1 ? "s" : "") + " " + actionPast + (action === 'reissue' ? " (Check console for new message ids)." : ".");
+                actionMessage.textContent = "Done, " + result.numberOfAffectedMessages
+                    + " message" + (result.numberOfAffectedMessages > 1 ? "s" : "")
+                    + " " + actionPast + (action === 'reissue' ? " (Check console for new message ids)." : ".")
+                    + " Time taken: " + result.timeTakenMillis + " ms";
                 actionMessage.classList.add(action === "reissue" ? 'matsbm_action_reissued' : 'matsbm_action_deleted')
                 for (const msgSysMsgId of result.msgSysMsgIds) {
                     const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
@@ -422,6 +438,8 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
     const actionPast = action === "reissue" ? "reissued" : "deleted";
     const operation = action === "reissue" ? "PUT" : "DELETE";
 
+    console.log(actionPresent + " single message")
+
     document.getElementById('matsbm_action_message').textContent = actionPresent + " message [" + msgSysMsgId + "].";
 
     let jsonPath = window.matsbm_json_path ? window.matsbm_json_path : window.location.pathname;
@@ -442,12 +460,15 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
                 return;
             }
             response.json().then(result => {
+                console.log(result);
                 let actionMessage = document.getElementById('matsbm_action_message');
                 if (result.numberOfAffectedMessages !== 1) {
                     actionMessage.textContent = "Message wasn't " + actionPast + "! Already " + actionPast + "?";
                     actionMessage.classList.add('matsbm_action_error');
                 } else {
-                    actionMessage.textContent = "Done, message " + actionPast + "!" + (action === 'reissue' ? " (Check console for new message id)" : "");
+                    actionMessage.textContent = "Done, message " + actionPast + "!"
+                        + (action === 'reissue' ? " (Check console for new message id)" : "")
+                        + " Time taken: " + result.timeTakenMillis + " ms";
                     actionMessage.classList.add(action === 'reissue' ? 'matsbm_action_reissued' : 'matsbm_action_deleted')
                 }
                 if (action === "reissue") {

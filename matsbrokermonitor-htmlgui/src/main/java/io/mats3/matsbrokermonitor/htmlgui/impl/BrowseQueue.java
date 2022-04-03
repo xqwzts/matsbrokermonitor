@@ -113,6 +113,9 @@ class BrowseQueue {
         out.html("<input type='button' id='matsbm_delete_confirm_bulk' value='Confirm Delete [X]'"
                 + " class='matsbm_button matsbm_button_delete matsbm_button_hidden'"
                 + " onclick='matsbm_delete_confirmed_bulk(event, \"").DATA(queueId).html("\")'>");
+        out.html("<input type='button' id='matsbm_button_forceupdate' value='Update Now!'"
+                + " class='matsbm_button matsbm_button_forceupdate"
+                + "' onclick='matsbm_button_forceupdate(event)'>");
         out.html("<span id='matsbm_action_message'></span>");
         out.html("<br>");
         out.html("</div>\n"); // /matsbm_actionbuttons

@@ -130,13 +130,13 @@ class BrokerOverview {
 
         out.html("<input type='button' id='matsbm_button_viewall' value='View All'"
                 + " class='matsbm_button matsbm_button_viewall" + (startWithBad ? "" : " matsbm_button_active")
-                + "' onclick='matsbm_view_all_destinations(event)'>");
+                + "' onclick='matsbm_button_view_all_destinations(event)'>");
         out.html("<input type='button' id='matsbm_button_viewbad' value='View Bad'"
                 + " class='matsbm_button matsbm_button_viewbad" + (startWithBad ? " matsbm_button_active" : "")
-                + "' onclick='matsbm_view_bad_destinations(event)'>");
-        out.html("<input type='button' id='matsbm_button_viewbad' value='Update Now!'"
-                + " class='matsbm_button matsbm_button_viewbad"
-                + "' onclick='matsbm_forceupdate(event)'>");
+                + "' onclick='matsbm_button_view_bad_destinations(event)'>");
+        out.html("<input type='button' id='matsbm_button_forceupdate' value='Update Now!'"
+                + " class='matsbm_button matsbm_button_forceupdate"
+                + "' onclick='matsbm_button_forceupdate(event)'>");
         out.html("<span id='matsbm_action_message'></span>");
         out.html("<br>\n");
 

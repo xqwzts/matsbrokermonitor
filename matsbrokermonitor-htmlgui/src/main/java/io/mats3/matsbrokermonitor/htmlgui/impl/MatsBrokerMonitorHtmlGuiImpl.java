@@ -224,6 +224,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
                 throw new IllegalArgumentException("command.msgSysMsgIds is null.");
             }
 
+            long nanosAtStart_wait = System.nanoTime();
             log.info("action:[" + command.action + "], queueId: [" + command.queueId
                     + "], msgSysMsgIds:[" + command.msgSysMsgIds + "]");
 
@@ -259,7 +260,12 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             result.numberOfAffectedMessages = affectedMsgSysMsgIds.size();
             result.msgSysMsgIds = affectedMsgSysMsgIds;
             result.reissuedMsgSysMsgIds = reissuedMsgSysMsgIds;
+            result.timeTakenMillis = Math.round((System.nanoTime() - nanosAtStart_wait) / 1000d) / 1000d;
             out.append(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(result));
+
+            // Run a forceUpdate to get newer info
+            _matsBrokerMonitor.forceUpdate("After_" + command.action + "_"
+                    + Long.toString(ThreadLocalRandom.current().nextLong(), 36), false);
         }
         else if ("update".equals(command.action)) {
             // ACCESS CONTROL: reissue message
@@ -270,12 +276,12 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
 
             boolean updated;
             String correlationId = Long.toString(ThreadLocalRandom.current().nextLong(), 36);
+            long nanosAtStart_wait = System.nanoTime();
             try {
                 CountDownLatch countDownLatch = new CountDownLatch(1);
                 _updateEventWaiters.put(correlationId, countDownLatch);
                 log.info("Update: executing matsBrokerMonitor.forceUpdate(\"" + correlationId + "\", false);");
                 _matsBrokerMonitor.forceUpdate(correlationId, false);
-                long nanosAtStart_wait = System.nanoTime();
                 updated = countDownLatch.await(2500, TimeUnit.MILLISECONDS);
                 long nanosTaken_wait = System.nanoTime() - nanosAtStart_wait;
                 log.info("Update: updated: [" + updated + "] (waited [" + Math.round((nanosTaken_wait / 1000d) / 1000d)
@@ -291,6 +297,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             }
             ResultDto result = new ResultDto();
             result.result = updated ? "ok" : "not_ok";
+            result.timeTakenMillis = Math.round((System.nanoTime() - nanosAtStart_wait) / 1000d) / 1000d;
             out.append(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(result));
         }
         else {
@@ -306,9 +313,10 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
 
     private static class ResultDto {
         String result;
-        int numberOfAffectedMessages;
+        Integer numberOfAffectedMessages;
         List<String> msgSysMsgIds;
         Map<String, String> reissuedMsgSysMsgIds;
+        double timeTakenMillis;
     }
 
     static final DecimalFormatSymbols NF_SYMBOLS;

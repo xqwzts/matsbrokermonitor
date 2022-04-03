@@ -73,7 +73,7 @@
 }
 
 .matsbm_button {
-    color: #212529;
+    color: white;
     background-color: #d8d8d8;
     padding: 0.5em 2em 0.5em 2em;
     text-align: center;
@@ -86,21 +86,24 @@
 }
 
 .matsbm_button_reissue {
-    color: white;
     background-color: #4CAF50;
     transition: background-color 0.3s, color 0.3s;
 }
 
 .matsbm_button_delete {
-    color: white;
     background-color: #f44336;
     transform: scale(1);
     max-width: 250px;
     transition: background-color 0.3s, color 0.3s, transform 0.3s, padding 0.3s, margin 0.3s, max-width 0.3s;
 }
 
+.matsbm_button_forceupdate {
+    margin-left: 2em;
+    background-color: #008CBA;
+    transition: background-color 0.3s, color 0.3s;
+}
+
 .matsbm_button_delete_cancel {
-    color: white;
     transform: scale(1);
     background-color: #008CBA;
     max-width: 250px;
