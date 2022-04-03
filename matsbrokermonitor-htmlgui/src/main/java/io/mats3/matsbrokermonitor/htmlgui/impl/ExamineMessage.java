@@ -297,7 +297,7 @@ public class ExamineMessage {
         }
 
         out.html("<tr><td>&nbsp;&nbsp;Persistent</td>");
-        out.html("<td>").html(brokerMsg.isPersistent()
+        out.html("<td>").html((matsTrace != null ? (!matsTrace.isNonPersistent()) : brokerMsg.isPersistent())
                 ? "Persistent <i>(default)</i>"
                 : "<b>Non-Persistent</b> <i>(non-default)</i>");
         out.html("</td></tr>\n");
@@ -408,7 +408,7 @@ public class ExamineMessage {
             out.html("<tr>");
             out.html("<td>MatsTrace Size</td>");
             String size = brokerMsg.getMatsTraceBytes().get().length == matsTraceDecompressedLength
-                    ? matsTraceDecompressedLength + " bytes uncompressed"
+                    ? matsTraceDecompressedLength + " bytes (not compressed)"
                     : brokerMsg.getMatsTraceBytes().get().length + " bytes compressed, "
                             + matsTraceDecompressedLength + " bytes decompressed";
             out.html("<td>").DATA(size).html("</td>");
@@ -478,9 +478,6 @@ public class ExamineMessage {
     }
 
     private static void part_MatsTrace(Outputter out, MatsTrace<?> matsTrace, boolean isDlq) throws IOException {
-
-        // TODO: ONLY DO IF KeepMatsTrace.FULL
-
         /*
          * Determine if the initial REQUEST or SEND was performed with initial state (dto, initialState) or normal
          * (dto). This is a bit convoluted, as the state flow data structure really has no direct correlation to the
@@ -651,7 +648,7 @@ public class ExamineMessage {
         out.html("<th>Call#</th>");
         out.html("<th>time</th>");
         out.html("<th>diff</th>");
-        out.html("<th colspan='" + (highestStackHeight + 1) + "'>Call/Processing</th>");
+        out.html("<th colspan='").DATA(highestStackHeight + 1).html("'>Call/Processing</th>");
         out.html("<th>Application</th>");
         out.html("<th>Host</th>");
         out.html("<th>DebugInfo</th>");
@@ -666,9 +663,21 @@ public class ExamineMessage {
         out.html("<td>#0</td>");
         out.html("<td>0 ms</td>");
         out.html("<td></td>");
-        out.html("<td colspan=100>");
-        out.html("INIT<br>from: ").DATA(matsTrace.getInitiatorId());
-        out.html("</td>");
+        if (matsTrace.getKeepTrace() != KeepMatsTrace.MINIMAL) {
+            // -> KeepTrace.FULL or KeepTrace.COMPACT
+            out.html("<td colspan=100>");
+            out.html("INIT<br>from: ").DATA(matsTrace.getInitiatorId());
+            out.html("</td>");
+        }
+        else {
+            // -> KeepTrace.MINIMAL
+            out.html("<td colspan='").DATA(highestStackHeight + 1).html("'>INIT<br>from: ")
+                    .DATA(matsTrace.getInitiatorId()).html("</td\n>");
+            out.html("<td>").DATA(matsTrace.getInitializingAppName())
+                    .html("; v.").DATA(matsTrace.getInitializingAppVersion()).html("</td>\n");
+            out.html("<td>").DATA(matsTrace.getInitializingHost()).html("</td>\n");
+            out.html("<td>").html(debugInfoToHtml(matsTrace.getDebugInfo())).html("</td>\n");
+        }
         out.html("</tr>\n");
 
         // :: IF we're in MINIMAL mode, output empty rows to represent the missing calls.
@@ -690,6 +699,7 @@ public class ExamineMessage {
         for (int i = 0; i < callFlow.size(); i++) {
             Call<?> currentCall = callFlow.get(i);
             // If there is only one call, then it is either first, or MINIMAL and last.
+            // If it is first, then both matsTrace.getCallNumber() and 'i+1' == 1
             int currentCallNumber = callFlow.size() == 1 ? matsTrace.getCallNumber() : i + 1;
             // Can we get a prevCall?
             Call<?> prevCall = (i == 0)
@@ -711,7 +721,7 @@ public class ExamineMessage {
             out.html("<td></td>");
             out.html("<td></td>");
             if (matsTrace.getKeepTrace() != KeepMatsTrace.MINIMAL) {
-                // -> KeepTrace.FULL or COMPACT
+                // -> KeepTrace.FULL or KeepTrace.COMPACT
                 out.html(prevIndent).html("<td onclick='matsbm_callmodal(event)' colspan='").DATA(highestStackHeight
                         - prevIndentLevel + 1).html("'>");
                 out.html("<i>Processed&nbsp;on&nbsp;</i>");
@@ -730,10 +740,11 @@ public class ExamineMessage {
                         - indentLevel + 1).html("'>");
                 out.html("<br>Processed on<br>");
             }
+
             out.html("<br>\n");
             out.html("</td>");
             out.html("<td>@");
-            if (prevCall != null) {
+            if (currentCallNumber > 1) {
                 out.DATA(currentCall.getCallingAppName())
                         .html("; v.").DATA(currentCall.getCallingAppVersion());
             }
@@ -742,14 +753,14 @@ public class ExamineMessage {
                         .html("; v.").DATA(matsTrace.getInitializingAppVersion());
             }
             out.html("</td><td>@");
-            if (prevCall != null) {
+            if (currentCallNumber > 1) {
                 out.DATA(currentCall.getCallingHost());
             }
             else {
                 out.DATA(matsTrace.getInitializingHost());
             }
             out.html("</td><td class='matsbm_from_info'>");
-            if (prevCall != null) {
+            if (currentCallNumber > 1) {
                 out.html(debugInfoToHtml(currentCall.getDebugInfo()));
             }
             else {
@@ -831,6 +842,7 @@ public class ExamineMessage {
         for (int i = 0; i < callFlow.size(); i++) {
             Call<?> currentCall = callFlow.get(i);
             // If there is only one call, then it is either first, or MINIMAL and last.
+            // If it is first, then both matsTrace.getCallNumber() and 'i+1' == 1
             int currentCallNumber = callFlow.size() == 1 ? matsTrace.getCallNumber() : i + 1;
             out.html("<div class='matsbm_box_call_and_state_modal' id='matsbm_callmodal_")
                     .DATA(currentCallNumber).html("'>\n");
@@ -843,12 +855,15 @@ public class ExamineMessage {
             String host = currentCallNumber == 1
                     ? matsTrace.getInitializingHost()
                     : currentCall.getCallingHost();
+            String debugInfoHtml = currentCallNumber == 1
+                    ? debugInfoToHtml(matsTrace.getDebugInfo())
+                    : debugInfoToHtml(currentCall.getDebugInfo());
             out.html("<i>(Arrows \u2b06 and \u2b07 to navigate, Esc to exit)</i><br>\n");
-            out.html("This is a message from <b>").DATA(from)
+            out.html("<div class='matsbm_box_call_and_state_callinfo'>This is a message from <b>").DATA(from)
                     .html("</b><br>on application <b>").DATA(appAndVer)
                     .html("</b><br>running on node <b>").DATA(host)
-                    .html("</b><br>").html(debugInfoToHtml(currentCall.getDebugInfo()))
-                    .html("</b><br><br>.. and it is a<br>\n");
+                    .html("</b></div><br><div class='matsbm_box_call_and_state_debuginfo'>").html(debugInfoHtml);
+            out.html("</div><br>.. and it is a<br>\n");
             out.html("<h3>").DATA(currentCall.getCallType())
                     .html(" call to <b>").DATA(currentCall.getTo().getId())
                     .html("</b></h3><br>\n");

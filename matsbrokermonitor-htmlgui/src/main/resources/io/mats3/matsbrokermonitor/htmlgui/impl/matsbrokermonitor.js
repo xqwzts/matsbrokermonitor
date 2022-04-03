@@ -422,11 +422,11 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
                     console.log("Reissued MsgSysMsgIds:", result.reissuedMsgSysMsgIds);
                 }
                 setTimeout(() => {
-                    document.getElementById('matsbm_part_flow_and_message_props').classList.add('matsbm_part_hidden_'+action);
-                    document.getElementById('matsbm_part_state_and_message').classList.add('matsbm_part_hidden_'+action);
-                    document.getElementById('matsbm_part_stack').classList.add('matsbm_part_hidden_'+action);
-                    document.getElementById('matsbm_part_matstrace').classList.add('matsbm_part_hidden_'+action);
-                    document.getElementById('matsbm_part_msgrepr_tostring').classList.add('matsbm_part_hidden_'+action);
+                    document.getElementById('matsbm_part_flow_and_message_props').classList.add('matsbm_part_hidden_' + action);
+                    document.getElementById('matsbm_part_state_and_message').classList.add('matsbm_part_hidden_' + action);
+                    document.getElementById('matsbm_part_stack').classList.add('matsbm_part_hidden_' + action);
+                    document.getElementById('matsbm_part_matstrace').classList.add('matsbm_part_hidden_' + action);
+                    document.getElementById('matsbm_part_msgrepr_tostring').classList.add('matsbm_part_hidden_' + action);
                     setTimeout(() => window.location = window.location.pathname + "?browse&destinationId=queue:" + queueId,
                         2000);
                 }, 750);
@@ -534,14 +534,9 @@ function matsbm_modalActiveKeyListener(event) {
             const nextProcessRow = document.getElementById("matsbm_processrow_" + matsbm_activecallmodal);
             nextCallRow.classList.add("matsbm_row_active")
             nextProcessRow.classList.add("matsbm_row_active")
-            // Handle the sticky header, so scroll above it
-            if (matsbm_activecallmodal === 1) {
-                const top = document.body.querySelector("#matsbm_table_matstrace thead");
-                top.scrollIntoView({behavior: "smooth", block: "nearest"});
-            } else {
-                document.getElementById("matsbm_callrow_" + (matsbm_activecallmodal - 1))
-                    .scrollIntoView({behavior: "smooth", block: "nearest"});
-            }
+            // Due to the CSS scroll-margin, this works even with sticky headers.
+            document.getElementById("matsbm_callrow_" + (matsbm_activecallmodal - 1))
+                .scrollIntoView({behavior: "smooth", block: "nearest"});
         } else {
             // Back out
             matsbm_activecallmodal++;

@@ -733,6 +733,8 @@
 
 .matsbm_table_matstrace tr {
     height: 100%;
+    scroll-margin-top: 15em;
+    scroll-margin-bottom: 10em;
 }
 
 .matsbm_table_matstrace .processing {
@@ -857,6 +859,22 @@
     position: fixed;
     top: 200px;
     left: 700px;
+}
+
+.matsbm_box_call_and_state_callinfo {
+    display: inline-block;
+    margin: 0.5em 0 0.5em 0.5em;
+    background-color: #e0e0e0;
+    border-radius: 3px;
+    padding: 0.5em;
+}
+
+.matsbm_box_call_and_state_debuginfo {
+    display: inline-block;
+    margin: 0 0 0.5em 1.5em;
+    background-color: #f0f0f0;
+    border-radius: 3px;
+    padding: 0.5em;
 }
 
 .matsbm_box_call_and_state_modal_visible {
