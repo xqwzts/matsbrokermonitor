@@ -31,7 +31,7 @@ ext {
 
 allprojects {
     group = 'io.mats3.matsbrokermonitor'
-    version = '0.0.1-SNAPSHOT'
+    version = '0.1.0-SNAPSHOT'
 }
 
 subprojects {
@@ -124,7 +124,7 @@ configure(subprojects.findAll { it.name != 'mats-api-test' }) {
                     url = 'https://github.com/centiservice/matsbrokermonitor'
                     licenses {
                         license {
-                            name = 'Source Available, commercial'
+                            name = 'PolyForm Perimeter License 1.0.0 with examples'
                             url = 'https://github.com/centiservice/matsbrokermonitor/blob/main/LICENSE.md'
                         }
                     }
