@@ -7,13 +7,13 @@ wrapper {
 
 // Versions for all libraries used throughout the subprojects
 ext {
-    matsVersion = 'RC1-0.18.5-2022-02-25'
-    activeMqVersion = '5.16.4'
+    matsVersion = '0.18.7-2022-04-06'
+    activeMqVersion = '5.16.4' // 5.17.0 requires Java 11.
     artemisMqVersion = '2.17.0'
-    springVersion = '5.3.14'
+    springVersion = '5.3.18'
 
-    jacksonVersion = '2.13.1'
-    slf4jVersion = '1.7.33'
+    jacksonVersion = '2.13.2.2'
+    slf4jVersion = '1.7.36'
     micrometerVersion = '1.7.3' // 1.7 is LTS. 1.7.3 most recent as of 2021-08-12
 
     jmsApiVersion = '1.1-rev-1'
@@ -22,15 +22,11 @@ ext {
 
     // For the JUnit system tests, and the JUnit testing tools
     junitVersion = '4.13.2'
-    // For the Jupiter testing tools
-    jupiterVersion = '5.7.2'
-    jupiterPlatformVersion = '1.7.2'
 
     // For testing
-    logbackVersion = '1.2.10'
+    logbackVersion = '1.2.11'
     h2Version = '1.4.200'
     jettyVersion = '9.4.41.v20210516'
-    hibernateVersion = '5.5.0.Final'
 }
 
 allprojects {
