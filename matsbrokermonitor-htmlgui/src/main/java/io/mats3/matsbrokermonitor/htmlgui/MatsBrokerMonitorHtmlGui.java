@@ -29,21 +29,26 @@ public interface MatsBrokerMonitorHtmlGui {
     }
 
     /**
-     * Note: The return from this method is static, and should only be included once per HTML page.
+     * Note: The return from this method is static.
      */
     void getStyleSheet(Appendable out) throws IOException;
 
     /**
-     * Note: The return from this method is static, and should only be included once per HTML page.
+     * Note: The return from this method is static.
      */
     void getJavaScript(Appendable out) throws IOException;
 
     /**
-     * The "main", embeddable HTML GUI. This might call to {@link #json(Appendable, Map, String, AccessControl)}.
+     * The embeddable HTML GUI - map this to GET, content type is <code>"text/html; charset=utf-8"</code>. This might
+     * call to {@link #json(Appendable, Map, String, AccessControl)}.
      */
     void gui(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException, AccessDeniedException;
 
+    /**
+     * The HTML GUI will invoke JSON-over-HTTP to the same URL it is located at - map this to PUT and DELETE,
+     * content type is <code>"application/json; charset=utf-8"</code>.
+     */
     void json(Appendable out, Map<String, String[]> requestParameters, String requestBody, AccessControl ac)
             throws IOException, AccessDeniedException;
 

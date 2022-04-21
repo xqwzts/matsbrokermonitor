@@ -65,7 +65,6 @@ function matsbm_button_forceupdate(event) {
 }
 
 
-
 // ::: BROKER OVERVIEW
 
 function matsbm_button_view_all_destinations(event) {
@@ -338,7 +337,10 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
                     }
                 }
                 if (action === "reissue") {
-                    console.log("Reissued MsgSysMsgIds:", result.reissuedMsgSysMsgIds);
+                    console.log("Reissued MsgSysMsgIds (" + Object.keys(result.reissuedMsgSysMsgIds).length + "):");
+                    for (const [key, value] of Object.entries(result.reissuedMsgSysMsgIds)) {
+                        console.log("  " + key + " -> " + value);
+                    }
                 }
                 // Annoying CSS "delayed transition" also somehow "overwrites" the row color transition..?!
                 // Using JS hack instead, to delay second part of transition.

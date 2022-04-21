@@ -225,8 +225,8 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             }
 
             long nanosAtStart_wait = System.nanoTime();
-            log.info("action:[" + command.action + "], queueId: [" + command.queueId
-                    + "], msgSysMsgIds:[" + command.msgSysMsgIds + "]");
+            log.info(command.action + ": queueId: [" + command.queueId
+                    + "], #msgSysMsgIds:[" + command.msgSysMsgIds.size() + "]");
 
             List<String> affectedMsgSysMsgIds;
             Map<String, String> reissuedMsgSysMsgIds = null;
@@ -263,7 +263,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             result.timeTakenMillis = Math.round((System.nanoTime() - nanosAtStart_wait) / 1000d) / 1000d;
             out.append(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(result));
 
-            // Run a forceUpdate to get newer info
+            // Run a forceUpdate to get newer info - this is async, returning "immediately".
             _matsBrokerMonitor.forceUpdate("After_" + command.action + "_"
                     + Long.toString(ThreadLocalRandom.current().nextLong(), 36), false);
         }
@@ -278,6 +278,8 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             String correlationId = Long.toString(ThreadLocalRandom.current().nextLong(), 36);
             long nanosAtStart_wait = System.nanoTime();
             try {
+                // :: Logic to make the update synchronous, using correlationId and waiting for the update
+                // event with the same correlationId.
                 CountDownLatch countDownLatch = new CountDownLatch(1);
                 _updateEventWaiters.put(correlationId, countDownLatch);
                 log.info("Update: executing matsBrokerMonitor.forceUpdate(\"" + correlationId + "\", false);");
@@ -319,20 +321,19 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
         double timeTakenMillis;
     }
 
-    static final DecimalFormatSymbols NF_SYMBOLS;
     static final DecimalFormat NF_INTEGER;
     static final DecimalFormat NF_3_DECIMALS;
     static {
-        NF_SYMBOLS = new DecimalFormatSymbols(Locale.US);
-        NF_SYMBOLS.setDecimalSeparator('.');
-        NF_SYMBOLS.setGroupingSeparator('\u202f');
+        DecimalFormatSymbols numFormatSymbols = new DecimalFormatSymbols(Locale.US);
+        numFormatSymbols.setDecimalSeparator('.');
+        numFormatSymbols.setGroupingSeparator('\u202f');
 
         NF_INTEGER = new DecimalFormat("#,##0");
         NF_INTEGER.setMaximumFractionDigits(0);
-        NF_INTEGER.setDecimalFormatSymbols(NF_SYMBOLS);
+        NF_INTEGER.setDecimalFormatSymbols(numFormatSymbols);
 
         NF_3_DECIMALS = new DecimalFormat("#,##0.000");
         NF_3_DECIMALS.setMaximumFractionDigits(3);
-        NF_3_DECIMALS.setDecimalFormatSymbols(NF_SYMBOLS);
+        NF_3_DECIMALS.setDecimalFormatSymbols(numFormatSymbols);
     }
 }
