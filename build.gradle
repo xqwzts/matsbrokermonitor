@@ -5,6 +5,11 @@ wrapper {
     setDistributionType(Wrapper.DistributionType.ALL)
 }
 
+allprojects {
+    group = 'io.mats3.matsbrokermonitor'
+    version = '0.1.0-2022-04-24'
+}
+
 // Versions for all libraries used throughout the subprojects
 ext {
     matsVersion = '0.18.7-2022-04-06'
@@ -27,11 +32,6 @@ ext {
     logbackVersion = '1.2.11'
     h2Version = '1.4.200'
     jettyVersion = '9.4.41.v20210516'
-}
-
-allprojects {
-    group = 'io.mats3.matsbrokermonitor'
-    version = '0.1.0-SNAPSHOT'
 }
 
 subprojects {
@@ -105,8 +105,8 @@ subprojects {
     }
 }
 
-// For publishing subprojects: All, minus 'mats-api-test'
-configure(subprojects.findAll { it.name != 'mats-api-test' }) {
+// For publishing subprojects: All, minus 'matsbrokermonitor-app'
+configure(subprojects.findAll { it.name != 'matsbrokermonitor-app' }) {
     apply plugin: 'signing'
     apply plugin: 'maven-publish'
 
