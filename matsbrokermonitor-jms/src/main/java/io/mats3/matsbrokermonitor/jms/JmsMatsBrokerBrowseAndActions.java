@@ -37,18 +37,18 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
     private final String _matsDestinationPrefix;
     private final String _matsTraceKey;
 
-    public static JmsMatsBrokerBrowseAndActions create(ConnectionFactory connectionFactory,
+    public static JmsMatsBrokerBrowseAndActions create(ConnectionFactory connectionFactory) {
+        return createWithDestinationPrefix(connectionFactory, "mats.", "mats:trace");
+    }
+
+    public static JmsMatsBrokerBrowseAndActions createWithDestinationPrefix(ConnectionFactory connectionFactory,
             String matsDestinationPrefix, String matsTraceKey) {
         return new JmsMatsBrokerBrowseAndActions(connectionFactory, matsDestinationPrefix, matsTraceKey);
     }
 
-    public static JmsMatsBrokerBrowseAndActions create(ConnectionFactory connectionFactory,
+    public static JmsMatsBrokerBrowseAndActions createWithDestinationPrefix(ConnectionFactory connectionFactory,
             String matsDestinationPrefix) {
-        return create(connectionFactory, matsDestinationPrefix, "mats:trace");
-    }
-
-    public static JmsMatsBrokerBrowseAndActions create(ConnectionFactory connectionFactory) {
-        return create(connectionFactory, "mats.", "mats:trace");
+        return createWithDestinationPrefix(connectionFactory, matsDestinationPrefix, "mats:trace");
     }
 
     private JmsMatsBrokerBrowseAndActions(ConnectionFactory connectionFactory, String matsDestinationPrefix,

@@ -144,23 +144,23 @@ public class MatsBrokerMonitor_TestJettyServer {
             LocalHtmlInspectForMatsFactory inspect = LocalHtmlInspectForMatsFactory.create(_matsFactory);
             sc.setAttribute(LocalHtmlInspectForMatsFactory.class.getName(), inspect);
 
-            // :: Create the MatsBrokerMonitor #1
+            // :: Create the ActiveMqMatsBrokerMonitor #1
             MatsBrokerMonitor matsBrokerMonitor1 = ActiveMqMatsBrokerMonitor
                     .createWithDestinationPrefix(connFactory, MATS_DESTINATION_PREFIX, 15_000);
             // Register a dummy listener
             matsBrokerMonitor1.registerListener(destinationUpdateEvent -> {
-                log.info("Listener #1 at TestJettyServer: Got update! " + destinationUpdateEvent);
+                log.info("Listener for MBM #1 at TestJettyServer: Got update! " + destinationUpdateEvent);
                 destinationUpdateEvent.getEventDestinations().forEach((fqName, matsBrokerDestination) -> log
                         .info(".. event destinations (non-zero): [" + fqName + "] = [" + matsBrokerDestination + "]"));
             });
             matsBrokerMonitor1.start();
 
-            // :: Create the MatsBrokerMonitor #2
+            // :: Create the ActiveMqMatsBrokerMonitor #2
             MatsBrokerMonitor matsBrokerMonitor2 = ActiveMqMatsBrokerMonitor
                     .createWithDestinationPrefix(connFactory, MATS_DESTINATION_PREFIX, 15_000);
             // Register a dummy listener
             matsBrokerMonitor2.registerListener(destinationUpdateEvent -> {
-                log.info("Listener #2 at TestJettyServer: Got update! " + destinationUpdateEvent);
+                log.info("Listener for MBM #2 at TestJettyServer: Got update! " + destinationUpdateEvent);
             });
             matsBrokerMonitor2.start();
 
@@ -208,11 +208,11 @@ public class MatsBrokerMonitor_TestJettyServer {
                 }
             });
 
-            // :: Create the MatsBrokerBrowserAndActions #1
+            // :: Create the JmsMatsBrokerBrowseAndActions #1 (don't need two of this)
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions1 = JmsMatsBrokerBrowseAndActions
-                    .create(connFactory, MATS_DESTINATION_PREFIX);
+                    .createWithDestinationPrefix(connFactory, MATS_DESTINATION_PREFIX);
 
-            // :: Create the MatsBrokerMonitorHtmlGui #1
+            // :: Create the MatsBrokerMonitorHtmlGui #1 (don't need two of this)
             MatsBrokerMonitorHtmlGuiImpl matsBrokerMonitorHtmlGui1 = MatsBrokerMonitorHtmlGui
                     .create(matsBrokerMonitor1, matsBrokerBrowseAndActions1, monitorAdditions, matsSerializer);
 
