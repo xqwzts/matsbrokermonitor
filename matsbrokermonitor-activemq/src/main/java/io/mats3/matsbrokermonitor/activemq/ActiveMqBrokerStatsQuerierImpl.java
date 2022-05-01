@@ -539,7 +539,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 _receiveDestinationsStatsReplyMessages_Connection = _connectionFactory.createConnection();
                 _receiveDestinationsStatsReplyMessages_Connection.start();
                 Session session = _receiveDestinationsStatsReplyMessages_Connection.createSession(false,
-                        Session.DUPS_OK_ACKNOWLEDGE);
+                        Session.AUTO_ACKNOWLEDGE);
                 Topic replyTopic = session.createTopic(QUERY_REPLY_STATISTICS_TOPIC);
                 MessageConsumer consumer = session.createConsumer(replyTopic);
 
