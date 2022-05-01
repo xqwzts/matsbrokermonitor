@@ -28,4 +28,10 @@ public interface Statics {
     String JMS_MSG_PROP_TO = "mats_To"; // String
     String JMS_MSG_PROP_AUDIT = "mats_Audit"; // Boolean
 
+    /**
+     * For delete and reissue, how many milliseconds to wait in receive.
+     * <p/>
+     * Value is <code>750</code>.
+     */
+    long RECEIVE_TIMEOUT_MILLIS = 750;
 }

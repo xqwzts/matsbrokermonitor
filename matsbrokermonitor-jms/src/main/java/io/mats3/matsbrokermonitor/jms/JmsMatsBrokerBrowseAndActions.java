@@ -87,7 +87,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             ArrayList<String> deletedMessageIds = new ArrayList<>();
             for (String messageSystemId : messageSystemIds) {
                 MessageConsumer consumer = session.createConsumer(queue, "JMSMessageID = '" + messageSystemId + "'");
-                Message message = consumer.receive(150);
+                Message message = consumer.receive(RECEIVE_TIMEOUT_MILLIS);
                 if (message != null) {
                     log.info("DELETED MESSAGE: Received and dropping message for id [" + messageSystemId
                             + "]! Messages Mats' TraceId:[" + message.getStringProperty(JMS_MSG_PROP_TRACE_ID) + "]");
@@ -132,7 +132,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             Map<String, String> reissuedMessageIds = new LinkedHashMap<>(messageSystemIds.size());
             for (String messageSystemId : messageSystemIds) {
                 MessageConsumer consumer = session.createConsumer(dlq, "JMSMessageID = '" + messageSystemId + "'");
-                Message message = consumer.receive(150);
+                Message message = consumer.receive(RECEIVE_TIMEOUT_MILLIS);
                 try {
                     MDC.put(MDC_MATS_MESSAGE_SYSTEM_ID, messageSystemId);
                     if (message != null) {
