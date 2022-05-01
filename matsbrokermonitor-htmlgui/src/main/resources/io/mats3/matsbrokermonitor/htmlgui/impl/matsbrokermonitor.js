@@ -42,28 +42,39 @@ function matsbm_button_forceupdate(event) {
         method: 'PUT', headers: {
             'Content-Type': 'application/json'
         }, body: JSON.stringify(requestBody)
-    })
-        .then(response => {
-            if (!response.ok) {
-                console.error("Response not OK", response);
-                let actionMessage = document.getElementById('matsbm_action_message');
-                actionMessage.textContent = "Error! " + response.status + ": " + response.statusText;
-                actionMessage.classList.add('matsbm_action_error');
-                return;
-            }
-            response.json().then(result => {
-                console.log(result);
-                let actionMessage = document.getElementById('matsbm_action_message');
+    }).then(response => {
+        if (!response.ok) {
+            matsbm_response_not_ok_message(response);
+            return;
+        }
+        response.json().then(result => {
+            console.log(result);
+            let actionMessage = document.getElementById('matsbm_action_message');
+            if (result.resultOk) {
                 actionMessage.textContent = "Updated! Time taken: " + result.timeTakenMillis + " ms";
-                window.location.reload();
-            });
-        })
-        .catch(error => {
-            console.error("Fetch error", error);
-            document.getElementById('matsbm_action_message').textContent = "Error! " + error;
+                setTimeout(() => {
+                    window.location.reload();
+                }, 300)
+            } else {
+                actionMessage.textContent = "Not updated within timeout! Time taken: " + result.timeTakenMillis + " ms";
+                actionMessage.classList.add('matsbm_action_error');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000)
+            }
         });
+    }).catch(error => {
+        console.error("Fetch error", error);
+        document.getElementById('matsbm_action_message').textContent = "Error! " + error;
+    });
 }
 
+function matsbm_response_not_ok_message(response) {
+    console.error("Response not OK", response);
+    let actionMessage = document.getElementById('matsbm_action_message');
+    actionMessage.textContent = "Error! HTTP Status: " + response.status + ": " + response.statusText;
+    actionMessage.classList.add('matsbm_action_error');
+}
 
 // ::: BROKER OVERVIEW
 
@@ -311,54 +322,49 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
         method: operation, headers: {
             'Content-Type': 'application/json'
         }, body: JSON.stringify(requestBody)
-    })
-        .then(response => {
-            if (!response.ok) {
-                console.error("Response not OK", response);
-                let actionMessage = document.getElementById('matsbm_action_message');
-                actionMessage.textContent = "Error! " + response.status + ": " + response.statusText;
-                actionMessage.classList.add('matsbm_action_error');
-                return;
+    }).then(response => {
+        if (!response.ok) {
+            matsbm_response_not_ok_message(response);
+            return;
+        }
+        response.json().then(result => {
+            console.log(result);
+            let actionMessage = document.getElementById('matsbm_action_message');
+            actionMessage.textContent = "Done, " + result.numberOfAffectedMessages
+                + " message" + (result.numberOfAffectedMessages > 1 ? "s" : "")
+                + " " + actionPast + (action === 'reissue' ? " (Check console for new message ids)." : ".")
+                + " Time taken: " + result.timeTakenMillis + " ms";
+            actionMessage.classList.add(action === "reissue" ? 'matsbm_action_reissued' : 'matsbm_action_deleted')
+            for (const msgSysMsgId of result.msgSysMsgIds) {
+                const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
+                if (row) {
+                    row.classList.add('matsbm_' + actionPast);
+                } else {
+                    console.error("Couldn't find message row for msgSysMsgId [" + msgSysMsgId + "].");
+                }
             }
-            response.json().then(result => {
-                console.log(result);
-                let actionMessage = document.getElementById('matsbm_action_message');
-                actionMessage.textContent = "Done, " + result.numberOfAffectedMessages
-                    + " message" + (result.numberOfAffectedMessages > 1 ? "s" : "")
-                    + " " + actionPast + (action === 'reissue' ? " (Check console for new message ids)." : ".")
-                    + " Time taken: " + result.timeTakenMillis + " ms";
-                actionMessage.classList.add(action === "reissue" ? 'matsbm_action_reissued' : 'matsbm_action_deleted')
+            if (action === "reissue") {
+                console.log("Reissued MsgSysMsgIds (" + Object.keys(result.reissuedMsgSysMsgIds).length + "):");
+                for (const [key, value] of Object.entries(result.reissuedMsgSysMsgIds)) {
+                    console.log("  " + key + " -> " + value);
+                }
+            }
+            // Annoying CSS "delayed transition" also somehow "overwrites" the row color transition..?!
+            // Using JS hack instead, to delay second part of transition.
+            setTimeout(() => {
                 for (const msgSysMsgId of result.msgSysMsgIds) {
                     const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
                     if (row) {
-                        row.classList.add('matsbm_' + actionPast);
-                    } else {
-                        console.error("Couldn't find message row for msgSysMsgId [" + msgSysMsgId + "].");
+                        row.classList.add('matsbs_delete_or_reissue');
                     }
                 }
-                if (action === "reissue") {
-                    console.log("Reissued MsgSysMsgIds (" + Object.keys(result.reissuedMsgSysMsgIds).length + "):");
-                    for (const [key, value] of Object.entries(result.reissuedMsgSysMsgIds)) {
-                        console.log("  " + key + " -> " + value);
-                    }
-                }
-                // Annoying CSS "delayed transition" also somehow "overwrites" the row color transition..?!
-                // Using JS hack instead, to delay second part of transition.
-                setTimeout(() => {
-                    for (const msgSysMsgId of result.msgSysMsgIds) {
-                        const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
-                        if (row) {
-                            row.classList.add('matsbs_delete_or_reissue');
-                        }
-                    }
-                    setTimeout(() => window.location.reload(), 1000);
-                }, 1500)
-            });
-        })
-        .catch(error => {
-            console.error("Fetch error", error);
-            document.getElementById('matsbm_action_message').textContent = "Error! " + error;
+                setTimeout(() => window.location.reload(), 1000);
+            }, 1500)
         });
+    }).catch(error => {
+        console.error("Fetch error", error);
+        document.getElementById('matsbm_action_message').textContent = "Error! " + error;
+    });
 }
 
 // ::: EXAMINE MESSAGE
@@ -452,45 +458,40 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
         method: operation, headers: {
             'Content-Type': 'application/json'
         }, body: JSON.stringify(requestBody)
-    })
-        .then(response => {
-            if (!response.ok) {
-                console.error("Response not OK", response);
-                let actionMessage = document.getElementById('matsbm_action_message');
-                actionMessage.textContent = "Error! HTTP Status: " + response.status;
+    }).then(response => {
+        if (!response.ok) {
+            matsbm_response_not_ok_message(response);
+            return;
+        }
+        response.json().then(result => {
+            console.log(result);
+            let actionMessage = document.getElementById('matsbm_action_message');
+            if (result.numberOfAffectedMessages !== 1) {
+                actionMessage.textContent = "Message wasn't " + actionPast + "! Already " + actionPast + "?";
                 actionMessage.classList.add('matsbm_action_error');
-                return;
+            } else {
+                actionMessage.textContent = "Done, message " + actionPast + "!"
+                    + (action === 'reissue' ? " (Check console for new message id)" : "")
+                    + " Time taken: " + result.timeTakenMillis + " ms";
+                actionMessage.classList.add(action === 'reissue' ? 'matsbm_action_reissued' : 'matsbm_action_deleted')
             }
-            response.json().then(result => {
-                console.log(result);
-                let actionMessage = document.getElementById('matsbm_action_message');
-                if (result.numberOfAffectedMessages !== 1) {
-                    actionMessage.textContent = "Message wasn't " + actionPast + "! Already " + actionPast + "?";
-                    actionMessage.classList.add('matsbm_action_error');
-                } else {
-                    actionMessage.textContent = "Done, message " + actionPast + "!"
-                        + (action === 'reissue' ? " (Check console for new message id)" : "")
-                        + " Time taken: " + result.timeTakenMillis + " ms";
-                    actionMessage.classList.add(action === 'reissue' ? 'matsbm_action_reissued' : 'matsbm_action_deleted')
-                }
-                if (action === "reissue") {
-                    console.log("Reissued MsgSysMsgIds:", result.reissuedMsgSysMsgIds);
-                }
-                setTimeout(() => {
-                    document.getElementById('matsbm_part_flow_and_message_props').classList.add('matsbm_part_hidden_' + action);
-                    document.getElementById('matsbm_part_state_and_message').classList.add('matsbm_part_hidden_' + action);
-                    document.getElementById('matsbm_part_stack').classList.add('matsbm_part_hidden_' + action);
-                    document.getElementById('matsbm_part_matstrace').classList.add('matsbm_part_hidden_' + action);
-                    document.getElementById('matsbm_part_msgrepr_tostring').classList.add('matsbm_part_hidden_' + action);
-                    setTimeout(() => window.location = window.location.pathname + "?browse&destinationId=queue:" + queueId,
-                        2000);
-                }, 750);
-            });
-        })
-        .catch(error => {
-            console.error("Fetch error", error);
-            document.getElementById('matsbm_action_message').textContent = "Error! " + error;
+            if (action === "reissue") {
+                console.log("Reissued MsgSysMsgIds:", result.reissuedMsgSysMsgIds);
+            }
+            setTimeout(() => {
+                document.getElementById('matsbm_part_flow_and_message_props').classList.add('matsbm_part_hidden_' + action);
+                document.getElementById('matsbm_part_state_and_message').classList.add('matsbm_part_hidden_' + action);
+                document.getElementById('matsbm_part_stack').classList.add('matsbm_part_hidden_' + action);
+                document.getElementById('matsbm_part_matstrace').classList.add('matsbm_part_hidden_' + action);
+                document.getElementById('matsbm_part_msgrepr_tostring').classList.add('matsbm_part_hidden_' + action);
+                setTimeout(() => window.location = window.location.pathname + "?browse&destinationId=queue:" + queueId,
+                    2000);
+            }, 750);
         });
+    }).catch(error => {
+        console.error("Fetch error", error);
+        document.getElementById('matsbm_action_message').textContent = "Error! " + error;
+    });
 }
 
 

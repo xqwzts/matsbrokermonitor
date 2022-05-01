@@ -215,6 +215,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             throw new IllegalArgumentException("'command.action' is null.");
         }
 
+        // ?: DELETE or REISSUE
         if ("delete".equals(command.action) || "reissue".equals(command.action)) {
             if (command.queueId == null) {
                 throw new IllegalArgumentException("command.queueId is null.");
@@ -256,7 +257,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             }
 
             ResultDto result = new ResultDto();
-            result.result = "ok";
+            result.resultOk = true;
             result.numberOfAffectedMessages = affectedMsgSysMsgIds.size();
             result.msgSysMsgIds = affectedMsgSysMsgIds;
             result.reissuedMsgSysMsgIds = reissuedMsgSysMsgIds;
@@ -267,6 +268,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             _matsBrokerMonitor.forceUpdate("After_" + command.action + "_"
                     + Long.toString(ThreadLocalRandom.current().nextLong(), 36), false);
         }
+        // ?: FORCE UPDATE?
         else if ("update".equals(command.action)) {
             // ACCESS CONTROL: reissue message
             if (!ac.overview()) {
@@ -274,7 +276,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             }
             // ----- Passed Access Control for overview; Request update
 
-            boolean updated;
+            boolean updatedOkWithinTimeout;
             String correlationId = Long.toString(ThreadLocalRandom.current().nextLong(), 36);
             long nanosAtStart_wait = System.nanoTime();
             try {
@@ -284,21 +286,21 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
                 _updateEventWaiters.put(correlationId, countDownLatch);
                 log.info("Update: executing matsBrokerMonitor.forceUpdate(\"" + correlationId + "\", false);");
                 _matsBrokerMonitor.forceUpdate(correlationId, false);
-                updated = countDownLatch.await(2500, TimeUnit.MILLISECONDS);
+                updatedOkWithinTimeout = countDownLatch.await(FORCE_UPDATE_TIMEOUT, TimeUnit.MILLISECONDS);
                 long nanosTaken_wait = System.nanoTime() - nanosAtStart_wait;
-                log.info("Update: updated: [" + updated + "] (waited [" + Math.round((nanosTaken_wait / 1000d) / 1000d)
-                        + "] ms).");
+                log.info("Update: updatedOkWithinTimeout: [" + updatedOkWithinTimeout
+                        + "] (waited [" + Math.round((nanosTaken_wait / 1000d) / 1000d) + "] ms).");
             }
             catch (InterruptedException e) {
                 log.info("Update: Got interrupted while waiting for matsBrokerMonitor.forceRefresh(" + correlationId
                         + ", false) - assuming shutdown, trying to reply 'no can do'.");
-                updated = false;
+                updatedOkWithinTimeout = false;
             }
             finally {
                 _updateEventWaiters.remove(correlationId);
             }
             ResultDto result = new ResultDto();
-            result.result = updated ? "ok" : "not_ok";
+            result.resultOk = updatedOkWithinTimeout;
             result.timeTakenMillis = Math.round((System.nanoTime() - nanosAtStart_wait) / 1000d) / 1000d;
             out.append(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(result));
         }
@@ -314,7 +316,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
     }
 
     private static class ResultDto {
-        String result;
+        boolean resultOk;
         Integer numberOfAffectedMessages;
         List<String> msgSysMsgIds;
         Map<String, String> reissuedMsgSysMsgIds;

@@ -20,6 +20,7 @@ public interface Statics {
 
     DateTimeFormatter DATE_TIME_FORMATTER_MS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
     DateTimeFormatter DATE_TIME_FORMATTER_SEC = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    int FORCE_UPDATE_TIMEOUT = 5000;
 
     static String formatTimestampSpan(long timestamp) {
         long millisAgo = System.currentTimeMillis() - timestamp;
