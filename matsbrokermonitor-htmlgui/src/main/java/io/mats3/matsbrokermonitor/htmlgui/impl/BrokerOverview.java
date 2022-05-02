@@ -53,9 +53,11 @@ class BrokerOverview {
 
         Collection<MatsBrokerDestination> destinations = snapshot.getMatsDestinations().values();
 
-        // :: "Stack up" into a Mats Fabric representation
+        // "Stack up" into a Mats Fabric representation
         MatsFabricBrokerRepresentation stack = MatsFabricBrokerRepresentation
                 .stack(destinations);
+
+        // ===== OVERALL FABRIC INFORMATION
 
         out.html("Updated as of: <b>").DATA(Statics.formatTimestampSpan(snapshot.getLastUpdateLocalMillis()));
         if (snapshot.getLastUpdateBrokerMillis().isPresent()) {
@@ -89,10 +91,12 @@ class BrokerOverview {
         }
         out.html(")</i><br>");
 
-        // :: Summary
+        // ==== QUEUE & DLQ SUMMARY
 
-        boolean brokerHasOldMsgs = false;
+        boolean brokerHasTooOldMsgs = false;
         boolean brokerHasDlqMsgs = false;
+
+        // ::: Heading Queued Messages
         out.html("<div class='matsbm_overview_message'>\n");
         long totalNumberOfIncomingMessages = stack.getTotalNumberOfIncomingMessages();
         out.html("Total queued messages: <b>").DATA(totalNumberOfIncomingMessages).html("</b>");
@@ -103,20 +107,26 @@ class BrokerOverview {
         OptionalLong oldestIncomingO = stack.getOldestIncomingMessageAgeMillis();
         if (oldestIncomingO.isPresent()) {
             long oldestIncoming = oldestIncomingO.getAsLong();
-            brokerHasOldMsgs = (oldestIncoming > TOO_OLD);
-            out.html(", ").html(brokerHasOldMsgs ? "<span class='matsbm_messages_old'>" : "")
+            brokerHasTooOldMsgs = (oldestIncoming > TOO_OLD);
+            out.html(", ")
+                    .html(brokerHasTooOldMsgs ? "<span class='matsbm_messages_old'>" : "")
                     .html("oldest message is ")
                     .html("<b>").DATA(Statics.millisSpanToHuman(oldestIncoming)).html("</b> old.")
-                    .html(brokerHasOldMsgs ? "</span>" : "");
+                    .html(brokerHasTooOldMsgs ? "</span>" : "");
         }
         out.html("<br>\n");
+
+        // ::: Heading DLQed Messages
         long totalNumberOfDeadLetterMessages = stack.getTotalNumberOfDlqMessages();
-        out.html("Total DLQed messages: <b>").DATA(totalNumberOfDeadLetterMessages).html("</b>");
-        if (totalNumberOfDeadLetterMessages > 0) {
-            brokerHasDlqMsgs = true;
+        brokerHasDlqMsgs = totalNumberOfDeadLetterMessages > 0;
+        out.html("Total DLQed messages: ")
+                .html(brokerHasDlqMsgs ? "<span class='matsbm_messages_dlq'>" : "")
+                .html("<b>").DATA(totalNumberOfDeadLetterMessages).html("</b>");
+        if (brokerHasDlqMsgs) {
             long maxQueue = stack.getMaxStageNumberOfDlqMessages();
             out.html(", worst DLQ has <b>").DATA(maxQueue).html("</b> message").html(maxQueue > 1 ? "s" : "");
         }
+        out.html(brokerHasDlqMsgs ? "</span>" : "");
         OptionalLong oldestDlq = stack.getOldestDlqMessageAgeMillis();
         if (oldestDlq.isPresent()) {
             out.html(", oldest DLQ message is <b>").DATA(Statics.millisSpanToHuman(oldestDlq.getAsLong()))
@@ -125,8 +135,8 @@ class BrokerOverview {
         out.html("</div>\n");
 
         // :: Decide whether to show all or bad only.
-        // Start with deciding based on whether there are "bad" (DLQ or old)
-        boolean showBadOnly = brokerHasDlqMsgs || brokerHasOldMsgs;
+        // Start with deciding based on whether there are "bad" (DLQ or old)..
+        boolean showBadOnly = brokerHasDlqMsgs || brokerHasTooOldMsgs;
         // .. override with any "show" parameter
         String[] showParam = requestParameters.get("show");
         if (showParam != null) {
@@ -141,7 +151,7 @@ class BrokerOverview {
             }
         }
 
-        // :: BUTTONS: View All vs View Bad
+        // ===== BUTTONS: View All vs View Bad
 
         out.html("<input type='button' id='matsbm_button_show_all' value='Show All'"
                 + " class='matsbm_button matsbm_button_show_all" + (showBadOnly ? "" : " matsbm_button_active")
@@ -155,7 +165,8 @@ class BrokerOverview {
         out.html("<span id='matsbm_action_message'></span>");
         out.html("<br>\n");
 
-        // :: ToC
+        // ===== TABLE OF CONTENTS
+
         out.html("<div id='matsbs_toc_heading'>EndpointGroups ToC</div>\n");
         out.html("<table id='matsbm_table_toc'>\n");
         for (MatsEndpointGroupBrokerRepresentation endpointGroup : stack.getEndpointGroups().values()) {
@@ -166,7 +177,7 @@ class BrokerOverview {
             boolean hasDlqMsgs = dlqMessages > 0;
 
             // ?: Should we only show bad, but there is no DLQs or old messages?
-            if (showBadOnly && !(hasDlqMsgs|| hasOldMsgs)) {
+            if (showBadOnly && !(hasDlqMsgs || hasOldMsgs)) {
                 // -> Yes, only show bad, but this is not bad, so skip.
                 continue;
             }
@@ -184,7 +195,7 @@ class BrokerOverview {
                     .html("</a>");
             out.html("</div></td><td><div class='matsbm_toc_content'>");
             long incomingMessages = endpointGroup.getTotalNumberOfIncomingMessages();
-            out.html("Q:<b>").DATA(incomingMessages).html("</b>");
+            out.html("ΣQ:<b>").DATA(incomingMessages).html("</b>");
             if (incomingMessages > 0) {
                 long maxStage = endpointGroup.getMaxStageNumberOfIncomingMessages();
                 out.html(", worst:<b>").DATA(maxStage).html("</b>");
@@ -196,11 +207,14 @@ class BrokerOverview {
                         .html(hasOldMsgs ? "</span>" : "");
             }
             out.html("</div></td><td><div class='matsbm_toc_content'>");
-            out.html("DLQ:<b>").DATA(dlqMessages).html("</b>");
+            out.html("ΣDLQ:")
+                    .html(dlqMessages > 0 ? "<span class='matsbm_messages_dlq'>" : "")
+                    .html("<b>").DATA(dlqMessages).html("</b>");
             if (dlqMessages > 0) {
                 long maxQueue = endpointGroup.getMaxStageNumberOfDlqMessages();
                 out.html(", worst:<b>").DATA(maxQueue).html("</b>");
             }
+            out.html("</span>");
             OptionalLong oldestDlqO = endpointGroup.getOldestDlqMessageAgeMillis();
             if (oldestDlqO.isPresent()) {
                 out.html(", oldest:<b>").DATA(Statics.millisSpanToHuman(oldestDlqO.getAsLong()))
@@ -210,6 +224,8 @@ class BrokerOverview {
         }
         out.html("</table>");
         out.html("<br>\n");
+
+        // ===== ENDPOINT GROUP BOXES
 
         // :: Global DLQ
         if (stack.getDefaultGlobalDlq().isPresent()) {
@@ -252,7 +268,7 @@ class BrokerOverview {
             boolean epgrHasDlqsmsgs = endpointGroup.getTotalNumberOfDlqMessages() > 0;
 
             // ?: Should we only show bad, but there is no DLQs or old messages in this endpoint group?
-            if (showBadOnly && !(epgrHasDlqsmsgs|| epgrHasOldMsgs)) {
+            if (showBadOnly && !(epgrHasDlqsmsgs || epgrHasOldMsgs)) {
                 // -> Yes, only show bad, but this is not bad, so skip.
                 continue;
             }
@@ -275,7 +291,7 @@ class BrokerOverview {
                 boolean epHasDlqsMsgs = endpoint.getTotalNumberOfDlqMessages() > 0;
 
                 // ?: Should we only show bad, but there is no DLQs or old messages in this endpoint?
-                if (showBadOnly && !(epHasDlqsMsgs|| epHasOldMsgs)) {
+                if (showBadOnly && !(epHasDlqsMsgs || epHasOldMsgs)) {
                     // -> Yes, only show bad, but this is not bad, so skip.
                     continue;
                 }
@@ -353,8 +369,8 @@ class BrokerOverview {
             // -> Topic
             out.html("<div class='topic'>");
         }
-        out.html(isDlq ? "DLQ:" : "")
-                .DATA(destination.getNumberOfQueuedMessages());
+        out.html(isDlq ? "DLQ:" : "");
+        out.DATA(destination.getNumberOfQueuedMessages());
         out.html(destination.getDestinationType() == DestinationType.QUEUE ? "</a>" : "</div>");
 
         long age = destination.getHeadMessageAgeMillis().orElse(0);

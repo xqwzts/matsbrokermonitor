@@ -44,7 +44,7 @@ function matsbm_button_forceupdate(event) {
         }, body: JSON.stringify(requestBody)
     }).then(response => {
         if (!response.ok) {
-            matsbm_response_not_ok_message(response);
+            matsbm_fetch_response_not_ok_message(response);
             return;
         }
         response.json().then(result => {
@@ -62,31 +62,48 @@ function matsbm_button_forceupdate(event) {
                     window.location.reload();
                 }, 3000)
             }
+        }).catch(error => {
+            matsbm_json_parse_error_message(error);
         });
     }).catch(error => {
-        console.error("Fetch error", error);
-        document.getElementById('matsbm_action_message').textContent = "Error! " + error;
+        matsbm_fetch_error_message(error);
     });
 }
 
-function matsbm_response_not_ok_message(response) {
+
+function matsbm_fetch_response_not_ok_message(response) {
     console.error("Response not OK", response);
     let actionMessage = document.getElementById('matsbm_action_message');
     actionMessage.textContent = "Error! HTTP Status: " + response.status + ": " + response.statusText;
     actionMessage.classList.add('matsbm_action_error');
 }
 
+function matsbm_json_parse_error_message(error) {
+    console.error("JSON error", error);
+    let actionMessage = document.getElementById('matsbm_action_message');
+    actionMessage.textContent = "JSON Error! " + error;
+    actionMessage.classList.add('matsbm_action_error');
+}
+
+function matsbm_fetch_error_message(error) {
+    console.error("Fetch error", error);
+    let actionMessage = document.getElementById('matsbm_action_message');
+    actionMessage.textContent = "Fetch Error! " + error;
+    actionMessage.classList.add('matsbm_action_error');
+}
+
+
 // ::: BROKER OVERVIEW
 
 function matsbm_button_show_all_destinations(event) {
-    window.location =  window.location.pathname + "?show=all";
+    window.location = window.location.pathname + "?show=all";
 
     document.getElementById("matsbm_button_show_all").classList.add('matsbm_button_active')
     document.getElementById("matsbm_button_show_bad").classList.remove('matsbm_button_active')
 }
 
 function matsbm_button_show_bad_destinations(event) {
-    window.location =  window.location.pathname + "?show=bad";
+    window.location = window.location.pathname + "?show=bad";
 
     document.getElementById("matsbm_button_show_all").classList.remove('matsbm_button_active')
     document.getElementById("matsbm_button_show_bad").classList.add('matsbm_button_active')
@@ -278,7 +295,7 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
         }, body: JSON.stringify(requestBody)
     }).then(response => {
         if (!response.ok) {
-            matsbm_response_not_ok_message(response);
+            matsbm_fetch_response_not_ok_message(response);
             return;
         }
         response.json().then(result => {
@@ -314,10 +331,11 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
                 }
                 setTimeout(() => window.location.reload(), 1000);
             }, 1500)
+        }).catch(error => {
+            matsbm_json_parse_error_message(error);
         });
     }).catch(error => {
-        console.error("Fetch error", error);
-        document.getElementById('matsbm_action_message').textContent = "Error! " + error;
+        matsbm_fetch_error_message(error);
     });
 }
 
@@ -414,7 +432,7 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
         }, body: JSON.stringify(requestBody)
     }).then(response => {
         if (!response.ok) {
-            matsbm_response_not_ok_message(response);
+            matsbm_fetch_response_not_ok_message(response);
             return;
         }
         response.json().then(result => {
@@ -441,10 +459,11 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
                 setTimeout(() => window.location = window.location.pathname + "?browse&destinationId=queue:" + queueId,
                     2000);
             }, 750);
+        }).catch(error => {
+            matsbm_json_parse_error_message(error);
         });
     }).catch(error => {
-        console.error("Fetch error", error);
-        document.getElementById('matsbm_action_message').textContent = "Error! " + error;
+        matsbm_fetch_error_message(error);
     });
 }
 

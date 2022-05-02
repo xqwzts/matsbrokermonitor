@@ -169,6 +169,11 @@
     color: white;
 }
 
+.matsbm_messages_dlq {
+    background-color: #FF7E31;
+    color: white;
+}
+
 /* :: Buttons: ViewAll, ViewBad */
 
 .matsbm_button_show_all {
