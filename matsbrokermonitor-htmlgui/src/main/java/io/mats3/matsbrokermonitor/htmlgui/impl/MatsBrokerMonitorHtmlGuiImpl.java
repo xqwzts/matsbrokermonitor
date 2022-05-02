@@ -83,14 +83,14 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
     /**
      * Note: The return from this method is static, and should only be included once per HTML page.
      */
-    public void getStyleSheet(Appendable out) throws IOException {
+    public void outputStyleSheet(Appendable out) throws IOException {
         includeFile(out, "matsbrokermonitor.css");
     }
 
     /**
      * Note: The return from this method is static, and should only be included once per HTML page.
      */
-    public void getJavaScript(Appendable out) throws IOException {
+    public void outputJavaScript(Appendable out) throws IOException {
         includeFile(out, "matsbrokermonitor.js");
     }
 
@@ -112,22 +112,22 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
     }
 
     @Override
-    public void gui(Appendable appendable, Map<String, String[]> requestParameters, AccessControl ac)
+    public void html(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException {
         long nanosAsStart_fullRender = System.nanoTime();
 
-        Outputter out = new Outputter(appendable);
+        Outputter outputter = new Outputter(out);
+
+        // move programmatically configured json-path over to javascript, for the static javascript to read.
+        outputter.html("<script>window.matsbm_json_path = '").DATA(_jsonUrlPath != null ? _jsonUrlPath : "null")
+                .html("';</script>\n");
+
         if (requestParameters.containsKey("browse")) {
             // -> Browse Queue
             String queueId = getBrowseQueueId(requestParameters, ac);
             // ----- Passed BROWSE Access Control for specific queueId.
 
-            // move programmatically configured json-path over to static javascript:
-            out.html("<script>window.matsbm_json_path = ").DATA(_jsonUrlPath != null
-                    ? "'" + _jsonUrlPath + "'"
-                    : "null").html(";</script>\n");
-
-            BrowseQueue.gui_BrowseQueue(_matsBrokerMonitor, _matsBrokerBrowseAndActions, _monitorAdditions, out,
+            BrowseQueue.gui_BrowseQueue(_matsBrokerMonitor, _matsBrokerBrowseAndActions, _monitorAdditions, outputter,
                     queueId, ac);
         }
         else if (requestParameters.containsKey("examineMessage")) {
@@ -151,13 +151,8 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             }
             String messageSystemId = messageSystemIds[0];
 
-            // move programmatically configured json-path over to static javascript:
-            out.html("<script>window.matsbm_json_path = ").DATA(_jsonUrlPath != null
-                    ? "'" + _jsonUrlPath + "'"
-                    : "null").html(";</script>\n");
-
             ExamineMessage.gui_ExamineMessage(_matsBrokerMonitor, _matsBrokerBrowseAndActions, _matsSerializer,
-                    _monitorAdditions, out, queueId, messageSystemId);
+                    _monitorAdditions, outputter, queueId, messageSystemId);
         }
         else {
             // E-> No view argument: Broker Overview
@@ -168,12 +163,12 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             }
             // ----- Passed Access Control for overview, render it.
 
-            BrokerOverview.gui_BrokerOverview(_matsBrokerMonitor, out, requestParameters, ac);
+            BrokerOverview.gui_BrokerOverview(_matsBrokerMonitor, outputter, requestParameters, ac);
         }
 
         long nanosTaken_fullRender = System.nanoTime() - nanosAsStart_fullRender;
-        out.html("Render time: ").DATA(Math.round(nanosTaken_fullRender / 1000d) / 1000d).html(" ms.");
-        out.html("</div>");
+        outputter.html("Render time: ").DATA(Math.round(nanosTaken_fullRender / 1000d) / 1000d).html(" ms.");
+        outputter.html("</div>");
     }
 
     private String getBrowseQueueId(Map<String, String[]> requestParameters, AccessControl ac) {

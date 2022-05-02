@@ -60,7 +60,6 @@ import io.mats3.matsbrokermonitor.activemq.ActiveMqMatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
-import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AllowAllAccessControl;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.BrowseQueueTableAddition;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.ExamineMessageAddition;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.MonitorAddition;
@@ -74,6 +73,8 @@ import io.mats3.test.MatsTestHelp;
 import io.mats3.test.broker.MatsTestBroker;
 import io.mats3.util.MatsFuturizer;
 import io.mats3.util.MatsFuturizer.Reply;
+
+import static io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.ACCESS_CONTROL_ALLOW_ALL;
 
 /**
  * @author Endre Stølsvik 2021-12-31 01:50 - http://stolsvik.com/, endre@stolsvik.com
@@ -413,12 +414,10 @@ public class MatsBrokerMonitor_TestJettyServer {
             MatsBrokerMonitorHtmlGui brokerMonitorHtmlGui = (MatsBrokerMonitorHtmlGui) req.getServletContext()
                     .getAttribute("matsBrokerMonitorHtmlGui1");
 
-            AllowAllAccessControl accessControl = new AllowAllAccessControl();
-
             String body = req.getReader().lines().collect(Collectors.joining("\n"));
             res.setContentType("application/json; charset=utf-8");
             PrintWriter out = res.getWriter();
-            brokerMonitorHtmlGui.json(out, req.getParameterMap(), body, accessControl);
+            brokerMonitorHtmlGui.json(out, req.getParameterMap(), body, ACCESS_CONTROL_ALLOW_ALL);
         }
 
         @Override
@@ -426,8 +425,6 @@ public class MatsBrokerMonitor_TestJettyServer {
             // :: MatsBrokerMonitorHtmlGUI instance
             MatsBrokerMonitorHtmlGui brokerMonitorHtmlGui = (MatsBrokerMonitorHtmlGui) req.getServletContext()
                     .getAttribute("matsBrokerMonitorHtmlGui1");
-
-            AllowAllAccessControl accessControl = new AllowAllAccessControl();
 
             res.setContentType("text/html; charset=utf-8");
 
@@ -479,11 +476,11 @@ public class MatsBrokerMonitor_TestJettyServer {
             // much "accidental difference" due to the Bootstrap's setting of margin=0.
             out.println("  <body style=\"margin: 0;\">");
             out.println("    <style>");
-            brokerMonitorHtmlGui.getStyleSheet(out); // Include just once, use the first.
+            brokerMonitorHtmlGui.outputStyleSheet(out); // Include just once, use the first.
             localInspect.getStyleSheet(out); // Include just once, use the first.
             out.println("    </style>");
             out.println("    <script>");
-            brokerMonitorHtmlGui.getJavaScript(out); // Include just once, use the first.
+            brokerMonitorHtmlGui.outputJavaScript(out); // Include just once, use the first.
             localInspect.getJavaScript(out);
             out.println("    </script>");
             out.println(" <a href=\"sendRequest\">Send request</a> - to initialize Initiator"
@@ -496,7 +493,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             }
             out.println("<h1>MatsBrokerMonitor HTML embedded GUI</h1>");
             Map<String, String[]> parameterMap = req.getParameterMap();
-            brokerMonitorHtmlGui.gui(out, parameterMap, accessControl);
+            brokerMonitorHtmlGui.html(out, parameterMap, ACCESS_CONTROL_ALLOW_ALL);
             if (includeBootstrap3) {
                 out.write("</div>\n");
             }

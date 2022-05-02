@@ -29,20 +29,22 @@ public interface MatsBrokerMonitorHtmlGui {
     }
 
     /**
-     * Note: The return from this method is static.
+     * Note: The output from this method is static, it can be written directly to the HTML page in a script-tag,
+     * or included as a separate file (with hard caching).
      */
-    void getStyleSheet(Appendable out) throws IOException;
+    void outputStyleSheet(Appendable out) throws IOException;
 
     /**
-     * Note: The return from this method is static.
+     * Note: The output from this method is static, it can be written directly to the HTML page in a style-tag,
+     * or included as a separate file (with hard caching).
      */
-    void getJavaScript(Appendable out) throws IOException;
+    void outputJavaScript(Appendable out) throws IOException;
 
     /**
      * The embeddable HTML GUI - map this to GET, content type is <code>"text/html; charset=utf-8"</code>. This might
      * call to {@link #json(Appendable, Map, String, AccessControl)}.
      */
-    void gui(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
+    void html(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException, AccessDeniedException;
 
     /**
@@ -105,7 +107,7 @@ public interface MatsBrokerMonitorHtmlGui {
         }
     }
 
-    class AllowAllAccessControl implements AccessControl {
+    AccessControl ACCESS_CONTROL_ALLOW_ALL = new AccessControl() {
         @Override
         public boolean overview() {
             return true;
@@ -130,7 +132,7 @@ public interface MatsBrokerMonitorHtmlGui {
         public boolean reissueMessage(String fromDeadLetterQueueId) {
             return true;
         }
-    }
+    };
 
     class AccessDeniedException extends RuntimeException {
         public AccessDeniedException(String message) {
