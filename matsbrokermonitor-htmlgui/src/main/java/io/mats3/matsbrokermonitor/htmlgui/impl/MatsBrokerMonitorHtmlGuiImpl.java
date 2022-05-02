@@ -119,8 +119,14 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
         Outputter outputter = new Outputter(out);
 
         // move programmatically configured json-path over to javascript, for the static javascript to read.
-        outputter.html("<script>window.matsbm_json_path = '").DATA(_jsonUrlPath != null ? _jsonUrlPath : "null")
-                .html("';</script>\n");
+        outputter.html("<script>window.matsbm_json_path = ");
+        if (_jsonUrlPath != null) {
+            outputter.html("'").DATA(_jsonUrlPath).html("'");
+        }
+        else {
+            outputter.html("null");
+        }
+        outputter.html(";</script>\n");
 
         if (requestParameters.containsKey("browse")) {
             // -> Browse Queue
