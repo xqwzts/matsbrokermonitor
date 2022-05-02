@@ -171,14 +171,14 @@
 
 /* :: Buttons: ViewAll, ViewBad */
 
-.matsbm_button_viewall {
+.matsbm_button_show_all {
     background-color: #008CBA;
     transition: background-color 0.3s, color 0.3s;
     position: relative;
     z-index: 2;
 }
 
-.matsbm_button_viewbad {
+.matsbm_button_show_bad {
     margin-left: 0.8em;
     background-color: #e57f00;
     transition: background-color 0.3s, color 0.3s;
@@ -215,22 +215,6 @@
     background-color: #ffff99;
 }
 
-/* table-row ToC endpointgroups show/hide transitions */
-
-/* .. show */
-.matsbm_toc_endpointgroup td div {
-    transition: all 1.5s;
-}
-
-/* .. hide */
-.matsbm_marker_hidden_toc td, .matsbm_marker_hidden_toc td div {
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
-    line-height: 0;
-    opacity: 0;
-    transition: all 1.5s;
-}
-
 
 /* :: Endpoint Groups boxes */
 
@@ -245,29 +229,7 @@
     background: #e8f0e8;
     margin: 0.5em 0.5em 1em 0.5em;
     max-height: 100000px;
-    transition: all 0.5s;
 }
-
-/* box endpoint group show/hide transitions */
-
-/* .. show */
-.matsbm_endpoint_group h2 {
-    transition: line-height 0.5s;
-}
-
-/* .. hide */
-.matsbm_marker_hidden_epgrp, .matsbm_marker_hidden_epgrp h2 {
-    max-height: 0;
-    opacity: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-    margin-top: 0;
-    margin-bottom: -0.6em;
-    /*transition: max-height 1.5s, opacity 1.5s, padding 1.5s, margin 1.5s;*/
-    line-height: 0;
-    transition: all 0.5s linear 0.7s;
-}
-
 
 /* table: Endpoints in EndpointGroup box */
 
@@ -298,42 +260,13 @@
     background-color: #ffff99;
 }
 
-/* table-row endpoint show/hide transitions */
-
-/* .. show */
 .matsbm_table_endpointgroup td {
-    transition: line-height 1.5s;
 }
 
 .matsbm_table_endpointgroup td div {
     max-height: 17pt;
     overflow: hidden;
     vertical-align: top;
-    transition: padding 1.5s, margin 1.5s, border 0.9s linear 0.6s, max-height 1.5s, opacity 1.5s, transform 1.5s;
-}
-
-/* .. hide */
-.matsbm_marker_hidden_row td {
-    line-height: 0;
-    transition: line-height 1.5s;
-}
-
-.matsbm_marker_hidden_row td div {
-    padding-top: 0;
-    padding-bottom: 0;
-    margin-top: 0;
-    margin-bottom: 0;
-
-    border-top-width: 0;
-    border-bottom-width: 0;
-
-    max-height: 0;
-
-    opacity: 0;
-
-    transform: scaleY(0.5);
-
-    transition: padding 1.5s, margin 1.5s, border 0.9s, max-height 1.5s, opacity 1.5s, transform 1.5s;
 }
 
 /* Markers for states of ep-groups and eps: Has incoming messages, Has DLQs */
@@ -435,7 +368,6 @@
     padding: 0px 10px;
     text-align: center;
     border: 0;
-    transition: box-shadow 0.4s;
 }
 
 .matsbm_report .topic {

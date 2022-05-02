@@ -124,16 +124,31 @@ class BrokerOverview {
         }
         out.html("</div>\n");
 
-        boolean startWithBad = brokerHasDlqMsgs || brokerHasOldMsgs;
+        // :: Decide whether to show all or bad only.
+        // Start with deciding based on whether there are "bad" (DLQ or old)
+        boolean showBadOnly = brokerHasDlqMsgs || brokerHasOldMsgs;
+        // .. override with any "show" parameter
+        String[] showParam = requestParameters.get("show");
+        if (showParam != null) {
+            if ("bad".equals(showParam[0])) {
+                showBadOnly = true;
+            }
+            else if ("all".equals(showParam[0])) {
+                showBadOnly = false;
+            }
+            else {
+                throw new IllegalArgumentException("Parameter 'show' can only be 'all' or 'bad'");
+            }
+        }
 
         // :: BUTTONS: View All vs View Bad
 
-        out.html("<input type='button' id='matsbm_button_viewall' value='View All'"
-                + " class='matsbm_button matsbm_button_viewall" + (startWithBad ? "" : " matsbm_button_active")
-                + "' onclick='matsbm_button_view_all_destinations(event)'>");
-        out.html("<input type='button' id='matsbm_button_viewbad' value='View Bad'"
-                + " class='matsbm_button matsbm_button_viewbad" + (startWithBad ? " matsbm_button_active" : "")
-                + "' onclick='matsbm_button_view_bad_destinations(event)'>");
+        out.html("<input type='button' id='matsbm_button_show_all' value='Show All'"
+                + " class='matsbm_button matsbm_button_show_all" + (showBadOnly ? "" : " matsbm_button_active")
+                + "' onclick='matsbm_button_show_all_destinations(event)'>");
+        out.html("<input type='button' id='matsbm_button_show_bad' value='Show Bad'"
+                + " class='matsbm_button matsbm_button_show_bad" + (showBadOnly ? " matsbm_button_active" : "")
+                + "' onclick='matsbm_button_show_bad_destinations(event)'>");
         out.html("<input type='button' id='matsbm_button_forceupdate' value='Update Now!'"
                 + " class='matsbm_button matsbm_button_forceupdate"
                 + "' onclick='matsbm_button_forceupdate(event)'>");
@@ -150,10 +165,15 @@ class BrokerOverview {
             long dlqMessages = endpointGroup.getTotalNumberOfDlqMessages();
             boolean hasDlqMsgs = dlqMessages > 0;
 
+            // ?: Should we only show bad, but there is no DLQs or old messages?
+            if (showBadOnly && !(hasDlqMsgs|| hasOldMsgs)) {
+                // -> Yes, only show bad, but this is not bad, so skip.
+                continue;
+            }
+
             out.html("<tr class='matsbm_toc_endpointgroup")
                     .html(hasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
                     .html(hasDlqMsgs ? " matsbm_marker_has_dlqs" : "")
-                    .html(startWithBad && !(hasOldMsgs || hasDlqMsgs) ? " matsbm_marker_hidden_toc" : "")
                     .html("'>");
             out.html("<td><div class='matsbm_toc_content'>");
             String endpointGroupId = endpointGroup.getEndpointGroup().trim().isEmpty()
@@ -195,31 +215,33 @@ class BrokerOverview {
         if (stack.getDefaultGlobalDlq().isPresent()) {
             MatsBrokerDestination globalDlq = stack.getDefaultGlobalDlq().get();
             boolean hasDlqMsgs = globalDlq.getNumberOfQueuedMessages() > 0;
-            out.html("<div class='matsbm_endpoint_group")
-                    .html(hasDlqMsgs ? " matsbm_marker_has_dlqs" : "")
-                    .html(startWithBad && !hasDlqMsgs ? " matsbm_marker_hidden_epgrp" : "")
-                    .html("'>");
-            out.html("<h2>Global DLQ</h2><br>");
-            out.html("<table class='matsbm_table_endpointgroup'>");
-            out.html("<tr class='matsbm_endpoint_group_row")
-                    .html(hasDlqMsgs ? " matsbm_marker_has_dlqs" : "")
-                    .html(startWithBad && !hasDlqMsgs ? " matsbm_marker_hidden_row" : "")
-                    .html("'>");
-            out.html("<td>");
-            out.html("<div class='matsbm_bo_stageid matsbm_bo_stageid_queue'>")
-                    .DATA(globalDlq.getDestinationName())
-                    .html("</div>");
-            out.html("</td><td><div class='matsbm_label matsbm_label_queue'>Queue</div></td>");
+            // ?: Do we have DLQs, or should we show all?
+            if (hasDlqMsgs || !showBadOnly) {
 
-            out.html("<td>");
-            out.html("<div class='matsbm_stage_box'>")
-                    .DATA(globalDlq.getFqDestinationName());
-            out_queueCount(out, globalDlq);
-            out.html("</div>");
-            out.html("</td>");
-            out.html("</table>");
+                out.html("<div class='matsbm_endpoint_group")
+                        .html(hasDlqMsgs ? " matsbm_marker_has_dlqs" : "")
+                        .html("'>");
+                out.html("<h2>Global DLQ</h2><br>");
+                out.html("<table class='matsbm_table_endpointgroup'>");
+                out.html("<tr class='matsbm_endpoint_group_row")
+                        .html(hasDlqMsgs ? " matsbm_marker_has_dlqs" : "")
+                        .html("'>");
+                out.html("<td>");
+                out.html("<div class='matsbm_bo_stageid matsbm_bo_stageid_queue'>")
+                        .DATA(globalDlq.getDestinationName())
+                        .html("</div>");
+                out.html("</td><td><div class='matsbm_label matsbm_label_queue'>Queue</div></td>");
 
-            out.html("</div>");
+                out.html("<td>");
+                out.html("<div class='matsbm_stage_box'>")
+                        .DATA(globalDlq.getFqDestinationName());
+                out_queueCount(out, globalDlq);
+                out.html("</div>");
+                out.html("</td>");
+                out.html("</table>");
+
+                out.html("</div>");
+            }
         }
 
         // :: Foreach EndpointGroup
@@ -229,13 +251,18 @@ class BrokerOverview {
             boolean epgrHasOldMsgs = endpointGroup.getOldestIncomingMessageAgeMillis().orElse(-1) > TOO_OLD;
             boolean epgrHasDlqsmsgs = endpointGroup.getTotalNumberOfDlqMessages() > 0;
 
+            // ?: Should we only show bad, but there is no DLQs or old messages in this endpoint group?
+            if (showBadOnly && !(epgrHasDlqsmsgs|| epgrHasOldMsgs)) {
+                // -> Yes, only show bad, but this is not bad, so skip.
+                continue;
+            }
+
             String endpointGroupId = endpointGroup.getEndpointGroup().trim().isEmpty()
                     ? "{empty string}"
                     : endpointGroup.getEndpointGroup();
             out.html("<div class='matsbm_endpoint_group")
                     .html(epgrHasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
                     .html(epgrHasDlqsmsgs ? " matsbm_marker_has_dlqs" : "")
-                    .html(startWithBad && !(epgrHasOldMsgs || epgrHasDlqsmsgs) ? " matsbm_marker_hidden_epgrp" : "")
                     .html("' id='").DATA(endpointGroupId).html("'>\n");
             out.html("<a href='#").DATA(endpointGroupId).html("'>");
             out.html("<h2>").DATA(endpointGroupId).html("</h2></a><br>\n");
@@ -247,10 +274,15 @@ class BrokerOverview {
                 boolean epHasOldMsgs = endpoint.getOldestIncomingMessageAgeMillis().orElse(-1) > TOO_OLD;
                 boolean epHasDlqsMsgs = endpoint.getTotalNumberOfDlqMessages() > 0;
 
+                // ?: Should we only show bad, but there is no DLQs or old messages in this endpoint?
+                if (showBadOnly && !(epHasDlqsMsgs|| epHasOldMsgs)) {
+                    // -> Yes, only show bad, but this is not bad, so skip.
+                    continue;
+                }
+
                 out.html("<tr class='matsbm_endpoint_group_row")
                         .html(epHasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
                         .html(epHasDlqsMsgs ? " matsbm_marker_has_dlqs" : "")
-                        .html(startWithBad && !(epHasOldMsgs || epHasDlqsMsgs) ? " matsbm_marker_hidden_row" : "")
                         .html("'>");
                 String endpointId = endpoint.getEndpointId();
                 Map<Integer, MatsStageBrokerRepresentation> stages = endpoint.getStages();

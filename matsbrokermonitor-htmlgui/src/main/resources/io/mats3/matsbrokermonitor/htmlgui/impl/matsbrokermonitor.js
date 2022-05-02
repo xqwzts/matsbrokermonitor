@@ -78,64 +78,18 @@ function matsbm_response_not_ok_message(response) {
 
 // ::: BROKER OVERVIEW
 
-function matsbm_button_view_all_destinations(event) {
-    console.log("view all")
-    // :: ToC EndpointGroup
-    for (const tocEpGroupRow of document.body.querySelectorAll(".matsbm_toc_endpointgroup")) {
-        // -> Remove the "hidden" class
-        tocEpGroupRow.classList.remove("matsbm_marker_hidden_toc");
-    }
+function matsbm_button_show_all_destinations(event) {
+    window.location =  window.location.pathname + "?show=all";
 
-    // :: Endpoints (rows in table)
-    for (const epRow of document.body.querySelectorAll(".matsbm_endpoint_group_row")) {
-        // -> Remove the "hidden" class
-        epRow.classList.remove("matsbm_marker_hidden_row");
-    }
-
-    // :: EndpointGroups (divs with endpoint-table inside)
-    for (const epGroupDiv of document.body.querySelectorAll(".matsbm_endpoint_group")) {
-        // -> Remove the "hidden" class
-        epGroupDiv.classList.remove("matsbm_marker_hidden_epgrp");
-    }
-
-    document.getElementById("matsbm_button_viewall").classList.add('matsbm_button_active')
-    document.getElementById("matsbm_button_viewbad").classList.remove('matsbm_button_active')
+    document.getElementById("matsbm_button_show_all").classList.add('matsbm_button_active')
+    document.getElementById("matsbm_button_show_bad").classList.remove('matsbm_button_active')
 }
 
-function matsbm_button_view_bad_destinations(event) {
-    console.log("view bad")
-    // :: ToC EndpointGroup
-    for (const tocEpGroupRow of document.body.querySelectorAll(".matsbm_toc_endpointgroup")) {
-        // ?: Does the ToC entry NOT have any of the "bad" markers?
-        if (!(tocEpGroupRow.classList.contains("matsbm_marker_has_old_msgs")
-            || tocEpGroupRow.classList.contains("matsbm_marker_has_dlqs"))) {
-            // -> No, does not have "bad" markers: Hide them
-            tocEpGroupRow.classList.add("matsbm_marker_hidden_toc");
-        }
-    }
+function matsbm_button_show_bad_destinations(event) {
+    window.location =  window.location.pathname + "?show=bad";
 
-    // :: Endpoints (rows in table)
-    for (const epRow of document.body.querySelectorAll(".matsbm_endpoint_group_row")) {
-        // ?: Does the group NOT have any of the "bad" markers?
-        if (!(epRow.classList.contains("matsbm_marker_has_old_msgs")
-            || epRow.classList.contains("matsbm_marker_has_dlqs"))) {
-            // -> No, does not have "bad" markers: Hide them
-            epRow.classList.add("matsbm_marker_hidden_row");
-        }
-    }
-
-    // :: EndpointGroups (divs with endpoint-table inside)
-    for (const epGroupDiv of document.body.querySelectorAll(".matsbm_endpoint_group")) {
-        // ?: Does the group NOT have any of the "bad" markers?
-        if (!(epGroupDiv.classList.contains("matsbm_marker_has_old_msgs")
-            || epGroupDiv.classList.contains("matsbm_marker_has_dlqs"))) {
-            // -> No, does not have "bad" markers: Hide them
-            epGroupDiv.classList.add("matsbm_marker_hidden_epgrp");
-        }
-    }
-
-    document.getElementById("matsbm_button_viewall").classList.remove('matsbm_button_active')
-    document.getElementById("matsbm_button_viewbad").classList.add('matsbm_button_active')
+    document.getElementById("matsbm_button_show_all").classList.remove('matsbm_button_active')
+    document.getElementById("matsbm_button_show_bad").classList.add('matsbm_button_active')
 }
 
 
