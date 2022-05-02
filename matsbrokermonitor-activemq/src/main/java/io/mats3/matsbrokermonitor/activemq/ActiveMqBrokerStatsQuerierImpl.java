@@ -48,12 +48,19 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
     private final Clock _clock;
     private final long _updateIntervalMillis;
 
+    /**
+     * 2.5 minutes query interval.
+     */
     static ActiveMqBrokerStatsQuerierImpl create(ConnectionFactory connectionFactory) {
         return create(connectionFactory, DEFAULT_UPDATE_INTERVAL_MILLIS);
     }
 
-    static ActiveMqBrokerStatsQuerierImpl create(ConnectionFactory connectionFactory, long updateIntervalMillisMillis) {
-        return new ActiveMqBrokerStatsQuerierImpl(connectionFactory, Clock.systemUTC(), updateIntervalMillisMillis);
+    /**
+     * Using specified query interval, should not be too small, in particular if lots of queues and topics, as each
+     * queue and topic gets its own statistics reply message: Less than 30 seconds would be much too often.
+     */
+    static ActiveMqBrokerStatsQuerierImpl create(ConnectionFactory connectionFactory, long updateIntervalMillis) {
+        return new ActiveMqBrokerStatsQuerierImpl(connectionFactory, Clock.systemUTC(), updateIntervalMillis);
     }
 
     private ActiveMqBrokerStatsQuerierImpl(ConnectionFactory connectionFactory, Clock clock,
@@ -110,10 +117,11 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         // First set _runStatus to RUNNING, so threads will be happy
         _runStatus = RunStatus.RUNNING;
         log.info("Starting ActiveMQ Broker statistics querier.");
+        String id = "(Querier@" + Integer.toHexString(System.identityHashCode(this)) + ")";
         _sendStatsRequestMessages_Thread = new Thread(this::sendStatsRequestMessages,
-                "MatsBrokerMonitor.ActiveMQ: Sending Statistics request messages");
+                "MatsBrokerMonitor.ActiveMQ: Send Statistics request messages " + id);
         _receiveDestinationsStatsReplyMessages_Thread = new Thread(this::receiveStatisticsReplyMessagesRunnable,
-                "MatsBrokerMonitor.ActiveMQ: Receive Destination Statistics reply messages");
+                "MatsBrokerMonitor.ActiveMQ: Receive&Process Statistics reply messages " + id);
 
         // :: First start reply consumer
         _receiveDestinationsStatsReplyMessages_Thread.start();
@@ -153,7 +161,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         }
         // .. interrupt the request sender if the above didn't work.
         interruptThread(_sendStatsRequestMessages_Thread);
-        // .. interrupt the receivers too if they haven't gotten out.
+        // .. interrupt the receiver too if they haven't gotten out.
         interruptThread(_receiveDestinationsStatsReplyMessages_Thread);
         // Null out Threads
         _sendStatsRequestMessages_Thread = null;
@@ -436,6 +444,8 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                         producer.send(requestQueuesQueue_globalDlq, requestGlobalDlqMsg);
                     }
 
+                    // :: Send the null-termination query (query w/o any destination replies, only the null-terminator)
+
                     // Do we currently have a specific correlationId?
                     if (correlationIdToSend == null) {
                         // -> No specific correlation Id, so make a "normal" Scheduled correlationId.
@@ -447,7 +457,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                         correlationIdToSend = constructCorrelationIdToSend(false, timeBasedFullUpdate, random);
                     }
 
-                    // Send the null-termination query (query w/o any destination replies, only the null-terminator)
+                    // .. construct the null-termination message
                     Message requestNullTermination = session.createMessage();
                     requestNullTermination.setJMSReplyTo(replyStatisticsTopic);
                     // .. set the special property which directs the StatisticsPlugin to "empty terminate" the replies.
@@ -471,11 +481,10 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                                 break;
                             }
                             // E-> No forced update, so calculate how long to wait
-                            // 5% randomness
+                            // 5% randomness, 2.5% to both sides
                             long randomRange = (long) Math.max(150, _updateIntervalMillis * .05d);
-                            long currentRandom = Math.round(ThreadLocalRandom.current().nextDouble() * randomRange);
-                            long halfRandomRange = randomRange / 2;
-                            long currentWait = _updateIntervalMillis - halfRandomRange + currentRandom;
+                            long randomness = Math.round(ThreadLocalRandom.current().nextDouble() * randomRange);
+                            long currentWait = Math.max(1, _updateIntervalMillis - (randomRange / 2) + randomness);
 
                             // Do wait.
                             _waitObject_And_ForceUpdateOutstandingCorrelationIds.wait(currentWait);
