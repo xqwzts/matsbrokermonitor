@@ -84,20 +84,37 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             Session session = connection.createSession(false, Session.DUPS_OK_ACKNOWLEDGE);
             Queue queue = session.createQueue(queueId);
 
+            // NOTICE: This is not optimal in any way, but to avoid premature optimizations and more complex code
+            // before it is needed, I'll just let it be like this: Single receive and drop (delete), loop.
+            // Could have batched harder using the 'messageSelector' with an OR-construct.
+
             ArrayList<String> deletedMessageIds = new ArrayList<>();
             for (String messageSystemId : messageSystemIds) {
                 MessageConsumer consumer = session.createConsumer(queue, "JMSMessageID = '" + messageSystemId + "'");
                 Message message = consumer.receive(RECEIVE_TIMEOUT_MILLIS);
-                if (message != null) {
-                    log.info("DELETED MESSAGE: Received and dropping message for id [" + messageSystemId
-                            + "]! Messages Mats' TraceId:[" + message.getStringProperty(JMS_MSG_PROP_TRACE_ID) + "]");
-                    deletedMessageIds.add(message.getJMSMessageID());
+                try {
+                    MDC.put(MDC_MATS_MESSAGE_SYSTEM_ID, messageSystemId);
+                    if (message != null) {
+                        String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
+                        MDC.put(MDC_MATS_STAGE_ID, message.getStringProperty(JMS_MSG_PROP_TO));
+                        MDC.put(MDC_TRACE_ID, traceId);
+                        MDC.put(MDC_MATS_MESSAGE_ID, message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID));
+                        log.info("DELETED MESSAGE: Received and dropping message from [" + queue + "]!"
+                                + " MsgSysId [" + messageSystemId + "], Message TraceId: [" + traceId + "]");
+                        deletedMessageIds.add(message.getJMSMessageID());
+                    }
+                    else {
+                        log.info("DELETE NOT DONE: Did NOT receive a message for id [" + messageSystemId
+                                + "], not deleted.");
+                    }
+                    consumer.close();
                 }
-                else {
-                    log.info("DELETE NOT DONE: Did NOT receive a message for id [" + messageSystemId
-                            + "], not deleted.");
+                finally {
+                    MDC.remove(MDC_MATS_MESSAGE_SYSTEM_ID);
+                    MDC.remove(MDC_MATS_STAGE_ID);
+                    MDC.remove(MDC_TRACE_ID);
+                    MDC.remove(MDC_MATS_MESSAGE_ID);
                 }
-                consumer.close();
             }
             session.close();
             connection.close();
@@ -126,7 +143,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             MessageProducer genericProducer = session.createProducer(null);
 
             // NOTICE: This is not optimal in any way, but to avoid premature optimizations and more complex code
-            // before it is needed, I'll just let it be like this: Single move, commit tx.
+            // before it is needed, I'll just let it be like this: Single receive-then-send (move), commit tx, loop.
             // Could have batched harder, both within transaction, and via the 'messageSelector' using an OR-construct.
 
             Map<String, String> reissuedMessageIds = new LinkedHashMap<>(messageSystemIds.size());
@@ -145,18 +162,22 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                         if (originalTo != null) {
                             String toQueueName = _matsDestinationPrefix + originalTo;
                             Queue toQueue = session.createQueue(toQueueName);
-                            log.info("REISSUE MESSAGE: Received and reissued message from dlq [" + dlq
-                                    + "] to [" + toQueue + "]!");
-
+                            // Send it ..
                             genericProducer.send(toQueue, message);
-                            reissuedMessageIds.put(messageSystemId, message.getJMSMessageID());
+                            // .. afterwards it has the new JMS Message ID.
+                            String newMsgSysId = message.getJMSMessageID();
+                            log.info("REISSUE MESSAGE: Received and reissued message from dlq [" + dlq
+                                    + "] to [" + toQueue + "]! Original MsgSysId: [" + messageSystemId
+                                    + "], New MsgSysId: [" + newMsgSysId + "], Message TraceId: [" + traceId + "]");
+
+                            reissuedMessageIds.put(messageSystemId, newMsgSysId);
                         }
                         else {
                             String matsDeadLetterQueue = _matsDestinationPrefix + MATS_DEAD_LETTER_ENDPOINT_ID;
                             Queue matsDlq = session.createQueue(matsDeadLetterQueue);
-                            log.error("Found message without JmsMats JMS StringProperty [" + JMS_MSG_PROP_TO
-                                    + "], so don't know where it was originally destined. Sending it to a"
-                                    + " synthetic Mats \"DLQ\" endpoint [" + matsDlq + "] to handle it,"
+                            log.error("REISSUE FAILED: Found message without JmsMats JMS StringProperty ["
+                                    + JMS_MSG_PROP_TO + "], so don't know where it was originally destined. Sending it"
+                                    + " to a synthetic Mats \"DLQ\" endpoint [" + matsDlq + "] to handle it,"
                                     + " and get it away from the DLQ. You may inspect it there, and either delete it,"
                                     + " or if an actual Mats message, code up a consumer for the endpoint.");
                             genericProducer.send(matsDlq, message);
