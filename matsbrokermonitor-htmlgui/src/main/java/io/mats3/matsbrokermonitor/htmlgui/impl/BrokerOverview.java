@@ -119,9 +119,8 @@ class BrokerOverview {
         // ::: Heading DLQed Messages
         long totalNumberOfDeadLetterMessages = stack.getTotalNumberOfDlqMessages();
         brokerHasDlqMsgs = totalNumberOfDeadLetterMessages > 0;
-        out.html("Total DLQed messages: ")
-                .html(brokerHasDlqMsgs ? "<span class='matsbm_messages_dlq'>" : "")
-                .html("<b>").DATA(totalNumberOfDeadLetterMessages).html("</b>");
+        out.html(brokerHasDlqMsgs ? "<span class='matsbm_messages_dlq'>" : "")
+                .html("Total DLQed messages: <b>").DATA(totalNumberOfDeadLetterMessages).html("</b>");
         if (brokerHasDlqMsgs) {
             long maxQueue = stack.getMaxStageNumberOfDlqMessages();
             out.html(", worst DLQ has <b>").DATA(maxQueue).html("</b> message").html(maxQueue > 1 ? "s" : "");
@@ -207,9 +206,8 @@ class BrokerOverview {
                         .html(hasOldMsgs ? "</span>" : "");
             }
             out.html("</div></td><td><div class='matsbm_toc_content'>");
-            out.html("ΣDLQ:")
-                    .html(dlqMessages > 0 ? "<span class='matsbm_messages_dlq'>" : "")
-                    .html("<b>").DATA(dlqMessages).html("</b>");
+            out.html(dlqMessages > 0 ? "<span class='matsbm_messages_dlq'>" : "")
+                    .html("ΣDLQ:<b>").DATA(dlqMessages).html("</b>");
             if (dlqMessages > 0) {
                 long maxQueue = endpointGroup.getMaxStageNumberOfDlqMessages();
                 out.html(", worst:<b>").DATA(maxQueue).html("</b>");

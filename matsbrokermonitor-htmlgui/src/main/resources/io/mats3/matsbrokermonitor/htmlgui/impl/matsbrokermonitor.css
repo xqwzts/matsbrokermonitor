@@ -167,11 +167,16 @@
 .matsbm_messages_old {
     background-color: red;
     color: white;
+    padding-left: 0.3em;
+    padding-right: 0.3em;
 }
 
 .matsbm_messages_dlq {
     background-color: #FF7E31;
     color: white;
+    padding-left: 0.3em;
+    margin-left: -0.3em;
+    padding-right: 0.3em;
 }
 
 /* :: Buttons: ViewAll, ViewBad */
@@ -418,7 +423,7 @@
 
 .matsbm_age {
     display: inline;
-    font-size: 75%;
+    font-size: 80%;
     line-height: 1.9em;
     font-style: italic;
     margin-left: 0.3em;
