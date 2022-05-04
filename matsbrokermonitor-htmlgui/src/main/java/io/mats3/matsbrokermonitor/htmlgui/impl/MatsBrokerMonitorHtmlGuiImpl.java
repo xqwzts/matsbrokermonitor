@@ -209,7 +209,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
     @Override
     public void json(Appendable out, Map<String, String[]> requestParameters, String requestBody,
             AccessControl ac) throws IOException, AccessDeniedException {
-        log.info("JSON RequestBody: " + requestBody);
+        log.info("MatsBrokerMonitorHtmlGui: JSON RequestBody: " + requestBody);
         CommandDto command = MAPPER.readValue(requestBody, CommandDto.class);
 
         if (command.action == null) {
@@ -285,15 +285,15 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
                 // event with the same correlationId.
                 CountDownLatch countDownLatch = new CountDownLatch(1);
                 _updateEventWaiters.put(correlationId, countDownLatch);
-                log.info("Update: executing matsBrokerMonitor.forceUpdate(\"" + correlationId + "\", false);");
+                log.info("update: executing matsBrokerMonitor.forceUpdate(\"" + correlationId + "\", false);");
                 _matsBrokerMonitor.forceUpdate(correlationId, false);
                 updatedOkWithinTimeout = countDownLatch.await(FORCE_UPDATE_TIMEOUT, TimeUnit.MILLISECONDS);
                 long nanosTaken_wait = System.nanoTime() - nanosAtStart_wait;
-                log.info("Update: updatedOkWithinTimeout: [" + updatedOkWithinTimeout
+                log.info("update: updatedOkWithinTimeout: [" + updatedOkWithinTimeout
                         + "] (waited [" + Math.round((nanosTaken_wait / 1000d) / 1000d) + "] ms).");
             }
             catch (InterruptedException e) {
-                log.info("Update: Got interrupted while waiting for matsBrokerMonitor.forceRefresh(" + correlationId
+                log.warn("update: Got interrupted while waiting for matsBrokerMonitor.forceRefresh(" + correlationId
                         + ", false) - assuming shutdown, trying to reply 'no can do'.");
                 updatedOkWithinTimeout = false;
             }

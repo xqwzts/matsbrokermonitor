@@ -150,7 +150,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
             _waitObject_And_ForceUpdateOutstandingCorrelationIds.notifyAll();
         }
         // Closing Connections for the receiver - they'll wake up from 'con.receive()'.
-        closeConnectionIgnoreException(_receiveDestinationsStatsReplyMessages_Connection);
+        closeConnectionIfNonNullIgnoreException(_receiveDestinationsStatsReplyMessages_Connection);
         // Check that all threads exit
         try {
             _sendStatsRequestMessages_Thread.join(TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN);
@@ -176,7 +176,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         _matsDestinationPrefix = matsDestinationPrefix;
     }
 
-    private void closeConnectionIgnoreException(Connection connection) {
+    private static void closeConnectionIfNonNullIgnoreException(Connection connection) {
         if (connection == null) {
             return;
         }
@@ -481,8 +481,8 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                                 break;
                             }
                             // E-> No forced update, so calculate how long to wait
-                            // 5% randomness, 2.5% to both sides
-                            long randomRange = (long) Math.max(150, _updateIntervalMillis * .05d);
+                            // 10% randomness, 5% to both sides
+                            long randomRange = (long) Math.max(150, _updateIntervalMillis * .1d);
                             long randomness = Math.round(ThreadLocalRandom.current().nextDouble() * randomRange);
                             long currentWait = Math.max(1, _updateIntervalMillis - (randomRange / 2) + randomness);
 
@@ -521,12 +521,12 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 }
                 log.warn("Got a [" + t.getClass().getSimpleName() + "] in the query-loop."
                         + " Attempting to close JMS Connection if gotten, then chill-waiting, then trying again.", t);
-                closeConnectionIgnoreException(sendRequestMessages_Connection);
+                closeConnectionIfNonNullIgnoreException(sendRequestMessages_Connection);
                 chill(CHILL_MILLIS_WAIT_AFTER_THROWABLE_IN_RECEIVE_LOOPS);
             }
         }
         // To exit, we're signalled via interrupt - it is our job to close Connection (it is a local variable)
-        closeConnectionIgnoreException(sendRequestMessages_Connection);
+        closeConnectionIfNonNullIgnoreException(sendRequestMessages_Connection);
         log.info("Got asked to exit, and that we do!");
     }
 
@@ -579,7 +579,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     // for a longish time, it is assumed that the destination is gone from the broker).
 
                     // Go into timed receive (receiving "the rest of the bunch", but handling startup)
-                    MapMessage replyMsg = (MapMessage) consumer.receive(
+                    MapMessage statsMsg = (MapMessage) consumer.receive(
                             TIMEOUT_MILLIS_FOR_LAST_MESSAGE_IN_BATCH_FOR_DESTINATION_STATS);
 
                     // NOTE: We're using an undocumented feature of ActiveMQ's StatisticsBrokerPlugin whereby if we add
@@ -587,7 +587,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
                     // ?: Did we either get a null, or get an "empty" MapMessage, BUT runFlag still true?
                     // (Null would be timeout for stats, empty MapMessage would be the "null termination" for stats.)
-                    if (((replyMsg == null) || (replyMsg.getObject("brokerName") == null))
+                    if (((statsMsg == null) || (statsMsg.getObject("brokerName") == null))
                             && (_runStatus == RunStatus.RUNNING)) {
                         // -> null or empty, but runStatus==RUNNING, so this was a timeout or "terminator".
 
@@ -596,8 +596,8 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                         boolean isFullUpdate = false;
                         String originatingNodeId = null;
                         boolean requestSameNode = false;
-                        if (replyMsg != null) {
-                            String raw = replyMsg.getJMSCorrelationID();
+                        if (statsMsg != null) {
+                            String raw = statsMsg.getJMSCorrelationID();
                             if (raw != null) {
                                 CorrSplit corrSplit = splitCorrelation(raw);
                                 // Only use the correlationId if it was supplied via a forceUpdate.
@@ -704,11 +704,11 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                         // ----- So, either startup, or we've finished a batch of messages:
                         // Go into indefinite receive: Waiting for _next batch_ of messages triggered by _next stats
                         // request_. (Or null message, resulting from outside close due to shutdown)
-                        replyMsg = (MapMessage) consumer.receive();
+                        statsMsg = (MapMessage) consumer.receive();
                     }
 
                     // ?: Was this a null-message, most probably denoting that we're exiting?
-                    if (replyMsg == null) {
+                    if (statsMsg == null) {
                         // -> Yes, null message received.
                         log.info("Received null message from consumer.receive(), assuming shutdown.");
                         if (_runStatus != RunStatus.RUNNING) {
@@ -719,30 +719,34 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     }
 
                     // :: Evaluate whether it is a BrokerStatistics or DestinationStatistics message
-                    if (replyMsg.getObject("destinationName") != null) {
+                    if (statsMsg.getObject("destinationName") != null) {
                         // -> Destination stats
                         // This was a destination stats message - count it
                         _countOfDestinationsReceivedAfterRequest.incrementAndGet();
                         // .. log time we received this destination stats message
                         nanosAtEnd_lastMessageReceived = System.nanoTime();
 
-                        DestinationStatsDto destinationStatsDto = mapMessageToDestinationStatsDto(replyMsg);
+                        DestinationStatsDto destinationStatsDto = mapMessageToDestinationStatsDto(statsMsg);
                         _currentDestinationStatsDtos.put(destinationStatsDto.destinationName, destinationStatsDto);
                         // Update that we've gotten a stats-message
                         _lastStatsUpdateMessageReceived = System.currentTimeMillis();
                         if (log.isTraceEnabled()) log.trace("Got DestinationStats: " + destinationStatsDto);
                     }
-                    else if (replyMsg.getObject("storeUsage") != null) {
+                    else if (statsMsg.getObject("storeUsage") != null) {
                         // -> Broker stats
-                        _currentBrokerStatsDto = mapMessageToBrokerStatsDto(replyMsg);
+                        _currentBrokerStatsDto = mapMessageToBrokerStatsDto(statsMsg);
                         // Update that we've gotten a stats-message
                         _lastStatsUpdateMessageReceived = System.currentTimeMillis();
                         if (log.isTraceEnabled()) log.trace("Got BrokerStats: " + _currentBrokerStatsDto);
                     }
                     else {
-                        log.warn("Got a JMS Message that was neither destination stats nor broker stats:\n" + replyMsg);
+                        log.info("Got a JMS Message that was neither destination stats nor broker stats."
+                                + " This is probably an unexpected 'null termination' which happened because more than"
+                                + " one instance of the querier sent stats query at the same time, thus getting two"
+                                + " replies concurrently. Should not happen often since we have forced randomness in"
+                                + " query interval. If it does happen often, either your interval is too low,"
+                                + " you have high load or latency, very many queues - or gimme a call! \n" + statsMsg);
                     }
-
                 }
             }
             catch (Throwable t) {
@@ -753,7 +757,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 }
                 log.warn("Got a [" + t.getClass().getSimpleName() + "] in the receive-loop."
                         + " Attempting to close JMS Connection if gotten, then chill-waiting, then trying again.", t);
-                closeConnectionIgnoreException(_receiveDestinationsStatsReplyMessages_Connection);
+                closeConnectionIfNonNullIgnoreException(_receiveDestinationsStatsReplyMessages_Connection);
                 chill(CHILL_MILLIS_WAIT_AFTER_THROWABLE_IN_RECEIVE_LOOPS);
             }
         }
