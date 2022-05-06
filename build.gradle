@@ -7,7 +7,7 @@ wrapper {
 
 allprojects {
     group = 'io.mats3.matsbrokermonitor'
-    version = '0.1.2-2022-05-05'
+    version = '0.1.3-2022-05-06'
 }
 
 // Versions for all libraries used throughout the subprojects
