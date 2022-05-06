@@ -109,6 +109,10 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      * Thrown if problems talking with the broker, e.g. for JMS, if <code>JMSException</code> is raised.
      */
     class BrokerIOException extends RuntimeException {
+        public BrokerIOException(String message) {
+            super(message);
+        }
+
         public BrokerIOException(String message, Throwable cause) {
             super(message, cause);
         }
