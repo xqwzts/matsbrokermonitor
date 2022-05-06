@@ -1,6 +1,8 @@
 package io.mats3.matsbrokermonitor.htmlgui.impl;
 
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
@@ -20,11 +22,14 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.BrowseQueueTableAddition;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.MonitorAddition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author Endre Stølsvik 2022-03-13 23:33 - http://stolsvik.com/, endre@stolsvik.com
  */
 class BrowseQueue {
+    private static final Logger log = LoggerFactory.getLogger(BrowseQueue.class);
 
     // Note: The queue-browser of ActiveMQ has a default max, from the server side, of 400.
     private static final int MAX_MESSAGES_BROWSER = 2000;
@@ -122,7 +127,22 @@ class BrowseQueue {
 
         out.html("<br>\n");
 
-        // :: TABLE
+
+        // :: MESSAGES TABLE
+
+        MatsBrokerMessageIterable matsBrokerMessageIterable;
+        try {
+            matsBrokerMessageIterable = matsBrokerBrowseAndActions.browseQueue(queueId);
+        }
+        catch (BrokerIOException e) {
+            out.html("<h1>Got BrokerIOException when trying to browse queue!</h1><br>\n");
+            log.error("Got BrokerIOException when trying to browse queue!", e);
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            e.printStackTrace(pw);
+            out.html("<pre>").DATA(sw.toString()).html("</pre>");
+            return;
+        }
 
         out.html("<div class='matsbm_table_browse_queue_container'>"); // To make room for text "number of messages"
         out.html("<table id='matsbm_table_browse_queue'>");
@@ -159,7 +179,7 @@ class BrowseQueue {
         out.html("<tbody>");
         int messageCount = 0;
         // Note: AutoCloseable, try-with-resources
-        try (MatsBrokerMessageIterable messages = matsBrokerBrowseAndActions.browseQueue(queueId)) {
+        try (MatsBrokerMessageIterable messages = matsBrokerMessageIterable) {
             for (MatsBrokerMessageRepresentation msgRepr : messages) {
                 out.html("<tr id='matsbm_msgid_").DATA(msgRepr.getMessageSystemId()).html("'>");
 

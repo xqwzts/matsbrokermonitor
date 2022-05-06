@@ -1,6 +1,8 @@
 package io.mats3.matsbrokermonitor.htmlgui.impl;
 
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Collections;
@@ -16,6 +18,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
+import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.BrokerIOException;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerSnapshot;
@@ -31,11 +34,14 @@ import io.mats3.serial.MatsTrace.Call.CallType;
 import io.mats3.serial.MatsTrace.Call.Channel;
 import io.mats3.serial.MatsTrace.KeepMatsTrace;
 import io.mats3.serial.MatsTrace.StackState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author Endre Stølsvik 2022-03-13 23:33 - http://stolsvik.com/, endre@stolsvik.com
  */
 public class ExamineMessage {
+    private static final Logger log = LoggerFactory.getLogger(ExamineMessage.class);
 
     static void gui_ExamineMessage(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, MatsSerializer<?> matsSerializer,
@@ -70,8 +76,20 @@ public class ExamineMessage {
             return;
         }
 
-        Optional<MatsBrokerMessageRepresentation> matsBrokerMessageRepresentationO = matsBrokerBrowseAndActions
-                .examineMessage(queueId, messageSystemId);
+        Optional<MatsBrokerMessageRepresentation> matsBrokerMessageRepresentationO;
+        try {
+            matsBrokerMessageRepresentationO = matsBrokerBrowseAndActions.examineMessage(queueId, messageSystemId);
+        }
+        catch (BrokerIOException e) {
+            out.html("<h1>Got BrokerIOException when trying to examine message!</h1><br>\n");
+            log.error("Got BrokerIOException when trying to examine message!", e);
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            e.printStackTrace(pw);
+            out.html("</div><pre>").DATA(sw.toString()).html("</pre>");
+            // Don't output last </div>, as caller does it.
+            return;
+        }
         if (!matsBrokerMessageRepresentationO.isPresent()) {
             out.html("</div>");
             out.html("<h1>No such message!</h1><br>\n");
