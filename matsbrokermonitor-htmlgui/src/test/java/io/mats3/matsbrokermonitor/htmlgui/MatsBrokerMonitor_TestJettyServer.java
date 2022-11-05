@@ -1,5 +1,7 @@
 package io.mats3.matsbrokermonitor.htmlgui;
 
+import static io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.ACCESS_CONTROL_ALLOW_ALL;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URL;
@@ -36,8 +38,8 @@ import org.apache.activemq.RedeliveryPolicy;
 import org.eclipse.jetty.annotations.AnnotationConfiguration;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.StatisticsHandler;
-import org.eclipse.jetty.util.component.AbstractLifeCycle.AbstractLifeCycleListener;
 import org.eclipse.jetty.util.component.LifeCycle;
+import org.eclipse.jetty.util.component.LifeCycle.Listener;
 import org.eclipse.jetty.util.resource.Resource;
 import org.eclipse.jetty.webapp.Configuration;
 import org.eclipse.jetty.webapp.WebAppContext;
@@ -74,8 +76,6 @@ import io.mats3.test.broker.MatsTestBroker;
 import io.mats3.util.MatsFuturizer;
 import io.mats3.util.MatsFuturizer.Reply;
 
-import static io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.ACCESS_CONTROL_ALLOW_ALL;
-
 /**
  * @author Endre Stølsvik 2021-12-31 01:50 - http://stolsvik.com/, endre@stolsvik.com
  */
@@ -85,7 +85,7 @@ public class MatsBrokerMonitor_TestJettyServer {
 
     private static final Logger log = LoggerFactory.getLogger(MatsBrokerMonitor_TestJettyServer.class);
 
-    public static final String MATS_DESTINATION_PREFIX = "endre:";
+    public static final String MATS_DESTINATION_PREFIX = "mats.";
 
     private static String SERVICE = "MatsTestBrokerMonitor";
     private static String SERVICE_1 = SERVICE + ".FirstSubService";
@@ -300,8 +300,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             matsFactory.getDefaultInitiator().initiateUnchecked(
                     (msg) -> {
                         for (int i = 0; i < countF; i++) {
-                            int finalI = i;
-                            msg.traceId(MatsTestHelp.traceId() + "_#" + finalI)
+                            msg.traceId(MatsTestHelp.traceId() + "_#" + i)
                                     .keepTrace(KeepTrace.FULL)
                                     .from("/sendRequestInitiated")
                                     .to(SERVICE_1 + SetupTestMatsEndpoints.SERVICE_MAIN)
@@ -499,8 +498,8 @@ public class MatsBrokerMonitor_TestJettyServer {
             }
 
             // Localinspect
-            // out.write("<h1>LocalHtmlInspectForMatsFactory</h1>\n");
-            // localInspect.createFactoryReport(out, true, true, true);
+            out.write("<h1>LocalHtmlInspectForMatsFactory</h1>\n");
+            localInspect.createFactoryReport(out, true, true, true);
 
             out.println("  </body>");
             out.println("</html>");
@@ -548,7 +547,7 @@ public class MatsBrokerMonitor_TestJettyServer {
         server.setHandler(stats);
 
         // Add a Jetty Lifecycle Listener
-        server.addLifeCycleListener(new AbstractLifeCycleListener() {
+        server.addLifeCycleListener(new Listener() {
             @Override
             public void lifeCycleFailure(LifeCycle event, Throwable cause) {
                 log.error("====# FAILURE! ===========================================", cause);
@@ -595,7 +594,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             jmsConnectionFactory = matsTestBroker.getConnectionFactory();
         }
         else {
-            // Using deafaults
+            // Using defaults
             ActiveMQConnectionFactory amqConnectionFactory = new ActiveMQConnectionFactory();
 
             /*
