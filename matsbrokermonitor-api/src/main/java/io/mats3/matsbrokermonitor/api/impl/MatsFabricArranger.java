@@ -19,6 +19,8 @@ import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation.MatsEndpoin
 import io.mats3.matsbrokermonitor.api.MatsFabricBrokerRepresentation.MatsStageBrokerRepresentation;
 
 /**
+ * Don't use directly, use {@link MatsFabricBrokerRepresentation#stack(Collection)}.
+ *
  * @author Endre Stølsvik 2022-01-09 00:23 - http://stolsvik.com/, endre@stolsvik.com
  */
 public final class MatsFabricArranger {
