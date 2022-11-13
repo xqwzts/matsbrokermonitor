@@ -31,8 +31,8 @@ public interface Statics {
 
     // :: For ActiveMqMatsBrokerMonitor:
 
-    // Time between automatic full updates from
-    long FULL_UPDATE_INTERVAL = 20 * 60 * 1000;
+    // Time between automatic full updates from ActiveMqBrokerStatsQuerier
+    long FULL_UPDATE_INTERVAL = 20 * 60 * 1000; // 20 minutes
 
     String QUERY_REQUEST_BROKER = "ActiveMQ.Statistics.Broker";
     /**

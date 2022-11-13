@@ -38,6 +38,8 @@ public interface MatsBrokerMonitor extends Closeable {
 
     void registerListener(Consumer<UpdateEvent> listener);
 
+    void removeListener(Consumer<UpdateEvent> listener);
+
     void forceUpdate(String correlationId, boolean full);
 
     interface BrokerSnapshot {
@@ -61,8 +63,10 @@ public interface MatsBrokerMonitor extends Closeable {
         OptionalDouble getStatisticsUpdateMillis();
 
         /**
-         * @return a Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination}] for currently known Mats-relevant
-         *         destinations.
+         * @return a
+         *         <code>Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination MatsBrokerDestination}]</code>
+         *         for currently known Mats-relevant destinations. (FullyQualifiedDestinationName ==
+         *         {@link MatsBrokerDestination#getFqDestinationName() destination.getFqDestinationName()}).
          */
         NavigableMap<String, MatsBrokerDestination> getMatsDestinations();
 
@@ -127,6 +131,10 @@ public interface MatsBrokerMonitor extends Closeable {
     }
 
     interface MatsBrokerDestination {
+
+        String STAGE_ATTRIBUTE_DESTINATION = "mats.mbm.Queue";
+        String STAGE_ATTRIBUTE_DLQ = "mats.mbm.DLQ";
+
         /**
          * @return the millis-since-Epoch when this was last updated, using the time of this receiving computer. Compare
          *         to {@link #getLastUpdateBrokerMillis()}.
@@ -234,5 +242,101 @@ public interface MatsBrokerMonitor extends Closeable {
      */
     enum DestinationType {
         QUEUE, TOPIC;
+    }
+
+    /**
+     * A DTO-implementation of {@link MatsBrokerDestination}, which can be sent over Mats. Used by the Broadcaster and
+     * BroadcasterReceiver.
+     */
+    class MatsBrokerDestinationDto implements MatsBrokerDestination {
+        private long lulm;
+        private OptionalLong lubm;
+        private String fqdn;
+        private String dn;
+        private DestinationType dt;
+        private boolean dlq;
+        private boolean gdlq;
+        private Optional<String> msid;
+        private long noqm;
+        private OptionalLong noifm;
+        private OptionalLong age;
+
+        public static MatsBrokerDestinationDto of(MatsBrokerDestination matsBrokerDestination) {
+            return new MatsBrokerDestinationDto(matsBrokerDestination);
+        }
+
+        private MatsBrokerDestinationDto() {
+            /* need no-args constructor for deserializing with Jackson */
+        }
+
+        private MatsBrokerDestinationDto(MatsBrokerDestination matsBrokerDestination) {
+            lulm = matsBrokerDestination.getLastUpdateLocalMillis();
+            lubm = matsBrokerDestination.getLastUpdateBrokerMillis();
+            fqdn = matsBrokerDestination.getFqDestinationName();
+            dn = matsBrokerDestination.getDestinationName();
+            dt = matsBrokerDestination.getDestinationType();
+            dlq = matsBrokerDestination.isDlq();
+            gdlq = matsBrokerDestination.isDefaultGlobalDlq();
+            ;
+            msid = matsBrokerDestination.getMatsStageId();
+            noqm = matsBrokerDestination.getNumberOfQueuedMessages();
+            noifm = matsBrokerDestination.getNumberOfInflightMessages();
+            age = matsBrokerDestination.getHeadMessageAgeMillis();
+        }
+
+        @Override
+        public long getLastUpdateLocalMillis() {
+            return lulm;
+        }
+
+        @Override
+        public OptionalLong getLastUpdateBrokerMillis() {
+            return lubm;
+        }
+
+        @Override
+        public String getFqDestinationName() {
+            return fqdn;
+        }
+
+        @Override
+        public String getDestinationName() {
+            return dn;
+        }
+
+        @Override
+        public DestinationType getDestinationType() {
+            return dt;
+        }
+
+        @Override
+        public boolean isDlq() {
+            return dlq;
+        }
+
+        @Override
+        public boolean isDefaultGlobalDlq() {
+            return gdlq;
+        }
+
+        @Override
+        public Optional<String> getMatsStageId() {
+            return msid;
+        }
+
+        @Override
+        public long getNumberOfQueuedMessages() {
+            return noqm;
+        }
+
+        @Override
+        public OptionalLong getNumberOfInflightMessages() {
+            return noifm;
+        }
+
+        @Override
+        public OptionalLong getHeadMessageAgeMillis() {
+            return age;
+        }
     }
 }

@@ -286,7 +286,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
                 CountDownLatch countDownLatch = new CountDownLatch(1);
                 _updateEventWaiters.put(correlationId, countDownLatch);
                 log.info("update: executing matsBrokerMonitor.forceUpdate(\"" + correlationId + "\", false);");
-                _matsBrokerMonitor.forceUpdate(correlationId, false);
+                _matsBrokerMonitor.forceUpdate(correlationId, true);
                 updatedOkWithinTimeout = countDownLatch.await(FORCE_UPDATE_TIMEOUT, TimeUnit.MILLISECONDS);
                 long nanosTaken_wait = System.nanoTime() - nanosAtStart_wait;
                 log.info("update: updatedOkWithinTimeout: [" + updatedOkWithinTimeout

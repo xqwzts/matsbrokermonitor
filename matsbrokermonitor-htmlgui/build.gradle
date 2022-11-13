@@ -16,6 +16,8 @@ dependencies {
     // The testing uses the ActiveMQ and JMS interfaces.
     testImplementation project(":matsbrokermonitor-activemq")
     testImplementation project(":matsbrokermonitor-jms")
+    testImplementation project(":matsbrokermonitor-broadcastandcontrol")
+    testImplementation project(":matsbrokermonitor-broadcastreceiver")
 
     // MATS STUFF:
     // Need the JMS Mats

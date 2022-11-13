@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -62,6 +63,8 @@ import io.mats3.matsbrokermonitor.activemq.ActiveMqMatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
+import io.mats3.matsbrokermonitor.broadcaster.MatsBrokerMonitorBroadcastAndControl;
+import io.mats3.matsbrokermonitor.broadcastreceiver.MatsBrokerMonitorBroadcastReceiver;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.BrowseQueueTableAddition;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.ExamineMessageAddition;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.MonitorAddition;
@@ -139,6 +142,10 @@ public class MatsBrokerMonitor_TestJettyServer {
             SetupTestMatsEndpoints.setupMatsTestEndpoints(SERVICE_2, _matsFactory);
             SetupTestMatsEndpoints.setupMatsTestEndpoints(SERVICE_3, _matsFactory);
 
+            MatsBrokerMonitorBroadcastReceiver receiver = MatsBrokerMonitorBroadcastReceiver.install(_matsFactory);
+            receiver.registerListener(updateEvent -> log.info("Received update via Mats fabric: " + updateEvent));
+            sc.setAttribute(MatsBrokerMonitorBroadcastReceiver.class.getName(), receiver);
+
             _matsFactory.start();
 
             // :: Create the "local inspect"
@@ -154,6 +161,7 @@ public class MatsBrokerMonitor_TestJettyServer {
                 destinationUpdateEvent.getEventDestinations().forEach((fqName, matsBrokerDestination) -> log
                         .info(".. event destinations (non-zero): [" + fqName + "] = [" + matsBrokerDestination + "]"));
             });
+            MatsBrokerMonitorBroadcastAndControl.install(matsBrokerMonitor1, _matsFactory);
             matsBrokerMonitor1.start();
 
             // :: Create the ActiveMqMatsBrokerMonitor #2
@@ -163,6 +171,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             matsBrokerMonitor2.registerListener(destinationUpdateEvent -> {
                 log.info("Listener for MBM #2 at TestJettyServer: Got update! " + destinationUpdateEvent);
             });
+            MatsBrokerMonitorBroadcastAndControl.install(matsBrokerMonitor2, _matsFactory);
             matsBrokerMonitor2.start();
 
             // Put it in ServletContext, for shutdown
@@ -249,7 +258,9 @@ public class MatsBrokerMonitor_TestJettyServer {
             PrintWriter out = res.getWriter();
             out.println("<h1>Menu</h1>");
             out.println("<a href=\"./matsbrokermonitor\">MatsBrokerMonitor HTML GUI</a><br>");
-            out.println("<a href=\"./sendRequest\">Send Mats requests</a><br>");
+            out.println("<a href=\"./sendRequest?count=1\">Send Mats requests, count=1</a><br>");
+            out.println("<a href=\"./forceUpdate\">Force Update (full) via " + MatsBrokerMonitorBroadcastReceiver.class
+                    .getSimpleName() + "</a><br>");
             out.println("<a href=\"./shutdown\">Shutdown</a><br>");
         }
     }
@@ -265,6 +276,25 @@ public class MatsBrokerMonitor_TestJettyServer {
 
             // Shut down the process
             ForkJoinPool.commonPool().submit(() -> System.exit(0));
+        }
+    }
+
+    /**
+     * Force update via MatsBrokerMonitorBroadcastReceiver
+     */
+    @WebServlet("/forceUpdate")
+    public static class ForceUpdateServlet extends HttpServlet {
+        @Override
+        protected void doGet(HttpServletRequest req, HttpServletResponse res) throws IOException {
+            String correlationId = "CorrelationId:" + Long.toString(Math.abs(ThreadLocalRandom.current().nextLong()),
+                    36);
+            res.getWriter().println("Sending ForceUpdate via '" + MatsBrokerMonitorBroadcastReceiver.class
+                    .getSimpleName() + "', using CorrelationId [" + correlationId + "]");
+
+            MatsBrokerMonitorBroadcastReceiver mbmbr = (MatsBrokerMonitorBroadcastReceiver) req.getServletContext()
+                    .getAttribute(MatsBrokerMonitorBroadcastReceiver.class.getName());
+
+            mbmbr.forceUpdate(correlationId, true);
         }
     }
 
@@ -482,8 +512,9 @@ public class MatsBrokerMonitor_TestJettyServer {
             brokerMonitorHtmlGui.outputJavaScript(out); // Include just once, use the first.
             localInspect.getJavaScript(out);
             out.println("    </script>");
-            out.println(" <a href=\"sendRequest\">Send request</a> - to initialize Initiator"
-                    + " and get some traffic.<br><br>");
+            out.println(" <a href=\"sendRequest?count=1\">Send request, count=1</a> - to initialize Initiator"
+                    + " and get some traffic.<br>");
+            out.println(" <a href=\".\">Go to menu</a><br><br>");
 
             // :: Bootstrap3 sets the body's font size to 14px.
             // We scale all the affected rem-using elements back up to check consistency.

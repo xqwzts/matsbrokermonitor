@@ -1,0 +1,6 @@
+dependencies {
+    api "io.mats3:mats-api:$matsVersion"
+    api project(":matsbrokermonitor-api")
+
+    implementation "org.slf4j:slf4j-api:$slf4jVersion"
+}

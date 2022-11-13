@@ -14,7 +14,7 @@ import io.mats3.MatsFactory;
  */
 public class SetupTestMatsEndpoints {
 
-    public static int BASE_CONCURRENCY = 5;
+    public static int BASE_CONCURRENCY = 2;
 
     static void setupMatsTestEndpoints(String servicePrefix, MatsFactory matsFactory) {
         setupMainMultiStagedService(servicePrefix, matsFactory);

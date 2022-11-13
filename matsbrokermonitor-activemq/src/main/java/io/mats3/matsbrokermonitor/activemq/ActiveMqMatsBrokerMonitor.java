@@ -134,6 +134,11 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
     }
 
     @Override
+    public void removeListener(Consumer<UpdateEvent> listener) {
+        _listeners.remove(listener);
+    }
+
+    @Override
     public void forceUpdate(String correlationId, boolean full) {
         _querier.forceUpdate(correlationId, full);
     }
@@ -345,7 +350,6 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
     }
 
     private static class UpdateEventImpl implements UpdateEvent {
-
         private final String _correlationId; // nullable
         private final boolean _isFullUpdate;
         private final NavigableMap<String, MatsBrokerDestination> _eventDestinations;

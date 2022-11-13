@@ -345,8 +345,8 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
                 Queue requestQueuesQueue_main;
                 Topic requestTopicsTopic_main;
-                Queue requestQueuesQueue_individualDlq = null;
-                Queue requestQueuesQueue_globalDlq = null;
+                Queue requestQueuesQueue_individualDlq;
+                Queue requestQueuesQueue_globalDlq;
 
                 // ?: Do we have a proper "path-style" prefix, i.e. ending with a "."?
                 if ((_matsDestinationPrefix != null) && _matsDestinationPrefix.endsWith(".")) {
@@ -378,6 +378,9 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             + " employing [" + queryRequestDestination_all + "]");
                     requestQueuesQueue_main = session.createQueue(queryRequestDestination_all);
                     requestTopicsTopic_main = session.createTopic(queryRequestDestination_all);
+                    // Since the two above gets all queues and topics, the DLQs will also be gotten.
+                    requestQueuesQueue_individualDlq = null;
+                    requestQueuesQueue_globalDlq = null;
                 }
 
                 // :: Create queue for the "zero-termination", sent in a separate request query
@@ -491,7 +494,7 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
 
                             // ?: Not running anymore?
                             if (_runStatus != RunStatus.RUNNING) {
-                                // -> Break out of wait loop (and then all the way, due to loop conditionals.).
+                                // -> Break out of wait loop (and then all the way out, due to loop conditionals.).
                                 break;
                             }
                             // ?: Forced update waiting?
@@ -506,8 +509,14 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                             if (_lastStatsUpdateMessageReceived < (System.currentTimeMillis()
                                     - (_updateIntervalMillis * 0.75d))) {
                                 // -> Yes, the message is overdue enough, so let's do the request
+                                log.debug("Last received StatsUpdateMessage is too old (I am probably first of the"
+                                        + " nodes, or the only node); I will do the request");
                                 // Break out of wait-loop
                                 break;
+                            }
+                            else {
+                                log.debug("Last received update is pretty fresh (probably gotten from another node);"
+                                        + " I will NOT do the request.");
                             }
                         }
                     }
