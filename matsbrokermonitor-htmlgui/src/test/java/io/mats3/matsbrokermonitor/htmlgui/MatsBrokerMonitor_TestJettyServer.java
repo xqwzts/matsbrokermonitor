@@ -21,6 +21,7 @@ import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
 import javax.jms.JMSException;
 import javax.jms.Message;
+import javax.jms.MessageConsumer;
 import javax.jms.MessageProducer;
 import javax.jms.Queue;
 import javax.jms.Session;
@@ -329,6 +330,13 @@ public class MatsBrokerMonitor_TestJettyServer {
             MatsFactory matsFactory = (MatsFactory) servletContext.getAttribute(JmsMatsFactory.class.getName());
 
             PrintWriter out = res.getWriter();
+
+            sendAFuturize(out, matsFuturizer, false);
+            sendAFuturize(out, matsFuturizer, true);
+
+            takeNap(500);
+
+            out.println("===========\n");
 
             sendAFuturize(out, matsFuturizer, false);
             sendAFuturize(out, matsFuturizer, true);
@@ -692,7 +700,10 @@ public class MatsBrokerMonitor_TestJettyServer {
         else if ("Direct_Artemis".equals(mode)) {
             String brokerUrl = "vm://" + Math.abs(ThreadLocalRandom.current().nextInt());
             EmbeddedActiveMQ artemisBroker = createArtemisBroker(brokerUrl);
-            jmsConnectionFactory = new org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory(brokerUrl);
+            org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory activeMQConnectionFactory = new org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory(brokerUrl);
+            //activeMQConnectionFactory.setConsumerWindowSize(128 * 1024 * 1024);
+            jmsConnectionFactory = activeMQConnectionFactory;
+
         }
         else {
             throw new IllegalStateException("No mode");
@@ -840,8 +851,8 @@ public class MatsBrokerMonitor_TestJettyServer {
          * gets hung, it won't allocate so many of the messages into a "void". This can be set on client side, but
          * if not set there, it gets the defaults from server, AFAIU.
          */
-        allQueuesPolicy.setQueuePrefetch(1);
-        allTopicsPolicy.setTopicPrefetch(1);
+        allQueuesPolicy.setQueuePrefetch(250);
+        allTopicsPolicy.setTopicPrefetch(250);
 
         // .. create the PolicyMap containing the two destination policies
         PolicyMap policyMap = new PolicyMap();
@@ -908,7 +919,8 @@ public class MatsBrokerMonitor_TestJettyServer {
 
         // Tune prefetch from client side
         ActiveMQPrefetchPolicy prefetchPolicy = new ActiveMQPrefetchPolicy();
-        prefetchPolicy.setQueuePrefetch(500);
+        prefetchPolicy.setQueuePrefetch(500); // Overrides whatever set from broker
+        prefetchPolicy.setTopicPrefetch(500); // Overrides whatever set from broker
         conFactory.setPrefetchPolicy(prefetchPolicy);
 
         return conFactory;
