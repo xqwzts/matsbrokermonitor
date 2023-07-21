@@ -3,13 +3,15 @@
 dependencies {
     api project(":matsbrokermonitor-api")
 
-    implementation "javax.jms:jms-api:$jmsApiVersion"
-    implementation "org.slf4j:slf4j-api:$slf4jVersion"
+    compileOnly "$jmsApiDependency"
+    compileOnly "org.slf4j:slf4j-api:$slf4jVersion"
 
     // ===== TEST
 
-    testImplementation "org.slf4j:log4j-over-slf4j:$slf4jVersion"
-    testImplementation "ch.qos.logback:logback-classic:$logbackVersion"
+    // Need logging system in tests
+    testCompileOnly "org.slf4j:slf4j-api:$slf4jVersion"
+    testRuntimeOnly "org.slf4j:log4j-over-slf4j:$slf4jVersion"
+    testRuntimeOnly "ch.qos.logback:logback-classic:$logbackVersion"
     // MatsTestBroker
     testImplementation "io.mats3:mats-test-broker:$matsVersion"
     // Must manually drag in ActiveMq broker

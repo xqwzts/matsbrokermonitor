@@ -9,7 +9,7 @@ dependencies {
     // Uses Jackson to try to pretty-print DTOs and STOs as JSON
     implementation "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
     // Logging.
-    implementation "org.slf4j:slf4j-api:$slf4jVersion"
+    compileOnly "org.slf4j:slf4j-api:$slf4jVersion"
 
     // :: TESTING
 
@@ -32,13 +32,16 @@ dependencies {
     testImplementation "io.mats3:mats-localinspect:$matsVersion"
 
     // JMS API
-    testImplementation "javax.jms:jms-api:$jmsApiVersion"
+    testCompileOnly "$jmsApiDependency"
     // MatsTestBroker
     testImplementation "io.mats3:mats-test-broker:$matsVersion"
     // Must manually drag in ActiveMq broker
     testImplementation "org.apache.activemq:activemq-broker:$activeMqVersion"
     // ..ActiveMQ Kaha (not really needed)
-    implementation "org.apache.activemq:activemq-kahadb-store:$activeMqVersion"
+    testImplementation "org.apache.activemq:activemq-kahadb-store:$activeMqVersion"
+    // Also Artemis
+    testImplementation "org.apache.activemq:artemis-jms-client:$artemisMqVersion"
+    testImplementation "org.apache.activemq:artemis-server:$artemisMqVersion"
 
     // Base Jetty Server
     testImplementation "org.eclipse.jetty:jetty-server:$jettyVersion"
@@ -47,7 +50,8 @@ dependencies {
     // .. Jetty: To get the @WebListener etc. annotation scanning.
     testImplementation "org.eclipse.jetty:jetty-annotations:$jettyVersion"
 
-    // Logging
-    testImplementation "org.slf4j:log4j-over-slf4j:$slf4jVersion"
+    // Need logging system in tests
+    testCompileOnly "org.slf4j:slf4j-api:$slf4jVersion"
+    testRuntimeOnly "org.slf4j:log4j-over-slf4j:$slf4jVersion"
     testImplementation "ch.qos.logback:logback-classic:$logbackVersion"
 }

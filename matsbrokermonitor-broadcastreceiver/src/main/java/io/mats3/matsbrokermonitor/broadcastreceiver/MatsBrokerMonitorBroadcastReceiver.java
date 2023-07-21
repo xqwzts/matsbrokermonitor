@@ -156,7 +156,6 @@ public class MatsBrokerMonitorBroadcastReceiver implements Closeable {
                                     + " Ignoring.", t);
                         }
                     }
-
                 });
         // :: We don't want this to be logged, as it will be annoying noise without much merit.
         // Allow for log suppression for this SubscriptionTerminator

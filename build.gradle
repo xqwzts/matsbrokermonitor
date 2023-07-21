@@ -14,15 +14,16 @@ allprojects {
 ext {
     matsVersion = '0.19.1-2022-11-13'
 
-    slf4jVersion = '1.7.36'
-    jmsApiVersion = '1.1-rev-1'
+    slf4jVersion = '2.0.7' // Only CompileOnly
+    jmsApiDependency = 'jakarta.jms:jakarta.jms-api:2.0.3' // Following Mats3's lead. Only CompileOnly.
     jacksonVersion = '2.13.4'
 
     // === For testing
-    activeMqVersion = '5.16.5' // 5.17.0 requires Java 11.
+    activeMqVersion = '5.18.2'
+    artemisMqVersion = '2.29.0'
     springVersion = '5.3.23'
     junitVersion = '4.13.2'
-    logbackVersion = '1.2.11'
+    logbackVersion = '1.4.8'
     jettyVersion = '9.4.49.v20220914'
 }
 
@@ -31,7 +32,7 @@ subprojects {
 
     java {
         toolchain {
-            languageVersion.set(JavaLanguageVersion.of(8))
+            languageVersion.set(JavaLanguageVersion.of(11))
         }
         withJavadocJar()
         withSourcesJar()
@@ -41,9 +42,8 @@ subprojects {
 
     project.buildDir = 'build-gradle'
 
-    compileJava {
+    tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
-        options.deprecation = true
         options.incremental = true
         options.compilerArgs += ['-Werror', '-Xlint:all', '-Xlint:-serial']
     }

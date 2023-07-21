@@ -277,7 +277,6 @@ public interface MatsBrokerMonitor extends Closeable {
             dt = matsBrokerDestination.getDestinationType();
             dlq = matsBrokerDestination.isDlq();
             gdlq = matsBrokerDestination.isDefaultGlobalDlq();
-            ;
             msid = matsBrokerDestination.getMatsStageId();
             noqm = matsBrokerDestination.getNumberOfQueuedMessages();
             noifm = matsBrokerDestination.getNumberOfInflightMessages();

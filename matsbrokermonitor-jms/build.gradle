@@ -3,8 +3,8 @@
 dependencies {
     api project(":matsbrokermonitor-api")
 
-    implementation "javax.jms:jms-api:$jmsApiVersion"
-    implementation "org.slf4j:slf4j-api:$slf4jVersion"
+    compileOnly "$jmsApiDependency"
+    compileOnly "org.slf4j:slf4j-api:$slf4jVersion"
 
     // TEST
     testImplementation "ch.qos.logback:logback-classic:$logbackVersion"

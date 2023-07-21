@@ -1,3 +1,5 @@
+import java.nio.charset.Charset
+
 rootProject.name = 'matsbrokermonitor'
 
 include 'matsbrokermonitor-api', 'matsbrokermonitor-activemq', 'matsbrokermonitor-jms',
@@ -5,5 +7,6 @@ include 'matsbrokermonitor-api', 'matsbrokermonitor-activemq', 'matsbrokermonito
         'matsbrokermonitor-broadcastandcontrol', 'matsbrokermonitor-broadcastreceiver'
 
 println "** Java: ${ System.getProperty('java.version') }, Groovy: $GroovySystem.version," +
-        " Gradle: ${ gradle.gradleVersion }   (printed from settings.gradle)"
+        " Gradle: ${ gradle.gradleVersion }, Charset.defaultCharset(): ${Charset.defaultCharset() }" +
+        "   (printed from settings.gradle)"
 

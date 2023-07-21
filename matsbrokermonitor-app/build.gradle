@@ -24,6 +24,7 @@ dependencies {
     testImplementation "org.springframework:spring-context:$springVersion"
 
     // Need logging system in tests
+    testCompileOnly "org.slf4j:slf4j-api:$slf4jVersion"
     testRuntimeOnly "org.slf4j:log4j-over-slf4j:$slf4jVersion"
     testRuntimeOnly "ch.qos.logback:logback-classic:$logbackVersion"
 }
