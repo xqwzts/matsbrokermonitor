@@ -3,6 +3,7 @@ package io.mats3.matsbrokermonitor.htmlgui;
 import java.util.Objects;
 
 import io.mats3.MatsEndpoint.ProcessContext;
+import io.mats3.test.MatsTestHelp;
 import org.junit.Assert;
 
 import io.mats3.MatsEndpoint;
@@ -82,6 +83,9 @@ public class SetupTestMatsEndpoints {
                 StateTO.class);
         ep.stage(DataTO.class, (context, sto, dto) -> {
             // We don't assert initial state, as that might be set or not, based on whether initialState is sent along.
+
+            MatsTestHelp.takeNap(50);
+
             sto.number1 = Integer.MAX_VALUE;
             sto.number2 = Math.E;
             context.request(servicePrefix + SERVICE_MID, new DataTO(dto.number, dto.string + ":MidCall1", 3));

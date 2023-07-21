@@ -3,6 +3,9 @@ HELP.md
 build-gradle/
 !gradle/wrapper/gradle-wrapper.jar
 
+# ActiveMQ if starting locally
+activemq-data/
+
 ### STS ###
 .apt_generated
 .classpath

@@ -36,7 +36,7 @@ public interface Statics {
 
     String QUERY_REQUEST_BROKER = "ActiveMQ.Statistics.Broker";
     /**
-     * Note: This should be postfixed with ".{which destination}", which handles wildcards - so ".>" will return a
+     * Note: This should be postfixed with ".{which destination}", which handles wildcards - so ".&gt;" will return a
      * message for every destination of the same type as which the query was sent on (that is, if the query is sent on a
      * queue, you'll get answers for queues, and sent on topic gives answers for topics).
      */

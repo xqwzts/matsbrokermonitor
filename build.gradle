@@ -1,6 +1,6 @@
 // Customize the Gradle Wrapper generation task.
 wrapper {
-    gradleVersion = "7.5.1"
+    gradleVersion = "8.4"
     // Use "-all"-version of distribution, since IntelliJ works better then..
     setDistributionType(Wrapper.DistributionType.ALL)
 }
@@ -8,23 +8,25 @@ wrapper {
 allprojects {
     group = 'io.mats3.matsbrokermonitor'
     version = '0.1.5-2022-11-13'
+
+    layout.buildDirectory = new File("build-gradle")
 }
 
 // Versions for all libraries used throughout the subprojects
 ext {
-    matsVersion = '0.19.1-2022-11-13'
+    matsVersion = '0.19.12-2023-11-12'
 
-    slf4jVersion = '2.0.7' // Only CompileOnly
+    slf4jVersion = '2.0.9' // Only CompileOnly
     jmsApiDependency = 'jakarta.jms:jakarta.jms-api:2.0.3' // Following Mats3's lead. Only CompileOnly.
-    jacksonVersion = '2.13.4'
+    jacksonVersion = '2.15.3'
 
     // === For testing
-    activeMqVersion = '5.18.2'
-    artemisMqVersion = '2.29.0'
-    springVersion = '5.3.23'
+    activeMqVersion = '5.18.3'
+    artemisMqVersion = '2.31.2'
+    springVersion = '5.3.30' // Spring 6 depends on Java 17 and Jakarta EE 9+
     junitVersion = '4.13.2'
-    logbackVersion = '1.4.8'
-    jettyVersion = '9.4.49.v20220914'
+    logbackVersion = '1.4.11'
+    jettyVersion = '9.4.53.v20231009'
 }
 
 subprojects {
@@ -39,8 +41,6 @@ subprojects {
     }
 
     repositories { mavenCentral() }
-
-    project.buildDir = 'build-gradle'
 
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
@@ -76,10 +76,10 @@ subprojects {
     // -- Simple tools
 
     // Define dependency report task that all subprojects gets. Invoke with "./gradlew allDeps | less"
-    task allDeps(type: DependencyReportTask) {}
+    tasks.register('allDeps', DependencyReportTask) {}
 
     // Some info about current gradle environment.
-    task systemInformation {
+    tasks.register('systemInformation') {
         doLast {
             println "\n** Java properties [System.getProperties()], sorted:\n"
             System.properties.sort().each { k, v ->
@@ -159,6 +159,6 @@ configure(subprojects.findAll { it.name != 'matsbrokermonitor-app' }) {
     }
 
     // Tasks to publish to Sonatype's OSSRH (OSS Repository Hosting), Snapshot and Staging
-    task matsPublishSnapshot(dependsOn: [publishAllPublicationsToSonatypeOSSRHSnapshotRepository])
-    task matsPublishStaging(dependsOn: [publishAllPublicationsToSonatypeOSSRHStagingRepository])
+    tasks.register('matsPublishSnapshot') { dependsOn publishAllPublicationsToSonatypeOSSRHSnapshotRepository }
+    tasks.register('matsPublishStaging') { dependsOn publishAllPublicationsToSonatypeOSSRHStagingRepository }
 }

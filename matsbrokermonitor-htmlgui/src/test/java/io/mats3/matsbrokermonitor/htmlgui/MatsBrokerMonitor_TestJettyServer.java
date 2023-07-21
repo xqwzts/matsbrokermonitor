@@ -4,7 +4,6 @@ import static io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.ACCESS
 
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -21,7 +20,6 @@ import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
 import javax.jms.JMSException;
 import javax.jms.Message;
-import javax.jms.MessageConsumer;
 import javax.jms.MessageProducer;
 import javax.jms.Queue;
 import javax.jms.Session;
@@ -34,9 +32,6 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.activemq.ActiveMQConnectionFactory;
-import org.apache.activemq.ActiveMQPrefetchPolicy;
-import org.apache.activemq.RedeliveryPolicy;
 import org.apache.activemq.artemis.api.core.QueueConfiguration;
 import org.apache.activemq.artemis.api.core.RoutingType;
 import org.apache.activemq.artemis.api.core.SimpleString;
@@ -44,17 +39,7 @@ import org.apache.activemq.artemis.core.config.CoreAddressConfiguration;
 import org.apache.activemq.artemis.core.config.impl.ConfigurationImpl;
 import org.apache.activemq.artemis.core.server.embedded.EmbeddedActiveMQ;
 import org.apache.activemq.artemis.core.settings.impl.AddressSettings;
-import org.apache.activemq.broker.BrokerPlugin;
 import org.apache.activemq.broker.BrokerService;
-import org.apache.activemq.broker.TransportConnector;
-import org.apache.activemq.broker.region.policy.IndividualDeadLetterStrategy;
-import org.apache.activemq.broker.region.policy.PolicyEntry;
-import org.apache.activemq.broker.region.policy.PolicyMap;
-import org.apache.activemq.command.ActiveMQQueue;
-import org.apache.activemq.command.ActiveMQTopic;
-import org.apache.activemq.plugin.StatisticsBrokerPlugin;
-import org.apache.activemq.store.kahadb.KahaDBPersistenceAdapter;
-import org.apache.activemq.store.kahadb.disk.journal.Journal.JournalDiskSyncStrategy;
 import org.eclipse.jetty.annotations.AnnotationConfiguration;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.StatisticsHandler;
@@ -71,7 +56,6 @@ import ch.qos.logback.core.CoreConstants;
 import io.mats3.MatsFactory;
 import io.mats3.MatsFactory.FactoryConfig;
 import io.mats3.MatsInitiator.KeepTrace;
-import io.mats3.api.intercept.MatsInterceptableMatsFactory;
 import io.mats3.impl.jms.JmsMatsFactory;
 import io.mats3.impl.jms.JmsMatsJmsSessionHandler_Pooling;
 import io.mats3.impl.jms.JmsMatsJmsSessionHandler_Pooling.PoolingKeyInitiator;
@@ -95,6 +79,7 @@ import io.mats3.serial.MatsSerializer;
 import io.mats3.serial.json.MatsSerializerJson;
 import io.mats3.test.MatsTestHelp;
 import io.mats3.test.broker.MatsTestBroker;
+import io.mats3.test.broker.MatsTestBroker.ActiveMq;
 import io.mats3.util.MatsFuturizer;
 import io.mats3.util.MatsFuturizer.Reply;
 
@@ -117,7 +102,7 @@ public class MatsBrokerMonitor_TestJettyServer {
     @WebListener
     public static class SCL_Endre implements ServletContextListener {
 
-        private MatsInterceptableMatsFactory _matsFactory;
+        private MatsFactory _matsFactory;
 
         @Override
         public void contextInitialized(ServletContextEvent sce) {
@@ -133,8 +118,8 @@ public class MatsBrokerMonitor_TestJettyServer {
             // Create the MatsFactory
             _matsFactory = JmsMatsFactory.createMatsFactory_JmsOnlyTransactions(
                     MatsBrokerMonitor_TestJettyServer.class.getSimpleName(), "*testing*",
-                    JmsMatsJmsSessionHandler_Pooling.create(connFactory, PoolingKeyInitiator.INITIATOR,
-                            PoolingKeyStageProcessor.STAGE),
+                    JmsMatsJmsSessionHandler_Pooling.create(connFactory, PoolingKeyInitiator.FACTORY,
+                            PoolingKeyStageProcessor.FACTORY),
                     matsSerializer);
             // Configure the MatsFactory for testing (remember, we're running two instances in same JVM)
             // .. Concurrency of only 2
@@ -178,7 +163,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             matsBrokerMonitor1.registerListener(destinationUpdateEvent -> {
                 log.info("Listener for MBM #1 at TestJettyServer: Got update! " + destinationUpdateEvent);
                 destinationUpdateEvent.getEventDestinations().forEach((fqName, matsBrokerDestination) -> log
-                        .info(".. event destinations (non-zero): [" + fqName + "] = [" + matsBrokerDestination + "]"));
+                        .info(".. event destinations: [" + fqName + "] = [" + matsBrokerDestination + "]"));
             });
             MatsBrokerMonitorBroadcastAndControl.install(matsBrokerMonitor1, _matsFactory);
             matsBrokerMonitor1.start();
@@ -357,8 +342,8 @@ public class MatsBrokerMonitor_TestJettyServer {
                     (msg) -> {
                         for (int i = 0; i < countF; i++) {
                             msg.traceId(MatsTestHelp.traceId() + "_#" + i)
+                                    // ORDINARY messages
                                     .keepTrace(KeepTrace.COMPACT)
-                            //.nonPersistent()
                                     .from("/sendRequestInitiated")
                                     .to(SERVICE_1 + SetupTestMatsEndpoints.SERVICE_MAIN)
                                     .replyTo(SERVICE_1 + SetupTestMatsEndpoints.TERMINATOR, sto)
@@ -411,8 +396,8 @@ public class MatsBrokerMonitor_TestJettyServer {
             // :: Chill till this has really gotten going.
             takeNap(200);
 
-            Future futureNonInteractive = sendAFuturize(out, matsFuturizer, false);
-            Future futureInteractive = sendAFuturize(out, matsFuturizer, true);
+            Future<Reply<DataTO>> futureNonInteractive = sendAFuturize(out, matsFuturizer, false);
+            Future<Reply<DataTO>> futureInteractive = sendAFuturize(out, matsFuturizer, true);
 
             out.flush();
 
@@ -428,7 +413,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             out.println("done");
         }
 
-        private static void takeNap(int numMillis) throws IOException{
+        private static void takeNap(int numMillis) throws IOException {
             try {
                 Thread.sleep(numMillis);
             }
@@ -438,7 +423,7 @@ public class MatsBrokerMonitor_TestJettyServer {
 
         }
 
-        private Future sendAFuturize(PrintWriter out, MatsFuturizer matsFuturizer, boolean interactive) {
+        private Future<Reply<DataTO>> sendAFuturize(PrintWriter out, MatsFuturizer matsFuturizer, boolean interactive) {
             // :: Do an interactive run, which should "jump the line" throughout the system:
             out.println("Doing a MatsFuturizer." + (interactive ? "interactive" : "NON-interactive") + ".");
             long nanosStart_futurize = System.nanoTime();
@@ -447,19 +432,19 @@ public class MatsBrokerMonitor_TestJettyServer {
                     DataTO.class, new DataTO(5, "fem"), msg -> {
                         msg.setTraceProperty(SetupTestMatsEndpoints.DONT_THROW, Boolean.TRUE);
                         msg.keepTrace(KeepTrace.MINIMAL);
-                        msg.nonPersistent(); // This works really strange in ActiveMQ Classic. Worrying.
                         if (interactive) {
+                            msg.nonPersistent(); // This works really strange in ActiveMQ Classic. Worrying.
                             msg.interactive();
                         }
                     });
             double msTaken_futurize = (System.nanoTime() - nanosStart_futurize) / 1_000_000d;
-            out.println(".. SEND matsFuturizer." + (interactive ? "interactive" : "NON-interactive")
+            out.println(".. SENT matsFuturizer." + (interactive ? "interactive" : "NON-interactive")
                     + " took [" + msTaken_futurize + "] ms.");
             out.println();
 
             futurized.thenAccept(dataTOReply -> {
                 double msTaken_futurizedReturn = (System.nanoTime() - nanosStart_futurize) / 1_000_000d;
-                out.println(".. #DONE# futurized " + (interactive ? "interactive" : "NON-interactive")
+                out.println(".. #DONE# Received futurized " + (interactive ? "interactive" : "NON-interactive")
                         + " took [" + msTaken_futurizedReturn + "] ms.");
                 out.println();
                 out.flush();
@@ -664,7 +649,7 @@ public class MatsBrokerMonitor_TestJettyServer {
         // :: Get ConnectionFactory
         ConnectionFactory jmsConnectionFactory;
 
-        String mode = "Direct_ActiveMQ";
+        String mode = "ActiveMQ_SpinUpLocalhost";
 
         if ("MatsTestBroker_Artemis".equals(mode)) {
             System.setProperty("mats.test.broker", "artemis");
@@ -676,34 +661,20 @@ public class MatsBrokerMonitor_TestJettyServer {
             MatsTestBroker matsTestBroker = MatsTestBroker.create();
             jmsConnectionFactory = matsTestBroker.getConnectionFactory();
         }
-        else if ("Standard_ActiveMQ".equals(mode)) {
-            // Using defaults
-            ActiveMQConnectionFactory amqConnectionFactory = new ActiveMQConnectionFactory();
-
-            // Set redelivery policies for testing.
-            RedeliveryPolicy redeliveryPolicy = amqConnectionFactory.getRedeliveryPolicy();
-            redeliveryPolicy.setMaximumRedeliveries(1);
-            redeliveryPolicy.setInitialRedeliveryDelay(100);
-
-            // Chill the prefetch.
-            ActiveMQPrefetchPolicy prefetchPolicy = amqConnectionFactory.getPrefetchPolicy();
-            prefetchPolicy.setQueuePrefetch(25);
-
-            jmsConnectionFactory = amqConnectionFactory;
+        else if ("ActiveMQ_LocalhostConnectionFactory".equals(mode)) {
+            jmsConnectionFactory = MatsTestBroker.newActiveMqConnectionFactory("tcp://localhost:61616");
         }
-        else if ("Direct_ActiveMQ".equals(mode)) {
-            BrokerService inVmActiveMqBroker = createInVmActiveMqBroker();
-//            jmsConnectionFactory = createActiveMQConnectionFactory("vm://" + inVmActiveMqBroker.getBrokerName()
-//                    + "?create=false");
-            jmsConnectionFactory = createActiveMQConnectionFactory("tcp://localhost:61616");
+        else if ("ActiveMQ_SpinUpLocalhost".equals(mode)) {
+            BrokerService broker = MatsTestBroker.newActiveMqBroker(ActiveMq.LOCALHOST, ActiveMq.SHUTDOWNHOOK);
+            jmsConnectionFactory = MatsTestBroker.newActiveMqConnectionFactory("tcp://localhost:61616");
         }
-        else if ("Direct_Artemis".equals(mode)) {
+        else if ("Artemis_".equals(mode)) {
             String brokerUrl = "vm://" + Math.abs(ThreadLocalRandom.current().nextInt());
             EmbeddedActiveMQ artemisBroker = createArtemisBroker(brokerUrl);
-            org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory activeMQConnectionFactory = new org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory(brokerUrl);
-            //activeMQConnectionFactory.setConsumerWindowSize(128 * 1024 * 1024);
-            jmsConnectionFactory = activeMQConnectionFactory;
-
+            org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory artemisMq_conFact = new org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory(
+                    brokerUrl);
+            // artemisMq_conFact.setConsumerWindowSize(128 * 1024 * 1024);
+            jmsConnectionFactory = artemisMq_conFact;
         }
         else {
             throw new IllegalStateException("No mode");
@@ -722,223 +693,16 @@ public class MatsBrokerMonitor_TestJettyServer {
 
     /// ---
 
-    protected static BrokerService createInVmActiveMqBroker() {
-        String ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        StringBuilder brokername = new StringBuilder(10);
-        brokername.append("MatsTestActiveMQ_");
-        for (int i = 0; i < 10; i++)
-            brokername.append(ALPHABET.charAt(ThreadLocalRandom.current().nextInt(ALPHABET.length())));
-
-       System.setProperty("org.apache.activemq.kahaDB.files.skipMetadataUpdate", "true");
-
-        log.info("Setting up in-vm ActiveMQ BrokerService '" + brokername + "'.");
-        BrokerService broker = new BrokerService();
-        try {
-            TransportConnector connector = new TransportConnector();
-            connector.setUri(new URI("nio://localhost:61616"));
-            broker.addConnector(connector);
-        }
-        catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
-        broker.setBrokerName(brokername.toString());
-        // :: Disable a bit of stuff for testing:
-        // No need for JMX registry; We won't control nor monitor it over JMX in tests
-        broker.setUseJmx(false);
-
-
-
-        // === NOTE: THE PERSISTENCE IS DIFFERENT FROM MatsTestBroker setup.
-
-        broker.setPersistent(true);
-        try {
-            // NOTE: Good KahaDB docs from RedHat:
-            // https://access.redhat.com/documentation/en-us/red_hat_amq/6.3/html/configuring_broker_persistence/kahadbconfiguration
-            KahaDBPersistenceAdapter kahaDBPersistenceAdapter = new KahaDBPersistenceAdapter();
-            kahaDBPersistenceAdapter.setJournalDiskSyncStrategy(JournalDiskSyncStrategy.PERIODIC.name());
-            // NOTE: This following value is default 1000, i.e. sync interval of 1 sec.
-            // Interestingly, setting it to a much lower value, e.g. 10 or 25, seemingly doesn't severely impact
-            // performance of the PERIODIC strategy. Thus, instead of potentially losing a full second's worth of
-            // messages if someone literally pulled the power cord of the ActiveMQ instance, you'd lose much less.
-            kahaDBPersistenceAdapter.setJournalDiskSyncInterval(25);
-            broker.setPersistenceAdapter(kahaDBPersistenceAdapter);
-        }
-        catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
-
-        // No need for Advisory Messages; We won't be needing those events in tests.
-        broker.setAdvisorySupport(false);
-        // No need for shutdown hook; We'll shut it down ourselves in the tests.
-        broker.setUseShutdownHook(false);
-        // Need scheduler support for redelivery plugin
-        broker.setSchedulerSupport(true);
-
-        // ::: Add features that we would want in prod.
-
-        // NOTICE: When using KahaDB, then you most probably want to have "skipMetadataUpdate=true":
-        // org.apache.activemq.kahaDB.files.skipMetadataUpdate=true
-        // https://access.redhat.com/documentation/en-us/red_hat_amq/6.3/html/tuning_guide/perstuning-kahadb
-
-        // NOTICE: All programmatic config here can be set via standalone broker config file 'conf/activemq.xml'.
-
-        // :: Purge inactive destinations
-        // Some usages of Mats ends up using "host-specific topics", e.g. MatsFuturizer from 'util' does this.
-        // When using e.g. Kubernetes, hostnames will change when deploying new versions of your services.
-        // Therefore, you'll end up with many dead topics. Thus, we want to scavenge these after some inactivity.
-        // Both the Broker needs to be configured, as well as DestinationPolicies.
-        broker.setSchedulePeriodForDestinationPurge(60_123); // Every 1 minute
-
-        // :: Plugins
-
-        // .. Statistics, since that is what we want people to do in production, and so that an
-        // ActiveMQ instance created with this tool can be used by 'matsbrokermonitor'.
-        StatisticsBrokerPlugin statisticsBrokerPlugin = new StatisticsBrokerPlugin();
-        // .. add the plugins to the BrokerService
-        broker.setPlugins(new BrokerPlugin[] { statisticsBrokerPlugin });
-
-        // :: Set Individual DLQ - which you most definitely should do in production.
-        // Hear, hear: https://users.activemq.apache.narkive.com/H7400Mn1/policymap-api-is-really-bad
-        IndividualDeadLetterStrategy individualDeadLetterStrategy = new IndividualDeadLetterStrategy();
-        individualDeadLetterStrategy.setQueuePrefix("DLQ.");
-        individualDeadLetterStrategy.setTopicPrefix("DLQ.");
-        // .. Send expired messages to DLQ (Note: true is default)
-        individualDeadLetterStrategy.setProcessExpired(true);
-        // .. Also DLQ non-persistent messages
-        individualDeadLetterStrategy.setProcessNonPersistent(true);
-        individualDeadLetterStrategy.setUseQueueForTopicMessages(true); // true is also default
-        individualDeadLetterStrategy.setUseQueueForQueueMessages(true); // true is also default.
-
-        // :: Create destination policy entry for QUEUES:
-        PolicyEntry allQueuesPolicy = new PolicyEntry();
-        allQueuesPolicy.setDestination(new ActiveMQQueue(">")); // all queues
-        // .. add the IndividualDeadLetterStrategy
-        allQueuesPolicy.setDeadLetterStrategy(individualDeadLetterStrategy);
-        // .. we do use prioritization, and this should ensure that priority information is handled in queue, and
-        // persisted to store. Store JavaDoc: "A hint to the store to try recover messages according to priority"
-        allQueuesPolicy.setPrioritizedMessages(true);
-        // Purge inactive Queues. The set of Queues should really be pretty stable. We only want to eventually
-        // get rid of queues for Endpoints which are taken out of the codebase.
-        allQueuesPolicy.setGcInactiveDestinations(true);
-        allQueuesPolicy.setInactiveTimeoutBeforeGC(2 * 24 * 60 * 60 * 1000); // Two full days.
-
-        // :: Create policy entry for TOPICS:
-        PolicyEntry allTopicsPolicy = new PolicyEntry();
-        allTopicsPolicy.setDestination(new ActiveMQTopic(">")); // all topics
-        // .. add the IndividualDeadLetterStrategy, not sure if that is ever relevant for plain Topics.
-        allTopicsPolicy.setDeadLetterStrategy(individualDeadLetterStrategy);
-        // .. and prioritization, not sure if that is ever relevant for Topics.
-        allTopicsPolicy.setPrioritizedMessages(true);
-        // Purge inactive Topics. The names of Topics will often end up being host-specific. The utility
-        // MatsFuturizer uses such logic. When using Kubernetes, the pods will change name upon redeploy of
-        // services. Get rid of the old pretty fast. But we want to see them in destination browsers like
-        // MatsBrokerMonitor, so not too fast.
-        allTopicsPolicy.setGcInactiveDestinations(true);
-        allTopicsPolicy.setInactiveTimeoutBeforeGC(2 * 60 * 60 * 1000); // 2 hours.
-        // .. note: Not leveraging the SubscriptionRecoveryPolicy features, as we do not have evidence of this being
-        // a problem, and using it does incur a cost wrt. memory and time.
-        // Would probably have used a FixedSizedSubscriptionRecoveryPolicy, with setUseSharedBuffer(true).
-        // To actually get subscribers to use this, one would have to also set the client side (consumer) to be
-        // 'Retroactive Consumer' i.e. new ActiveMQTopic("TEST.Topic?consumer.retroactive=true"); This is not
-        // done by the JMS impl of Mats.
-        // https://activemq.apache.org/retroactive-consumer
-
-        /*
-         * .. chill the prefetch a bit, from Queue:1000 and Topic:Short.MAX_VALUE (!), which is very much when used
-         * with Mats and its transactional logic of "consume a message, produce a message, commit", as well as
-         * multiple StageProcessors per Stage, on multiple instances/replicas of the services. Lowering this
-         * considerably to instead focus on lower memory usage, good distribution, and if one consumer by any chance
-         * gets hung, it won't allocate so many of the messages into a "void". This can be set on client side, but
-         * if not set there, it gets the defaults from server, AFAIU.
-         */
-        allQueuesPolicy.setQueuePrefetch(250);
-        allTopicsPolicy.setTopicPrefetch(250);
-
-        // .. create the PolicyMap containing the two destination policies
-        PolicyMap policyMap = new PolicyMap();
-        policyMap.put(allQueuesPolicy.getDestination(), allQueuesPolicy);
-        policyMap.put(allTopicsPolicy.getDestination(), allTopicsPolicy);
-        // .. set this PolicyMap containing our PolicyEntry on the broker.
-        broker.setDestinationPolicy(policyMap);
-
-        // :: Memory: Override available system memory. (The default is 1GB, which feels small for prod.)
-        // For production, you'd probably want to tune this, possibly using some calculation based on
-        // 'Runtime.getRuntime().maxMemory()', e.g. 'all - some fixed amount for the JVM and ActiveMQ'
-        // There's also a 'setPercentOfJvmHeap(..)' instead of 'setLimit(..)'
-        broker.getSystemUsage()
-                .getMemoryUsage()
-                .setLimit(1024L * 1024 * 1024); // 1 GB, which is the default. This is a test-broker!!
-        /*
-         * .. by default, ActiveMQ shares the memory between producers and consumers. We've encountered issues where
-         * the AMQ enters a state where the producers are unable to produce messages while consumers are also unable
-         * to consume due to the fact that there is no more memory to be had, effectively deadlocking the system
-         * (since a Mats Stage typically reads one message and produces one message). Default behaviour for ActiveMq
-         * is that both producers and consumers share the main memory pool of the application. By dividing this into
-         * two sections, and providing the producers with a large piece of the pie, it should ensure that the
-         * producers will always be able to produce messages while the consumers will always have some memory
-         * available to consume messages. Consumers do not use a lot of memory, in fact they use almost nothing.
-         * Therefore we've elected to override the default values of AMQ (60/40 P/C) and enforce a 95/5 P/C split
-         * instead.
-         *
-         * Source: ActiveMQ: Understanding Memory Usage
-         * http://blog.christianposta.com/activemq/activemq-understanding-memory-usage/
-         */
-        broker.setSplitSystemUsageForProducersConsumers(true);
-        broker.setProducerSystemUsagePortion(95);
-        broker.setConsumerSystemUsagePortion(5);
-
-        // :: Start the broker.
-        try {
-            broker.start();
-        }
-        catch (Exception e) {
-            throw new AssertionError("Could not start ActiveMQ BrokerService '" + brokername + "'.", e);
-        }
-        return broker;
-    }
-
-    protected static ConnectionFactory createActiveMQConnectionFactory(String brokerUrl) {
-        log.info("Setting up ActiveMQ ConnectionFactory to brokerUrl: [" + brokerUrl + "].");
-        org.apache.activemq.ActiveMQConnectionFactory conFactory = new org.apache.activemq.ActiveMQConnectionFactory(
-                brokerUrl);
-
-        // We don't need in-order, so just deliver other messages while waiting for redelivery.
-        // NOTE: This is NOT possible to use until https://issues.apache.org/jira/browse/AMQ-8617 is fixed!!
-        // conFactory.setNonBlockingRedelivery(true);
-
-        // :: RedeliveryPolicy
-        RedeliveryPolicy redeliveryPolicy = conFactory.getRedeliveryPolicy();
-        redeliveryPolicy.setInitialRedeliveryDelay(500);
-        redeliveryPolicy.setRedeliveryDelay(2000); // This is not in use when using exp. backoff and initial != 0
-        redeliveryPolicy.setUseExponentialBackOff(true);
-        redeliveryPolicy.setBackOffMultiplier(2);
-        redeliveryPolicy.setUseCollisionAvoidance(true);
-        redeliveryPolicy.setCollisionAvoidancePercent((short) 15);
-        // Only need 1 redelivery for testing, totally ignoring the above. Use 6-10 for production.
-        redeliveryPolicy.setMaximumRedeliveries(1);
-
-        // Tune prefetch from client side
-        ActiveMQPrefetchPolicy prefetchPolicy = new ActiveMQPrefetchPolicy();
-        prefetchPolicy.setQueuePrefetch(500); // Overrides whatever set from broker
-        prefetchPolicy.setTopicPrefetch(500); // Overrides whatever set from broker
-        conFactory.setPrefetchPolicy(prefetchPolicy);
-
-        return conFactory;
-    }
-
-
-
-
     public static EmbeddedActiveMQ createArtemisBroker(String brokerUrl) {
         log.info("Setting up in-vm Artemis embedded broker on URL '" + brokerUrl + "'.");
         org.apache.activemq.artemis.core.config.Configuration config = new ConfigurationImpl();
         try {
             config.setSecurityEnabled(false);
-            //config.setPersistenceEnabled(false);
+            // config.setPersistenceEnabled(false);
             config.addAcceptorConfiguration("in-vm", brokerUrl);
 
             // :: Configuring for common DLQs (since we can't get individual DLQs to work!!)
-            config.addAddressesSetting("#",
+            config.addAddressSetting("#",
                     new AddressSettings()
                             .setDeadLetterAddress(SimpleString.toSimpleString("DLQ"))
                             .setExpiryAddress(SimpleString.toSimpleString("ExpiryQueue"))
@@ -974,6 +738,5 @@ public class MatsBrokerMonitor_TestJettyServer {
         }
         return server;
     }
-
 
 }
