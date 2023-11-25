@@ -165,7 +165,7 @@ public interface MatsBrokerMonitor extends Closeable {
         String getDestinationName();
 
         /**
-         * @return whether this is a Queue (<code>true</code>) or a Topic (<code>false</code>).
+         * @return what type of destination this is: QUEUE or TOPIC.
          */
         DestinationType getDestinationType();
 

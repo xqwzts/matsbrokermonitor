@@ -11,6 +11,9 @@ import java.util.List;
 import java.util.SortedMap;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.BrokerIOException;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageIterable;
@@ -22,8 +25,6 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.BrowseQueueTableAddition;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.MonitorAddition;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * @author Endre Stølsvik 2022-03-13 23:33 - http://stolsvik.com/, endre@stolsvik.com
@@ -106,18 +107,20 @@ class BrowseQueue {
 
         // :: BUTTONS: REISSUE, DELETE
 
-        out.html("<input type='button' id='matsbm_reissue_bulk' value='Reissue [R]'"
+        out.html("<input type='button' id='matsbm_reissue_selected' value='Reissue [R]'"
                 + " class='matsbm_button matsbm_button_reissue matsbm_button_disabled'"
-                + " onclick='matsbm_reissue_bulk(event, \"").DATA(queueId).html("\")'>");
-        out.html("<input type='button' id='matsbm_delete_bulk' value='Delete [D]'"
+                + " onclick='matsbm_reissue_selected(event, \"").DATA(queueId).html("\")'>");
+
+        out.html("<input type='button' id='matsbm_delete_selected' value='Delete... [D]'"
                 + " class='matsbm_button matsbm_button_delete matsbm_button_disabled'"
-                + " onclick='matsbm_delete_propose_bulk(event)'>");
-        out.html("<input type='button' id='matsbm_delete_cancel_bulk' value='Cancel Delete [Esc]'"
+                + " onclick='matsbm_delete_propose_selected(event)'>");
+        out.html("<input type='button' id='matsbm_delete_cancel_selected' value='Cancel Delete [Esc]'"
                 + " class='matsbm_button matsbm_button_delete_cancel matsbm_button_hidden'"
-                + " onclick='matsbm_delete_cancel_bulk(event)'>");
-        out.html("<input type='button' id='matsbm_delete_confirm_bulk' value='Confirm Delete [X]'"
+                + " onclick='matsbm_delete_cancel_selected(event)'>");
+        out.html("<input type='button' id='matsbm_delete_confirm_selected' value='Confirm Delete [X]'"
                 + " class='matsbm_button matsbm_button_delete matsbm_button_hidden'"
-                + " onclick='matsbm_delete_confirmed_bulk(event, \"").DATA(queueId).html("\")'>");
+                + " onclick='matsbm_delete_confirmed_selected(event, \"").DATA(queueId).html("\")'>");
+
         out.html("<input type='button' id='matsbm_button_forceupdate' value='Update Now!'"
                 + " class='matsbm_button matsbm_button_forceupdate"
                 + "' onclick='matsbm_button_forceupdate(event)'>");
@@ -130,6 +133,8 @@ class BrowseQueue {
 
         // :: MESSAGES TABLE
 
+        // Note: Getting the iterator first, so that we can output any error before the table.
+        // Will be closed by try-with-resources later.
         MatsBrokerMessageIterable matsBrokerMessageIterable;
         try {
             matsBrokerMessageIterable = matsBrokerBrowseAndActions.browseQueue(queueId);
@@ -179,8 +184,11 @@ class BrowseQueue {
         out.html("<tbody>");
         int messageCount = 0;
         // Note: AutoCloseable, try-with-resources
-        try (MatsBrokerMessageIterable messages = matsBrokerMessageIterable) {
-            for (MatsBrokerMessageRepresentation msgRepr : messages) {
+        try (matsBrokerMessageIterable) {
+            // Notice: Outputting the information in a streaming fashion, so that we don't have to hold on to the
+            // MatsBrokerMessageRepresentation instances, which can be large. (They can thus be GCed as soon as we've
+            // output their info.)
+            for (MatsBrokerMessageRepresentation msgRepr : matsBrokerMessageIterable) {
                 out.html("<tr id='matsbm_msgid_").DATA(msgRepr.getMessageSystemId()).html("'>");
 
                 out.html("<td><div class='matsbm_table_browse_nobreak'>");

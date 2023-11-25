@@ -117,9 +117,9 @@ function matsbm_browseQueueKeyListener(event) {
     const name = event.key;
     if (name === "Escape") {
         // ?: Is the "Confirm Delete" button active (non-hidden)?
-        if (matsbm_is_delete_confirm_bulk_active()) {
+        if (matsbm_is_delete_confirm_selected_active()) {
             // -> Yes it is active - then it is this we'll escape
-            matsbm_delete_cancel_bulk();
+            matsbm_delete_cancel_selected();
         } else {
             setTimeout(() => {
                 document.getElementById("matsbm_back_broker_overview").click();
@@ -129,29 +129,29 @@ function matsbm_browseQueueKeyListener(event) {
     }
 
     if (name.toLowerCase() === "r") {
-        document.getElementById("matsbm_reissue_bulk").click();
+        document.getElementById("matsbm_reissue_selected").click();
     }
     if (name.toLowerCase() === "d") {
-        document.getElementById("matsbm_delete_bulk").click();
+        document.getElementById("matsbm_delete_selected").click();
     }
-    if ((name.toLowerCase() === "x") && matsbm_is_delete_confirm_bulk_active()) {
-        document.getElementById("matsbm_delete_confirm_bulk").click();
+    if ((name.toLowerCase() === "x") && matsbm_is_delete_confirm_selected_active()) {
+        document.getElementById("matsbm_delete_confirm_selected").click();
     }
 
 }
 
-function matsbm_reissue_bulk(event, queueId) {
+function matsbm_reissue_selected(event, queueId) {
     // ?: Is it disabled?
-    if (document.getElementById("matsbm_reissue_bulk").classList.contains('matsbm_button_disabled')) {
+    if (document.getElementById("matsbm_reissue_selected").classList.contains('matsbm_button_disabled')) {
         // -> Yes, disabled - so ignore press.
         return;
     }
-    matsbm_reissue_or_delete_bulk(event, queueId, "reissue")
+    matsbm_reissue_or_delete_selected(event, queueId, "reissue")
 }
 
-function matsbm_is_delete_confirm_bulk_active() {
+function matsbm_is_delete_confirm_selected_active() {
     // Return whether the "Confirm Delete" button is non-hidden
-    const confirmDeleteButton = document.getElementById("matsbm_delete_confirm_bulk");
+    const confirmDeleteButton = document.getElementById("matsbm_delete_confirm_selected");
     if (!confirmDeleteButton) {
         return false;
     }
@@ -159,30 +159,30 @@ function matsbm_is_delete_confirm_bulk_active() {
 
 }
 
-function matsbm_delete_propose_bulk(event) {
+function matsbm_delete_propose_selected(event) {
     // ?: Is it disabled?
-    if (document.getElementById("matsbm_delete_bulk").classList.contains('matsbm_button_disabled')) {
+    if (document.getElementById("matsbm_delete_selected").classList.contains('matsbm_button_disabled')) {
         // -> Yes, disabled - so ignore press.
         return;
     }
     // Gray out Delete
-    document.getElementById("matsbm_delete_bulk").classList.add("matsbm_button_disabled");
+    document.getElementById("matsbm_delete_selected").classList.add("matsbm_button_disabled");
     // Set Delete Confirm and Delete Cancel visible
-    document.getElementById("matsbm_delete_confirm_bulk").classList.remove("matsbm_button_hidden");
-    document.getElementById("matsbm_delete_cancel_bulk").classList.remove("matsbm_button_hidden");
+    document.getElementById("matsbm_delete_confirm_selected").classList.remove("matsbm_button_hidden");
+    document.getElementById("matsbm_delete_cancel_selected").classList.remove("matsbm_button_hidden");
 }
 
-function matsbm_delete_cancel_bulk(event) {
+function matsbm_delete_cancel_selected(event) {
     // Set Delete Confirm and Delete Cancel hidden
-    document.getElementById("matsbm_delete_confirm_bulk").classList.add("matsbm_button_hidden");
-    document.getElementById("matsbm_delete_cancel_bulk").classList.add("matsbm_button_hidden");
+    document.getElementById("matsbm_delete_confirm_selected").classList.add("matsbm_button_hidden");
+    document.getElementById("matsbm_delete_cancel_selected").classList.add("matsbm_button_hidden");
     // Enable Delete
-    document.getElementById("matsbm_delete_bulk").classList.remove("matsbm_button_disabled");
+    document.getElementById("matsbm_delete_selected").classList.remove("matsbm_button_disabled");
 }
 
 // Action for the "Confirm Delete" button made visible by clicking "Delete".
-function matsbm_delete_confirmed_bulk(event, queueId) {
-    matsbm_reissue_or_delete_bulk(event, queueId, "delete")
+function matsbm_delete_confirmed_selected(event, queueId) {
+    matsbm_reissue_or_delete_selected(event, queueId, "delete")
 }
 
 function matsbm_checkall(event) {
@@ -237,11 +237,11 @@ function matsbm_evaluate_checkall_and_buttons() {
     }
 
     // We're changing selection: Cancel the "Confirm Delete" if it was active.
-    matsbm_delete_cancel_bulk();
+    matsbm_delete_cancel_selected();
 
     // Activate or deactivate Reissue/Delete based on whether any is selected.
-    const reissueBtn = document.getElementById('matsbm_reissue_bulk');
-    const deleteBtn = document.getElementById('matsbm_delete_bulk');
+    const reissueBtn = document.getElementById('matsbm_reissue_selected');
+    const deleteBtn = document.getElementById('matsbm_delete_selected');
     if (numchecked) {
         reissueBtn.classList.remove('matsbm_button_disabled')
         deleteBtn.classList.remove('matsbm_button_disabled')
@@ -262,13 +262,13 @@ function matsbm_evaluate_checkall_and_buttons() {
     document.getElementById("matsbm_num_messages_shown").textContent = selectionText;
 }
 
-function matsbm_reissue_or_delete_bulk(event, queueId, action) {
+function matsbm_reissue_or_delete_selected(event, queueId, action) {
     // hide Cancel Delete and Confirm Delete
-    document.getElementById("matsbm_delete_confirm_bulk").classList.add("matsbm_button_hidden");
-    document.getElementById("matsbm_delete_cancel_bulk").classList.add("matsbm_button_hidden");
+    document.getElementById("matsbm_delete_confirm_selected").classList.add("matsbm_button_hidden");
+    document.getElementById("matsbm_delete_cancel_selected").classList.add("matsbm_button_hidden");
     // Disable Reissue and Delete buttons
-    document.getElementById('matsbm_reissue_bulk').classList.add('matsbm_button_disabled');
-    document.getElementById('matsbm_delete_bulk').classList.add('matsbm_button_disabled');
+    document.getElementById('matsbm_reissue_selected').classList.add('matsbm_button_disabled');
+    document.getElementById('matsbm_delete_selected').classList.add('matsbm_button_disabled');
 
     // :: Find which messages
     const msgSysMsgIds = [];
@@ -281,7 +281,7 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
     const actionPast = action === "reissue" ? "reissued" : "deleted";
     const operation = action === "reissue" ? "PUT" : "DELETE";
 
-    console.log(actionPresent + " bulk message(s)")
+    console.log(actionPresent + " [" + msgSysMsgIds.length + "] selected message(s)...")
 
     document.getElementById('matsbm_action_message').textContent = actionPresent + " " + msgSysMsgIds.length + " message" + (msgSysMsgIds.length > 1 ? "s" : "") + ".";
 
@@ -301,12 +301,13 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
         response.json().then(result => {
             console.log(result);
             let actionMessage = document.getElementById('matsbm_action_message');
-            actionMessage.textContent = "Done, " + result.numberOfAffectedMessages
+            actionMessage.innerHTML = "Done, " + result.numberOfAffectedMessages
                 + " message" + (result.numberOfAffectedMessages > 1 ? "s" : "")
-                + " " + actionPast + (action === 'reissue' ? " (Check console for new message ids)." : ".")
-                + " Time taken: " + result.timeTakenMillis + " ms";
+                + " " + actionPast
+                + ". Time taken: " + result.timeTakenMillis + " ms."
+                + (action === 'reissue' ? " <b>[Check console or log for new message ids!]</b>" : "");
             actionMessage.classList.add(action === "reissue" ? 'matsbm_action_reissued' : 'matsbm_action_deleted')
-            for (const msgSysMsgId of result.msgSysMsgIds) {
+            for (const msgSysMsgId of Object.keys(result.affectedMessages)) {
                 const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
                 if (row) {
                     row.classList.add('matsbm_' + actionPast);
@@ -314,22 +315,23 @@ function matsbm_reissue_or_delete_bulk(event, queueId, action) {
                     console.error("Couldn't find message row for msgSysMsgId [" + msgSysMsgId + "].");
                 }
             }
-            if (action === "reissue") {
-                console.log("Reissued MsgSysMsgIds (" + Object.keys(result.reissuedMsgSysMsgIds).length + "):");
-                for (const [key, value] of Object.entries(result.reissuedMsgSysMsgIds)) {
-                    console.log("  " + key + " -> " + value);
-                }
+
+            console.log("Done, " + actionPast + " [" + result.numberOfAffectedMessages + "] messages(s):");
+            let count = 0;
+            for (const messageMeta of Object.values(result.affectedMessages)) {
+                console.log("  " + count + ": " + JSON.stringify(messageMeta));
+                count++;
             }
             // Annoying CSS "delayed transition" also somehow "overwrites" the row color transition..?!
             // Using JS hack instead, to delay second part of transition.
             setTimeout(() => {
-                for (const msgSysMsgId of result.msgSysMsgIds) {
+                for (const [msgSysMsgId, messageMeta] of Object.entries(result.affectedMessages)) {
                     const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
                     if (row) {
                         row.classList.add('matsbs_delete_or_reissue');
                     }
                 }
-                setTimeout(() => window.location.reload(), 1000);
+                setTimeout(() => window.location.reload(), action === "reissue" ? 4000 : 2000);
             }, 1500)
         }).catch(error => {
             matsbm_json_parse_error_message(error);

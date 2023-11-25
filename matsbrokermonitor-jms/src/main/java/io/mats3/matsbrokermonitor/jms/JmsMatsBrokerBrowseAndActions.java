@@ -1,11 +1,9 @@
 package io.mats3.matsbrokermonitor.jms;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -33,7 +31,8 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions, Statics {
     private static final Logger log = LoggerFactory.getLogger(JmsMatsBrokerBrowseAndActions.class);
 
-    private final ConnectionFactory _connectionFactory;
+    private final JmsConnectionHolder _jmsConnectionHolder;
+
     private final String _matsDestinationPrefix;
     private final String _matsTraceKey;
 
@@ -42,18 +41,18 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
     }
 
     public static JmsMatsBrokerBrowseAndActions createWithDestinationPrefix(ConnectionFactory connectionFactory,
-            String matsDestinationPrefix, String matsTraceKey) {
-        return new JmsMatsBrokerBrowseAndActions(connectionFactory, matsDestinationPrefix, matsTraceKey);
-    }
-
-    public static JmsMatsBrokerBrowseAndActions createWithDestinationPrefix(ConnectionFactory connectionFactory,
             String matsDestinationPrefix) {
         return createWithDestinationPrefix(connectionFactory, matsDestinationPrefix, "mats:trace");
     }
 
+    public static JmsMatsBrokerBrowseAndActions createWithDestinationPrefix(ConnectionFactory connectionFactory,
+            String matsDestinationPrefix, String matsTraceKey) {
+        return new JmsMatsBrokerBrowseAndActions(connectionFactory, matsDestinationPrefix, matsTraceKey);
+    }
+
     private JmsMatsBrokerBrowseAndActions(ConnectionFactory connectionFactory, String matsDestinationPrefix,
             String matsTraceKey) {
-        _connectionFactory = connectionFactory;
+        _jmsConnectionHolder = new JmsConnectionHolder(connectionFactory);
         _matsDestinationPrefix = matsDestinationPrefix;
         _matsTraceKey = matsTraceKey;
     }
@@ -69,7 +68,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
     }
 
     @Override
-    public List<String> deleteMessages(String queueId, Collection<String> messageSystemIds) {
+    public Map<String, MatsBrokerMessageMetadata> deleteMessages(String queueId, Collection<String> messageSystemIds) {
         if (queueId == null) {
             throw new NullPointerException("queueId");
         }
@@ -80,7 +79,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         Session session = null;
         try {
             long nanosAtStart_CreateSession = System.nanoTime();
-            session = createSession(false);
+            session = _jmsConnectionHolder.createSession(false);
             long nanosTaken_CreateSession = System.nanoTime() - nanosAtStart_CreateSession;
 
             Queue queue = session.createQueue(queueId);
@@ -89,7 +88,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             // before it is needed, I'll just let it be like this: Single receive and drop (delete), loop.
             // Could have batched harder using the 'messageSelector' with an OR-construct.
 
-            ArrayList<String> deletedMessageIds = new ArrayList<>();
+            Map<String, MatsBrokerMessageMetadata> deletedMessages = new LinkedHashMap<>(messageSystemIds.size());
             boolean first = true;
             for (String messageSystemId : messageSystemIds) {
                 long nanosAtStart_CreateConsumerAndReceive = System.nanoTime();
@@ -102,13 +101,16 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                     first = false;
                     if (message != null) {
                         String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
-                        MDC.put(MDC_MATS_STAGE_ID, message.getStringProperty(JMS_MSG_PROP_TO));
+                        String matsMessageId = message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID);
+                        String toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
+                        MDC.put(MDC_MATS_STAGE_ID, toStageId);
                         MDC.put(MDC_TRACE_ID, traceId);
-                        MDC.put(MDC_MATS_MESSAGE_ID, message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID));
+                        MDC.put(MDC_MATS_MESSAGE_ID, matsMessageId);
                         log.info("DELETED MESSAGE: Received and dropping message from [" + queue + "]!"
                                 + " MsgSysId [" + messageSystemId + "], Message TraceId: [" + traceId + "]" + extraLog
                                 + " - session.createConsumer()+receive(): " + ms(nanosTaken_CreateConsumerAndReceive));
-                        deletedMessageIds.add(message.getJMSMessageID());
+                        deletedMessages.put(message.getJMSMessageID(), new MatsBrokerMessageMetadata(messageSystemId,
+                                null, matsMessageId, traceId, toStageId));
                     }
                     else {
                         log.info("DELETE NOT DONE: Did NOT receive a message for id [" + messageSystemId
@@ -124,21 +126,29 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                     MDC.remove(MDC_MATS_MESSAGE_ID);
                 }
             }
-            return deletedMessageIds;
+            return deletedMessages;
         }
         catch (JMSException e) {
             // Bad, so ditch connection.
-            closeAndNullOutSharedConnection();
+            _jmsConnectionHolder.closeAndNullOutSharedConnection();
             throw new BrokerIOException("Problems talking to broker."
                     + " If you retry the operation, a new attempt at making a JMS Connection will be performed.", e);
         }
         finally {
-            closeIfNonNullIgnoreException(session);
+            JmsConnectionHolder.closeIfNonNullIgnoreException(session);
         }
     }
 
     @Override
-    public Map<String, String> reissueMessages(String deadLetterQueueId, Collection<String> messageSystemIds) {
+    public Map<String, MatsBrokerMessageMetadata> deleteAllMessages(String queueId, int maxNumberOfMessages)
+            throws BrokerIOException {
+        // TODO: Implement!
+        throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public Map<String, MatsBrokerMessageMetadata> reissueMessages(String deadLetterQueueId,
+            Collection<String> messageSystemIds) {
         if (deadLetterQueueId == null) {
             throw new NullPointerException("deadLetterQueueId");
         }
@@ -149,7 +159,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         Session session = null;
         try {
             long nanosAtStart_CreateSession = System.nanoTime();
-            session = createSession(true);
+            session = _jmsConnectionHolder.createSession(true);
             long nanosTaken_CreateSession = System.nanoTime() - nanosAtStart_CreateSession;
 
             Queue dlq = session.createQueue(deadLetterQueueId);
@@ -159,7 +169,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             // before it is needed, I'll just let it be like this: Single receive-then-send (move), commit tx, loop.
             // Could have batched harder, both within transaction, and via the 'messageSelector' using an OR-construct.
 
-            Map<String, String> reissuedMessageIds = new LinkedHashMap<>(messageSystemIds.size());
+            Map<String, MatsBrokerMessageMetadata> reissuedMessageIds = new LinkedHashMap<>(messageSystemIds.size());
             boolean first = true;
             for (String messageSystemId : messageSystemIds) {
                 long nanosAtStart_CreateConsumerAndReceive = System.nanoTime();
@@ -172,49 +182,53 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                     first = false;
                     MDC.put(MDC_MATS_MESSAGE_SYSTEM_ID, messageSystemId);
                     if (message != null) {
-                        String originalTo = message.getStringProperty(JMS_MSG_PROP_TO);
                         String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
-
-                        MDC.put(MDC_MATS_STAGE_ID, originalTo);
+                        String matsMessageId = message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID);
+                        String toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
+                        MDC.put(MDC_MATS_STAGE_ID, toStageId);
                         MDC.put(MDC_TRACE_ID, traceId);
-                        MDC.put(MDC_MATS_MESSAGE_ID, message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID));
+                        MDC.put(MDC_MATS_MESSAGE_ID, matsMessageId);
                         // ?: Do we know which endpoint/queue it originally should go to?
-                        if (originalTo != null) {
+                        if (toStageId != null) {
                             // -> Yes, we know which queue it originally came from!
-                            String toQueueName = _matsDestinationPrefix + originalTo;
+                            String toQueueName = _matsDestinationPrefix + toStageId;
                             Queue toQueue = session.createQueue(toQueueName);
                             // Send it ..
                             long nanosAtStart_Send = System.nanoTime();
                             genericProducer.send(toQueue, message);
                             long nanosTaken_Send = System.nanoTime() - nanosAtStart_Send;
                             // .. afterwards it has the new JMS Message ID.
-                            String newMsgSysId = message.getJMSMessageID();
+                            String reissuedMsgSysId = message.getJMSMessageID();
+                            MDC.put(MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID, reissuedMsgSysId);
+
                             log.info("REISSUE MESSAGE: Received and reissued message from dlq [" + dlq
                                     + "] to [" + toQueue + "]! Original MsgSysId: [" + messageSystemId
-                                    + "], New MsgSysId: [" + newMsgSysId + "], Message TraceId: [" + traceId + "]"
+                                    + "], New MsgSysId: [" + reissuedMsgSysId + "], Message TraceId: [" + traceId + "]"
                                     + extraLog + " - session.createConsumer()+receive(): "
                                     + ms(nanosTaken_CreateConsumerAndReceive)
                                     + " - producer.send(): " + ms(nanosTaken_Send));
 
-                            reissuedMessageIds.put(messageSystemId, newMsgSysId);
+                            reissuedMessageIds.put(messageSystemId, new MatsBrokerMessageMetadata(messageSystemId,
+                                    reissuedMsgSysId, matsMessageId, traceId, toStageId));
                         }
                         else {
                             // -> No, we don't know which queue it originally came from!
-                            String matsDeadLetterQueue = _matsDestinationPrefix + MATS_DEAD_LETTER_ENDPOINT_ID;
-                            Queue matsDlq = session.createQueue(matsDeadLetterQueue);
+                            String matsFailedReissueQueueName = _matsDestinationPrefix
+                                    + MatsBrokerBrowseAndActions.MATS_QUEUE_ID_FOR_FAILED_REISSUE;
+                            Queue matsFailedReissueQueue = session.createQueue(matsFailedReissueQueueName);
                             // Send it ..
                             long nanosAtStart_Send = System.nanoTime();
-                            genericProducer.send(matsDlq, message);
+                            genericProducer.send(matsFailedReissueQueue, message);
                             long nanosTaken_Send = System.nanoTime() - nanosAtStart_Send;
                             // .. afterwards it has the new JMS Message ID.
                             String newMsgSysId = message.getJMSMessageID();
                             log.error("REISSUE FAILED: Found message without JmsMats JMS StringProperty ["
                                     + JMS_MSG_PROP_TO + "], so don't know where it was originally destined. Sending it"
-                                    + " to a synthetic Mats \"DLQ\" endpoint [" + matsDlq + "] to handle it,"
-                                    + " and get it away from the DLQ. You may inspect it there, and either delete it,"
-                                    + " or if an actual Mats message, code up a consumer for the endpoint."
-                                    + " Original MsgSysId: [" + messageSystemId + "], New MsgSysId: [" + newMsgSysId
-                                    + "]" + extraLog + " - session.createConsumer()+receive(): "
+                                    + " to a synthetic Mats \"DLQ\" endpoint [" + matsFailedReissueQueue
+                                    + "] to handle it, and get it away from the DLQ. You may inspect it there, and"
+                                    + " either delete it, or if an actual Mats message, code up a consumer for the"
+                                    + " endpoint. Original MsgSysId: [" + messageSystemId + "], New MsgSysId: ["
+                                    + newMsgSysId + "]" + extraLog + " - session.createConsumer()+receive(): "
                                     + ms(nanosTaken_CreateConsumerAndReceive)
                                     + " - producer.send(): " + ms(nanosTaken_Send));
                         }
@@ -231,6 +245,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                     MDC.remove(MDC_MATS_STAGE_ID);
                     MDC.remove(MDC_TRACE_ID);
                     MDC.remove(MDC_MATS_MESSAGE_ID);
+                    MDC.remove(MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID);
                 }
                 session.commit();
             }
@@ -239,23 +254,18 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         }
         catch (JMSException e) {
             // Bad, so ditch connection.
-            closeAndNullOutSharedConnection();
+            _jmsConnectionHolder.closeAndNullOutSharedConnection();
             throw new BrokerIOException("Problems talking to broker."
                     + " If you retry the operation, a new attempt at making a JMS Connection will be performed.", e);
         }
         finally {
-            closeIfNonNullIgnoreException(session);
+            JmsConnectionHolder.closeIfNonNullIgnoreException(session);
         }
     }
 
     @Override
-    public int deleteAllMessages(String destinationId) {
-        // TODO: Implement!
-        throw new IllegalStateException("Not implemented");
-    }
-
-    @Override
-    public int reissueAllMessages(String deadLetterQueueId) {
+    public Map<String, MatsBrokerMessageMetadata> reissueAllMessages(String deadLetterQueueId, int maxNumberOfMessages,
+            String randomCookie) throws BrokerIOException {
         // TODO: Implement!
         throw new IllegalStateException("Not implemented");
     }
@@ -289,7 +299,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         Session session = null;
         try {
             long nanosAtStart_CreateSession = System.nanoTime();
-            session = createSession(false);
+            session = _jmsConnectionHolder.createSession(false);
             long nanosTaken_CreateSession = System.nanoTime() - nanosAtStart_CreateSession;
 
             Queue queue = session.createQueue(queueId);
@@ -308,238 +318,174 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         }
         catch (JMSException e) {
             // Bad, so ditch connection.
-            closeAndNullOutSharedConnection();
+            _jmsConnectionHolder.closeAndNullOutSharedConnection();
             throw new BrokerIOException("Problems talking to broker."
                     + " If you retry the operation, a new attempt at making a JMS Connection will be performed.", e);
         }
         // NOTICE: NOT closing Session, as the Iterator needs it till it is closed!
     }
 
-    private Session createSession(boolean transacted) throws JMSException {
-        try {
-            return transacted
-                    ? getCachedConnection().createSession(true, Session.SESSION_TRANSACTED)
-                    : getCachedConnection().createSession(false, Session.AUTO_ACKNOWLEDGE);
+    private static class JmsConnectionHolder {
+
+        private final ConnectionFactory _connectionFactory;
+
+        // GuardedBy(this): the three following
+        private Connection _jmsConnection;
+        private boolean _connectionBeingCreated;
+        private Throwable _creatingException;
+
+        // Wait-object while separate thread creates the Connection (in case multiple threads need it at the same time).
+        private final Object _waitWhileConnectionBeingCreatedObject = new Object();
+
+        public JmsConnectionHolder(ConnectionFactory connectionFactory) {
+            _connectionFactory = connectionFactory;
         }
-        catch (JMSException e) {
-            // :: If the createSession() call failed, let's retry once more to get a new Connection.
-            closeAndNullOutSharedConnection();
-            // Retry getting Connection and then createSession. If this fails, give up.
-            return transacted
-                    ? getCachedConnection().createSession(true, Session.SESSION_TRANSACTED)
-                    : getCachedConnection().createSession(false, Session.AUTO_ACKNOWLEDGE);
+
+        private Session createSession(boolean transacted) throws JMSException {
+            try {
+                return transacted
+                        ? getCachedConnection().createSession(true, Session.SESSION_TRANSACTED)
+                        : getCachedConnection().createSession(false, Session.AUTO_ACKNOWLEDGE);
+            }
+            catch (JMSException e) {
+                // :: If the createSession() call failed, let's retry once more to get a new Connection.
+                closeAndNullOutSharedConnection();
+                // Retry getting Connection. If this fails, let exception percolate out.
+                return transacted
+                        ? getCachedConnection().createSession(true, Session.SESSION_TRANSACTED)
+                        : getCachedConnection().createSession(false, Session.AUTO_ACKNOWLEDGE);
+            }
         }
-    }
 
-    private void closeAndNullOutSharedConnection() {
-        Connection existing;
-        synchronized (this) {
-            existing = _jmsConnection;
-            // Null out connection, so that we'll get a new one.
-            _jmsConnection = null;
-        }
-        // Close existing if present
-        closeIfNonNullIgnoreException(existing);
-    }
-
-    // GuardedBy(this): the three following
-    private Connection _jmsConnection;
-    private boolean _connectionBeingCreated;
-    private Throwable _creatingException;
-
-    private final Object _waitObject = new Object();
-
-    private Connection getCachedConnection() {
-        synchronized (_waitObject) {
+        private void closeAndNullOutSharedConnection() {
+            Connection existing;
             synchronized (this) {
-                // ?: Do we have a shared Connection?
-                if (_jmsConnection != null) {
-                    // -> Yes, so return it.
-                    return _jmsConnection;
-                }
-                else {
-                    // -> No connection, so someone needs to make it.
-                    // ?: Are someone else already creating a new Connection?
-                    if (!_connectionBeingCreated) {
-                        // -> No, we're not already creating a new Connection, so go ahead and do it
-                        log.info("No connection available, no one else is creating it, so we need to make it -"
-                                + " firing off a create-Connection-Thread.");
-                        // We are now in the process of attempting to create a new Connection
-                        _connectionBeingCreated = true;
-                        // There is currently no creating exception
-                        _creatingException = null;
-                        new Thread(() -> {
-                            try {
-                                log.info("Creating JMS Connection.");
-                                Connection connection = _connectionFactory.createConnection();
-                                connection.start();
-                                synchronized (JmsMatsBrokerBrowseAndActions.this) {
-                                    _jmsConnection = connection;
-                                    _connectionBeingCreated = false;
-                                }
-                                log.info("JMS Connection created successfully.");
-                            }
-                            catch (Throwable e) {
-                                synchronized (JmsMatsBrokerBrowseAndActions.this) {
-                                    _creatingException = e;
-                                    _connectionBeingCreated = false;
-                                }
-                                log.warn("Couldn't create JMS Connection.", e);
-                            }
-                            finally {
-                                // Just to entirely sure that it is not possible to leave this thread with the system
-                                // in a bad state that we'll never get out of.
-                                synchronized (JmsMatsBrokerBrowseAndActions.this) {
-                                    _connectionBeingCreated = false;
-                                }
-                                // Now wake all waiter (including the thread that fired off this thread!).
-                                synchronized (_waitObject) {
-                                    _waitObject.notifyAll();
-                                }
-                            }
-                        }, "JmsMatsBrokerBrowseAndActions: Creating JMS Connection").start();
+                existing = _jmsConnection;
+                // Null out connection, so that we'll get a new one.
+                _jmsConnection = null;
+            }
+            // Close existing if present
+            if (existing == null) {
+                return;
+            }
+            try {
+                existing.close();
+            }
+            catch (JMSException e) {
+                log.warn("Got [" + e.getClass().getSimpleName() + "] when trying to close Connection [" + existing
+                        + "], ignoring.");
+            }
+        }
+
+        private Connection getCachedConnection() {
+            synchronized (_waitWhileConnectionBeingCreatedObject) {
+                synchronized (this) {
+                    // ?: Do we have a shared Connection?
+                    if (_jmsConnection != null) {
+                        // -> Yes, so return it.
+                        return _jmsConnection;
                     }
                     else {
-                        // -> Someone else has fired off the create-Connection-Thread.
-                        log.info("No connection available, but someone else have fired off a"
-                                + " create-Connection-Thread.");
+                        // -> No connection, so someone needs to make it.
+                        // ?: Are someone else already creating a new Connection?
+                        if (!_connectionBeingCreated) {
+                            // -> No, we're not already creating a new Connection, so go ahead and do it
+                            log.info("No connection available, no one else is creating it, so we need to make it -"
+                                    + " firing off a create-Connection-Thread.");
+                            // We are now in the process of attempting to create a new Connection
+                            _connectionBeingCreated = true;
+                            // There is currently no creating exception
+                            _creatingException = null;
+                            new Thread(() -> {
+                                try {
+                                    log.info("Creating JMS Connection.");
+                                    Connection connection = _connectionFactory.createConnection();
+                                    connection.start();
+                                    synchronized (JmsConnectionHolder.this) {
+                                        _jmsConnection = connection;
+                                        _connectionBeingCreated = false;
+                                    }
+                                    log.info("JMS Connection created successfully.");
+                                }
+                                catch (Throwable e) {
+                                    synchronized (JmsConnectionHolder.this) {
+                                        _creatingException = e;
+                                        _connectionBeingCreated = false;
+                                    }
+                                    log.warn("Couldn't create JMS Connection.", e);
+                                }
+                                finally {
+                                    // Just to entirely sure that it is not possible to leave this thread with the
+                                    // system
+                                    // in a bad state that we'll never get out of.
+                                    synchronized (JmsConnectionHolder.this) {
+                                        _connectionBeingCreated = false;
+                                    }
+                                    // Now wake all waiter (including the thread that fired off this thread!).
+                                    synchronized (_waitWhileConnectionBeingCreatedObject) {
+                                        _waitWhileConnectionBeingCreatedObject.notifyAll();
+                                    }
+                                }
+                            }, "JmsMatsBrokerBrowseAndActions: Creating JMS Connection").start();
+                        }
+                        else {
+                            // -> Someone else has fired off the create-Connection-Thread.
+                            log.info("No connection available, but someone else have fired off a"
+                                    + " create-Connection-Thread.");
+                        }
+                    }
+                } // Exiting sync on 'this'.
+
+                // ----- Now either we fired off a create-new-Connection thread, or someone else has already done it.
+
+                // We already hold the lock for _waitObject, so thead cannot notify us yet.
+                try {
+                    // Go into wait on resolution: Whether created Exception, or Exception for why it didn't work.
+                    _waitWhileConnectionBeingCreatedObject.wait(30_000);
+                }
+                catch (InterruptedException e) {
+                    throw new BrokerIOException("We got interrupted while waiting for connection to be made.", e);
+                }
+
+                synchronized (this) {
+                    // ?: Did the create-new-Connection thread get a Connection?
+                    if (_jmsConnection != null) {
+                        // -> Yes, connection now present, so return it.
+                        return _jmsConnection;
+                    }
+                    // ?: Did the create-new-Connection thread get an Exception?
+                    else if (_creatingException != null) {
+                        // -> Yes, so throw an Exception out
+                        throw new BrokerIOException("Couldn't create JMS Connection.", _creatingException);
+                    }
+                    else {
+                        // -> Neither Connection nor Exception - probably timeout.
+                        /*
+                         * NOTE: There is a tiny chance of a state-race here, in that another thread might already have
+                         * gotten problems with the new Connection, nulled it out, and started a new connection
+                         * creation. I choose to ignore this, as the resulting failure isn't devastating.
+                         */
+                        throw new BrokerIOException("Didn't manage to create JMS Connection within timeout.");
                     }
                 }
             }
+        }
 
-            // ----- Now either we fired off a create-new-Connection thread, or someone else has already done it.
-
-            // We already hold the lock for _waitObject, so thead cannot notify us yet.
+        private static void closeIfNonNullIgnoreException(Session session) {
+            if (session == null) {
+                return;
+            }
             try {
-                // Go into wait on resolution: Wither created Exception, or Exception for why it didn't work.
-                _waitObject.wait(10_000);
+                session.close();
             }
-            catch (InterruptedException e) {
-                throw new BrokerIOException("We got interrupted while waiting for connection to be made.", e);
-            }
-
-            synchronized (this) {
-                // ?: Did the create-new-Connection thread get a Connection?
-                if (_jmsConnection != null) {
-                    // -> Yes, connection now present, so return it.
-                    return _jmsConnection;
-                }
-                // ?: Did the create-new-Connection thread get an Exception?
-                else if (_creatingException != null) {
-                    // -> Yes, so throw an Exception out
-                    throw new BrokerIOException("Couldn't create JMS Connection.", _creatingException);
-                }
-                else {
-                    // -> Neither Connection nor Exception - probably timeout.
-                    /*
-                     * NOTE: There is a tiny chance of a state-race here, in that another thread might already have
-                     * gotten problems with the new Connection, nulled it out, and started a new connection creation. I
-                     * choose to ignore this, as the resulting failure isn't devastating.
-                     */
-                    throw new BrokerIOException("Didn't manage to create JMS Connection within timeout.");
-                }
+            catch (JMSException e) {
+                log.warn("Got [" + e.getClass().getSimpleName() + "] when trying to close Session [" + session
+                        + "], ignoring.");
             }
         }
     }
 
-    private static BrokerIOException closeExceptionally(Connection connection, JMSException e) {
-        JMSException suppressed = null;
-        if (connection != null) {
-            try {
-                connection.close();
-            }
-            catch (JMSException ex) {
-                suppressed = ex;
-            }
-        }
-        BrokerIOException brokerIOException = new BrokerIOException("Problems talking with broker.", e);
-        if (suppressed != null) {
-            brokerIOException.addSuppressed(suppressed);
-        }
-        return brokerIOException;
-    }
-
-    private static void closeIfNonNullIgnoreException(Connection connection) {
-        if (connection == null) {
-            return;
-        }
-        try {
-            connection.close();
-        }
-        catch (JMSException e) {
-            log.warn("Got [" + e.getClass().getSimpleName() + "] when trying to close Connection [" + connection
-                    + "], ignoring.");
-        }
-    }
-
-    private static void closeIfNonNullIgnoreException(Session session) {
-        if (session == null) {
-            return;
-        }
-        try {
-            session.close();
-        }
-        catch (JMSException e) {
-            log.warn("Got [" + e.getClass().getSimpleName() + "] when trying to close Session [" + session
-                    + "], ignoring.");
-        }
-    }
-
-    /**
-     * Converts nanos to millis with a sane number of significant digits ("3.5" significant digits), but assuming that
-     * this is not used to measure things that take less than 0.001 milliseconds (in which case it will be "rounded" to
-     * 0.0001, 1e-4, as a special value). Takes care of handling the difference between 0 and >0 nanoseconds when
-     * rounding - in that 1 nanosecond will become 0.0001 (1e-4 ms, which if used to measure things that are really
-     * short lived might be magnitudes wrong), while 0 will be 0.0 exactly. Note that printing of a double always
-     * include the ".0" (unless scientific notation kicks in), which can lead your interpretation slightly astray wrt.
-     * accuracy/significant digits when running this over e.g. the number 555_555_555, which will print as "556.0", and
-     * 5_555_555_555 prints "5560.0".
-     */
-    private static double ms(long nanosTaken) {
-        if (nanosTaken == 0) {
-            return 0.0;
-        }
-        // >=500_000 ms?
-        if (nanosTaken >= 1_000_000L * 500_000) {
-            // -> Yes, >500_000ms, thus chop into the integer part of the number (zeroing 3 digits)
-            // (note: printing of a double always include ".0"), e.g. 612000.0
-            return Math.round(nanosTaken / 1_000_000_000d) * 1_000d;
-        }
-        // >=50_000 ms?
-        if (nanosTaken >= 1_000_000L * 50_000) {
-            // -> Yes, >50_000ms, thus chop into the integer part of the number (zeroing 2 digits)
-            // (note: printing of a double always include ".0"), e.g. 61200.0
-            return Math.round(nanosTaken / 100_000_000d) * 100d;
-        }
-        // >=5_000 ms?
-        if (nanosTaken >= 1_000_000L * 5_000) {
-            // -> Yes, >5_000ms, thus chop into the integer part of the number (zeroing 1 digit)
-            // (note: printing of a double always include ".0"), e.g. 6120.0
-            return Math.round(nanosTaken / 10_000_000d) * 10d;
-        }
-        // >=500 ms?
-        if (nanosTaken >= 1_000_000L * 500) {
-            // -> Yes, >500ms, so chop off fraction entirely
-            // (note: printing of a double always include ".0"), e.g. 612.0
-            return Math.round(nanosTaken / 1_000_000d);
-        }
-        // >=50 ms?
-        if (nanosTaken >= 1_000_000L * 50) {
-            // -> Yes, >50ms, so use 1 decimal, e.g. 61.2
-            return Math.round(nanosTaken / 100_000d) / 10d;
-        }
-        // >=5 ms?
-        if (nanosTaken >= 1_000_000L * 5) {
-            // -> Yes, >5ms, so use 2 decimal, e.g. 6.12
-            return Math.round(nanosTaken / 10_000d) / 100d;
-        }
-        // E-> <5 ms
-        // Use 3 decimals, but at least '0.0001' if round to zero, so as to point out that it is NOT 0.0d
-        // e.g. 0.612
-        return Math.max(Math.round(nanosTaken / 1_000d) / 1_000d, 0.0001d);
-    }
-
-    private static class MatsBrokerMessageIterableImpl implements MatsBrokerMessageIterable {
+    private static class MatsBrokerMessageIterableImpl implements MatsBrokerMessageIterable, Statics {
         private static final Logger log = LoggerFactory.getLogger(MatsBrokerMessageIterableImpl.class);
         private final Session _session;
         private final String _matsTraceKey;
@@ -567,7 +513,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
 
         @Override
         public Iterator<MatsBrokerMessageRepresentation> iterator() {
-            return new Iterator<MatsBrokerMessageRepresentation>() {
+            return new Iterator<>() {
                 @Override
                 public boolean hasNext() {
                     return _messageEnumeration.hasMoreElements();

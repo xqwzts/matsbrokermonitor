@@ -7,7 +7,6 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -24,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
+import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageMetadata;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.UpdateEvent;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui;
@@ -230,8 +230,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             log.info(command.action + ": queueId: [" + command.queueId
                     + "], #msgSysMsgIds:[" + command.msgSysMsgIds.size() + "]");
 
-            List<String> affectedMsgSysMsgIds;
-            Map<String, String> reissuedMsgSysMsgIds = null;
+            Map<String, MatsBrokerMessageMetadata> affectedMessages;
             if ("delete".equals(command.action)) {
                 // ACCESS CONTROL: delete message
                 if (!ac.deleteMessage(command.queueId)) {
@@ -239,7 +238,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
                 }
                 // ----- Passed Access Control for deleteMessage; Perform operation
 
-                affectedMsgSysMsgIds = _matsBrokerBrowseAndActions.deleteMessages(command.queueId,
+                affectedMessages = _matsBrokerBrowseAndActions.deleteMessages(command.queueId,
                         command.msgSysMsgIds);
             }
             else if ("reissue".equals(command.action)) {
@@ -249,9 +248,8 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
                 }
                 // ----- Passed Access Control for reissueMessage; Perform operation
 
-                reissuedMsgSysMsgIds = _matsBrokerBrowseAndActions.reissueMessages(command.queueId,
+                affectedMessages = _matsBrokerBrowseAndActions.reissueMessages(command.queueId,
                         command.msgSysMsgIds);
-                affectedMsgSysMsgIds = new ArrayList<>(reissuedMsgSysMsgIds.keySet());
             }
             else {
                 throw new IllegalArgumentException("Unknown command.action.");
@@ -259,9 +257,9 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
 
             ResultDto result = new ResultDto();
             result.resultOk = true;
-            result.numberOfAffectedMessages = affectedMsgSysMsgIds.size();
-            result.msgSysMsgIds = affectedMsgSysMsgIds;
-            result.reissuedMsgSysMsgIds = reissuedMsgSysMsgIds;
+            result.numberOfAffectedMessages = affectedMessages.size();
+            result.requestedMsgSysMsgIds = command.msgSysMsgIds;
+            result.affectedMessages = affectedMessages;
             result.timeTakenMillis = Math.round((System.nanoTime() - nanosAtStart_wait) / 1000d) / 1000d;
             out.append(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(result));
 
@@ -318,9 +316,9 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
 
     private static class ResultDto {
         boolean resultOk;
+        List<String> requestedMsgSysMsgIds;
         Integer numberOfAffectedMessages;
-        List<String> msgSysMsgIds;
-        Map<String, String> reissuedMsgSysMsgIds;
+        Map<String, MatsBrokerMessageMetadata> affectedMessages;
         double timeTakenMillis;
     }
 
