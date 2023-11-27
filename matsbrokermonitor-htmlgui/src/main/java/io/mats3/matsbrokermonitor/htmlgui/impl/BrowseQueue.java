@@ -55,6 +55,8 @@ class BrowseQueue {
             }
         }
 
+        // :: HANDLING MISSING DESTINATION
+
         out.html("<div class='matsbm_heading'>");
         if (matsBrokerDestination == null) {
             out.html("<h1>No info about queue!</h1><br>\n");
@@ -63,6 +65,16 @@ class BrowseQueue {
             out.html("</div>");
             return;
         }
+
+        // :: CONTEXT FOR JAVASCRIPT: Move some data to JS context: Number of messages on queue.
+
+        long numberOfQueuedMessages = matsBrokerDestination.getNumberOfQueuedMessages();
+
+        out.html("<script>\n    const matsbm_number_of_messages_on_queue = ")
+                .DATA(numberOfQueuedMessages)
+                .html(";\n</script>\n");
+
+        // :: HEADING
 
         // ?: Is this the Global DLQ?
         if (matsBrokerDestination.isDefaultGlobalDlq()) {
@@ -91,7 +103,7 @@ class BrowseQueue {
         out.html("Broker Queue '").DATA(queueId).html("'<br>\n");
 
         out.html("At ").DATA(Statics.formatTimestampSpan(matsBrokerDestination.getLastUpdateLocalMillis()))
-                .html(" it had ").DATA(matsBrokerDestination.getNumberOfQueuedMessages()).html(" messages");
+                .html(" it had <b>").DATA(numberOfQueuedMessages).html(" messages</b>");
         if (matsBrokerDestination.getNumberOfInflightMessages().isPresent()) {
             out.html(" of which ")
                     .DATA(matsBrokerDestination.getNumberOfInflightMessages().getAsLong())
@@ -105,23 +117,70 @@ class BrowseQueue {
         }
         out.html("<br>\n");
 
-        // :: BUTTONS: REISSUE, DELETE
+        // :: BUTTONS: REISSUE, DELETE, FORCE UPDATE
 
-        out.html("<input type='button' id='matsbm_reissue_selected' value='Reissue [R]'"
-                + " class='matsbm_button matsbm_button_reissue matsbm_button_disabled'"
-                + " onclick='matsbm_reissue_selected(event, \"").DATA(queueId).html("\")'>");
+        if (matsBrokerDestination.isDlq()) {
+            // Reissue selected (instant, no confirm)
+            out.html("<input type='button' id='matsbm_reissue_selected' value='Reissue [r]'"
+                    + " class='matsbm_button matsbm_button_reissue matsbm_button_disabled'"
+                    + " onclick='matsbm_reissue_selected(event, \"").DATA(queueId).html("\")'>");
+        }
 
-        out.html("<input type='button' id='matsbm_delete_selected' value='Delete... [D]'"
+        // Delete selected
+        out.html("<input type='button' id='matsbm_delete_selected' value='Delete... [d]'"
                 + " class='matsbm_button matsbm_button_delete matsbm_button_disabled'"
-                + " onclick='matsbm_delete_propose_selected(event)'>");
-        out.html("<input type='button' id='matsbm_delete_cancel_selected' value='Cancel Delete [Esc]'"
-                + " class='matsbm_button matsbm_button_delete_cancel matsbm_button_hidden'"
-                + " onclick='matsbm_delete_cancel_selected(event)'>");
-        out.html("<input type='button' id='matsbm_delete_confirm_selected' value='Confirm Delete [X]'"
-                + " class='matsbm_button matsbm_button_delete matsbm_button_hidden'"
-                + " onclick='matsbm_delete_confirmed_selected(event, \"").DATA(queueId).html("\")'>");
+                + " onclick='matsbm_delete_selected_propose(event)'>");
+        // Cancel delete selected
+        out.html("<button id='matsbm_delete_selected_cancel'"
+                + " class='matsbm_button matsbm_button_wider matsbm_button_delete_cancel matsbm_button_hidden'"
+                + " onclick='matsbm_delete_or_reissue_cancel(event)'>Cancel <b>Delete Selected</b> [Esc]</button>");
+        // Confirm delete selected
+        out.html("<button id='matsbm_delete_selected_confirm'"
+                + " class='matsbm_button matsbm_button_wider matsbm_button_delete matsbm_button_hidden'"
+                + " onclick='matsbm_delete_selected_confirm(event, \"").DATA(queueId).html("\")'>"
+                        + "Confirm <b>Delete Selected</b> [x]</button>");
 
-        out.html("<input type='button' id='matsbm_button_forceupdate' value='Update Now!'"
+        if (matsBrokerDestination.isDlq()) {
+            // Reissue all
+            out.html("<input type='button' id='matsbm_reissue_all' value='Reissue All... [R]'"
+                    + " class='matsbm_button matsbm_button_reissue"
+                    + (numberOfQueuedMessages > 0 ? "" : " matsbm_button_disabled")
+                    + "' onclick='matsbm_reissue_all_propose(event)'>");
+            // Cancel reissue all
+            out.html("<button id='matsbm_reissue_all_cancel'"
+                    + " class='matsbm_button matsbm_button_wider matsbm_button_reissue_cancel matsbm_button_hidden'"
+                    + " onclick='matsbm_delete_or_reissue_cancel(event)'>Cancel <b>Reissue All</b> [Esc]</button>");
+            // Confirm reissue all
+            out.html("<button id='matsbm_reissue_all_confirm'"
+                    + " class='matsbm_button matsbm_button_wider matsbm_button_reissue matsbm_button_hidden'"
+                    + " onclick='matsbm_reissue_all_confirm(event, \"").DATA(queueId).html("\")'>"
+                            + "Confirm <b>Reissue All</b> [x]</button>");
+        }
+
+        // Delete all
+        out.html("<input type='button' id='matsbm_delete_all' value='Delete All... [D]'"
+                + " class='matsbm_button matsbm_button_delete"
+                + (numberOfQueuedMessages > 0 ? "" : " matsbm_button_disabled")
+                + "' onclick='matsbm_delete_all_propose(event)'>");
+        // Cancel delete all
+        out.html("<button id='matsbm_delete_all_cancel'"
+                + " class='matsbm_button matsbm_button_wider matsbm_button_delete_cancel matsbm_button_hidden'"
+                + " onclick='matsbm_delete_or_reissue_cancel(event)'>Cancel <b>Delete All</b> [Esc]</button>");
+        // Confirm delete all
+        out.html("<button id='matsbm_delete_all_confirm'"
+                + " class='matsbm_button matsbm_button_wider matsbm_button_delete matsbm_button_hidden'"
+                + " onclick='matsbm_delete_all_confirm(event, \"").DATA(queueId).html("\")'>"
+                        + "Confirm <b>Delete All</b> [x]</button>");
+
+        // Limit messages input field (for both reissue all, and delete all)
+        out.html("<div id='matsbm_all_limit_div' class='matsbm_input_limit_div matsbm_input_limit_div_hidden'>")
+                .html("<label for='matsbm_reissue_all_max_messages'>Limit: </label>"
+                        + "<input type='text' id='matsbm_all_limit_messages' value='")
+                .DATA(numberOfQueuedMessages)
+                .html("' autocomplete='off' inputmode='numeric' class='matsbm_input_max'> messages</div>");
+
+        // Force update
+        out.html("<input type='button' id='matsbm_button_forceupdate' value='Update Now! [u]'"
                 + " class='matsbm_button matsbm_button_forceupdate"
                 + "' onclick='matsbm_button_forceupdate(event)'>");
         out.html("<span id='matsbm_action_message'></span>");
@@ -129,7 +188,6 @@ class BrowseQueue {
         out.html("</div>\n"); // /matsbm_actionbuttons
 
         out.html("<br>\n");
-
 
         // :: MESSAGES TABLE
 
@@ -265,7 +323,7 @@ class BrowseQueue {
         // This text is displayed above the table. THE MAGIC OF CSS!!!
         out.html("<div id='matsbm_num_messages_shown'>Browsing ").DATA(messageCount).html(
                 " messages directly from queue.");
-        if (messageCount > 200) {
+        if (messageCount > 100) {
             out.html(" <i>(Note: Our max is ").DATA(MAX_MESSAGES_BROWSER).html(
                     ", but the message broker might have a smaller max browse. ActiveMQ default is 400)</i>\n");
         }

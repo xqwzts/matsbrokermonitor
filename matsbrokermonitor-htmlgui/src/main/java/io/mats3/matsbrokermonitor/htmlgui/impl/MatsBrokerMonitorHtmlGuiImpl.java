@@ -216,95 +216,151 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             throw new IllegalArgumentException("'command.action' is null.");
         }
 
-        // ?: DELETE or REISSUE
-        if ("delete".equals(command.action) || "reissue".equals(command.action)) {
-            if (command.queueId == null) {
-                throw new IllegalArgumentException("command.queueId is null.");
-            }
-
-            if (command.msgSysMsgIds == null) {
-                throw new IllegalArgumentException("command.msgSysMsgIds is null.");
-            }
-
-            long nanosAtStart_wait = System.nanoTime();
-            log.info(command.action + ": queueId: [" + command.queueId
-                    + "], #msgSysMsgIds:[" + command.msgSysMsgIds.size() + "]");
-
-            Map<String, MatsBrokerMessageMetadata> affectedMessages;
-            if ("delete".equals(command.action)) {
-                // ACCESS CONTROL: delete message
-                if (!ac.deleteMessage(command.queueId)) {
-                    throw new AccessDeniedException("Not allowed to delete messages from queue.");
+        switch (command.action) {
+            // ?: DELETE SELECTED or REISSUE SELECTED
+            case "delete_selected":
+            case "reissue_selected": {
+                if (command.queueId == null) {
+                    throw new IllegalArgumentException("command.queueId is null.");
                 }
-                // ----- Passed Access Control for deleteMessage; Perform operation
 
-                affectedMessages = _matsBrokerBrowseAndActions.deleteMessages(command.queueId,
-                        command.msgSysMsgIds);
+                if (command.msgSysMsgIds == null) {
+                    throw new IllegalArgumentException("command.msgSysMsgIds is null.");
+                }
+
+                long nanosAtStart_wait = System.nanoTime();
+                log.info(command.action + ": queueId: [" + command.queueId
+                        + "], #msgSysMsgIds:[" + command.msgSysMsgIds.size() + "]");
+
+                Map<String, MatsBrokerMessageMetadata> affectedMessages;
+                if ("delete_selected".equals(command.action)) {
+                    // ACCESS CONTROL: delete message
+                    if (!ac.deleteMessage(command.queueId)) {
+                        throw new AccessDeniedException("Not allowed to delete messages from queue.");
+                    }
+                    // ----- Passed Access Control for deleteMessage; Perform operation
+
+                    affectedMessages = _matsBrokerBrowseAndActions.deleteMessages(command.queueId,
+                            command.msgSysMsgIds);
+                }
+                else if ("reissue_selected".equals(command.action)) {
+                    // ACCESS CONTROL: reissue message
+                    if (!ac.reissueMessage(command.queueId)) {
+                        throw new AccessDeniedException("Not allowed to reissue messages from DLQ.");
+                    }
+                    // ----- Passed Access Control for reissueMessage; Perform operation
+
+                    affectedMessages = _matsBrokerBrowseAndActions.reissueMessages(command.queueId,
+                            command.msgSysMsgIds, ac.username());
+                }
+                else {
+                    throw new AssertionError("Should not be able to get here.");
+                }
+
+                ResultDto result = new ResultDto();
+                result.resultOk = true;
+                result.numberOfAffectedMessages = affectedMessages.size();
+                result.requestedMsgSysMsgIds = command.msgSysMsgIds;
+                result.affectedMessages = affectedMessages;
+                result.timeTakenMillis = Math.round((System.nanoTime() - nanosAtStart_wait) / 1000d) / 1000d;
+                out.append(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(result));
+
+                // Run a forceUpdate to get newer info - this is async, returning "immediately".
+                _matsBrokerMonitor.forceUpdate("After_" + command.action + "_"
+                        + Long.toString(ThreadLocalRandom.current().nextLong(), 36), false);
+                break;
             }
-            else if ("reissue".equals(command.action)) {
+            // ?: DELETE ALL or REISSUE ALL
+            case "delete_all":
+            case "reissue_all": {
+                if (command.queueId == null) {
+                    throw new IllegalArgumentException("command.queueId is null.");
+                }
+
+                if (command.limitMessages <= 0) {
+                    throw new IllegalArgumentException("command.limitMessages <= 0.");
+                }
+
+                long nanosAtStart_wait = System.nanoTime();
+                log.info(command.action + ": queueId: [" + command.queueId
+                        + "], limitMessages:[" + command.limitMessages + "]");
+
+                Map<String, MatsBrokerMessageMetadata> affectedMessages;
+                if ("delete_all".equals(command.action)) {
+                    // ACCESS CONTROL: delete message
+                    if (!ac.deleteMessage(command.queueId)) {
+                        throw new AccessDeniedException("Not allowed to delete messages from queue.");
+                    }
+                    // ----- Passed Access Control for deleteMessage; Perform operation
+
+                    affectedMessages = _matsBrokerBrowseAndActions.deleteAllMessages(command.queueId,
+                            command.limitMessages);
+                }
+                else if ("reissue_all".equals(command.action)) {
+                    // ACCESS CONTROL: reissue message
+                    if (!ac.reissueMessage(command.queueId)) {
+                        throw new AccessDeniedException("Not allowed to reissue messages from DLQ.");
+                    }
+                    // ----- Passed Access Control for reissueMessage; Perform operation
+
+                    affectedMessages = _matsBrokerBrowseAndActions.reissueAllMessages(command.queueId,
+                            command.limitMessages, random());
+                }
+                else {
+                    throw new AssertionError("Should not be able to get here.");
+                }
+
+                ResultDto result = new ResultDto();
+                result.resultOk = true;
+                result.numberOfAffectedMessages = affectedMessages.size();
+                result.requestedMsgSysMsgIds = command.msgSysMsgIds;
+                result.affectedMessages = affectedMessages;
+                result.timeTakenMillis = Math.round((System.nanoTime() - nanosAtStart_wait) / 1000d) / 1000d;
+                out.append(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(result));
+
+                // Run a forceUpdate to get newer info - this is async, returning "immediately".
+                _matsBrokerMonitor.forceUpdate("After_" + command.action + "_" + random(), false);
+                break;
+            }
+            // ?: FORCE UPDATE?
+            case "update": {
                 // ACCESS CONTROL: reissue message
-                if (!ac.reissueMessage(command.queueId)) {
-                    throw new AccessDeniedException("Not allowed to reissue messages from DLQ.");
+                if (!ac.overview()) {
+                    throw new AccessDeniedException("Not allowed to see overview, thus not request update either.");
                 }
-                // ----- Passed Access Control for reissueMessage; Perform operation
+                // ----- Passed Access Control for overview; Request update
 
-                affectedMessages = _matsBrokerBrowseAndActions.reissueMessages(command.queueId,
-                        command.msgSysMsgIds);
+                boolean updatedOkWithinTimeout;
+                String correlationId = random();
+                long nanosAtStart_wait = System.nanoTime();
+                try {
+                    // :: Logic to make the update synchronous, using correlationId and waiting for the update
+                    // event with the same correlationId.
+                    CountDownLatch countDownLatch = new CountDownLatch(1);
+                    _updateEventWaiters.put(correlationId, countDownLatch);
+                    log.info("update: executing matsBrokerMonitor.forceUpdate(\"" + correlationId + "\", false);");
+                    _matsBrokerMonitor.forceUpdate(correlationId, true);
+                    updatedOkWithinTimeout = countDownLatch.await(FORCE_UPDATE_TIMEOUT, TimeUnit.MILLISECONDS);
+                    long nanosTaken_wait = System.nanoTime() - nanosAtStart_wait;
+                    log.info("update: updatedOkWithinTimeout: [" + updatedOkWithinTimeout
+                            + "] (waited [" + Math.round((nanosTaken_wait / 1000d) / 1000d) + "] ms).");
+                }
+                catch (InterruptedException e) {
+                    log.warn("update: Got interrupted while waiting for matsBrokerMonitor.forceRefresh(" + correlationId
+                            + ", false) - assuming shutdown, trying to reply 'no can do'.");
+                    updatedOkWithinTimeout = false;
+                }
+                finally {
+                    _updateEventWaiters.remove(correlationId);
+                }
+                ResultDto result = new ResultDto();
+                result.resultOk = updatedOkWithinTimeout;
+                result.timeTakenMillis = Math.round((System.nanoTime() - nanosAtStart_wait) / 1000d) / 1000d;
+                out.append(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(result));
+                break;
             }
-            else {
-                throw new IllegalArgumentException("Unknown command.action.");
-            }
-
-            ResultDto result = new ResultDto();
-            result.resultOk = true;
-            result.numberOfAffectedMessages = affectedMessages.size();
-            result.requestedMsgSysMsgIds = command.msgSysMsgIds;
-            result.affectedMessages = affectedMessages;
-            result.timeTakenMillis = Math.round((System.nanoTime() - nanosAtStart_wait) / 1000d) / 1000d;
-            out.append(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(result));
-
-            // Run a forceUpdate to get newer info - this is async, returning "immediately".
-            _matsBrokerMonitor.forceUpdate("After_" + command.action + "_"
-                    + Long.toString(ThreadLocalRandom.current().nextLong(), 36), false);
-        }
-        // ?: FORCE UPDATE?
-        else if ("update".equals(command.action)) {
-            // ACCESS CONTROL: reissue message
-            if (!ac.overview()) {
-                throw new AccessDeniedException("Not allowed to see overview, thus not request update either.");
-            }
-            // ----- Passed Access Control for overview; Request update
-
-            boolean updatedOkWithinTimeout;
-            String correlationId = Long.toString(ThreadLocalRandom.current().nextLong(), 36);
-            long nanosAtStart_wait = System.nanoTime();
-            try {
-                // :: Logic to make the update synchronous, using correlationId and waiting for the update
-                // event with the same correlationId.
-                CountDownLatch countDownLatch = new CountDownLatch(1);
-                _updateEventWaiters.put(correlationId, countDownLatch);
-                log.info("update: executing matsBrokerMonitor.forceUpdate(\"" + correlationId + "\", false);");
-                _matsBrokerMonitor.forceUpdate(correlationId, true);
-                updatedOkWithinTimeout = countDownLatch.await(FORCE_UPDATE_TIMEOUT, TimeUnit.MILLISECONDS);
-                long nanosTaken_wait = System.nanoTime() - nanosAtStart_wait;
-                log.info("update: updatedOkWithinTimeout: [" + updatedOkWithinTimeout
-                        + "] (waited [" + Math.round((nanosTaken_wait / 1000d) / 1000d) + "] ms).");
-            }
-            catch (InterruptedException e) {
-                log.warn("update: Got interrupted while waiting for matsBrokerMonitor.forceRefresh(" + correlationId
-                        + ", false) - assuming shutdown, trying to reply 'no can do'.");
-                updatedOkWithinTimeout = false;
-            }
-            finally {
-                _updateEventWaiters.remove(correlationId);
-            }
-            ResultDto result = new ResultDto();
-            result.resultOk = updatedOkWithinTimeout;
-            result.timeTakenMillis = Math.round((System.nanoTime() - nanosAtStart_wait) / 1000d) / 1000d;
-            out.append(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(result));
-        }
-        else {
-            throw new IllegalArgumentException("Don't understand that 'command.action'.");
+            default:
+                throw new IllegalArgumentException("Don't understand that 'command.action'.");
         }
     }
 
@@ -312,6 +368,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
         String action;
         String queueId;
         List<String> msgSysMsgIds;
+        int limitMessages;
     }
 
     private static class ResultDto {

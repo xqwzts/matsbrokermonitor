@@ -79,10 +79,12 @@ class BrokerOverview {
                 topics++;
             }
         }
-        out.html("<i>(Number of Mats incoming Queues: <b>").DATA(queues)
+        out.html("<i>(<b>").DATA(stack.getEndpoints().size())
+                .html("</b> Mats Endpoints over <b>").DATA(stack.getEndpointGroups().size())
+                .html("</b> EndpointGroups | Incoming Queues: <b>").DATA(queues)
                 .html("</b>, Topics: <b>").DATA(topics)
                 .html("</b>, Dead Letter Queues: <b>").DATA(dlqs)
-                .html("</b>, Total Mats relevant destinations: <b>").DATA(queues + topics + dlqs)
+                .html("</b> = total Mats relevant destinations: <b>").DATA(queues + topics + dlqs)
                 .html("</b>");
         if (snapshot.getStatisticsUpdateMillis().isPresent()) {
             out.html(" - Stats update time: <b>")
@@ -152,13 +154,15 @@ class BrokerOverview {
 
         // ===== BUTTONS: View All vs View Bad
 
-        out.html("<input type='button' id='matsbm_button_show_all' value='Show All'"
+        out.html("<input type='button' id='matsbm_button_show_all' value='Show All [a]'"
                 + " class='matsbm_button matsbm_button_show_all" + (showBadOnly ? "" : " matsbm_button_active")
                 + "' onclick='matsbm_button_show_all_destinations(event)'>");
-        out.html("<input type='button' id='matsbm_button_show_bad' value='Show Bad'"
+
+        out.html("<input type='button' id='matsbm_button_show_bad' value='Show Bad [b]'"
                 + " class='matsbm_button matsbm_button_show_bad" + (showBadOnly ? " matsbm_button_active" : "")
                 + "' onclick='matsbm_button_show_bad_destinations(event)'>");
-        out.html("<input type='button' id='matsbm_button_forceupdate' value='Update Now!'"
+
+        out.html("<input type='button' id='matsbm_button_forceupdate' value='Update Now! [u]'"
                 + " class='matsbm_button matsbm_button_forceupdate"
                 + "' onclick='matsbm_button_forceupdate(event)'>");
         out.html("<span id='matsbm_action_message'></span>");

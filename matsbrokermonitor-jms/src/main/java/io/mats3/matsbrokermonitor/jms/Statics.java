@@ -1,5 +1,7 @@
 package io.mats3.matsbrokermonitor.jms;
 
+import java.util.Random;
+
 /**
  * @author Endre Stølsvik 2022-01-16 23:24 - http://stolsvik.com/, endre@stolsvik.com
  */
@@ -18,6 +20,9 @@ public interface Statics {
     String MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID = "mats.ReissuedMsgSysId";
     String MDC_MATS_MESSAGE_ID = "mats.MatsMsgId";
 
+    String JMS_MSG_PROP_REISSUE_COOKIE = "mats.ReissueCookie";
+    String JMS_MSG_PROP_REISSUE_USERNAME = "mats.ReissueUsername";
+
     // COPIED FROM JmsMatsFactory
 
     // MDC Keys
@@ -34,6 +39,17 @@ public interface Statics {
     String JMS_MSG_PROP_FROM = "mats_From"; // String
     String JMS_MSG_PROP_TO = "mats_To"; // String
     String JMS_MSG_PROP_AUDIT = "mats_Audit"; // Boolean
+
+    Random RANDOM = new Random();
+    default String random() {
+        String ALPHABET =  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        int length = 8;
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            sb.append(ALPHABET.charAt(RANDOM.nextInt(ALPHABET.length())));
+        }
+        return sb.toString();
+    }
 
     /**
      * Converts nanos to millis with a sane number of significant digits ("3.5" significant digits), but assuming that

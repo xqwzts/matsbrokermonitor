@@ -29,14 +29,14 @@ public interface MatsBrokerMonitorHtmlGui {
     }
 
     /**
-     * Note: The output from this method is static, it can be written directly to the HTML page in a script-tag,
-     * or included as a separate file (with hard caching).
+     * Note: The output from this method is static, it can be written directly to the HTML page in a script-tag, or
+     * included as a separate file (with hard caching).
      */
     void outputStyleSheet(Appendable out) throws IOException;
 
     /**
-     * Note: The output from this method is static, it can be written directly to the HTML page in a style-tag,
-     * or included as a separate file (with hard caching).
+     * Note: The output from this method is static, it can be written directly to the HTML page in a style-tag, or
+     * included as a separate file (with hard caching).
      */
     void outputJavaScript(Appendable out) throws IOException;
 
@@ -48,8 +48,14 @@ public interface MatsBrokerMonitorHtmlGui {
             throws IOException, AccessDeniedException;
 
     /**
-     * The HTML GUI will invoke JSON-over-HTTP to the same URL it is located at - map this to PUT and DELETE,
-     * content type is <code>"application/json; charset=utf-8"</code>.
+     * The HTML GUI will invoke JSON-over-HTTP to the same URL it is located at - map this to PUT and DELETE, content
+     * type is <code>"application/json; charset=utf-8"</code>.
+     * <p/>
+     * NOTICE: If you need to change the JSON Path, i.e. the path which this GUI employs to do "active" operations, you
+     * can do so by setting the JS global variable "matsbm_json_path" when outputting the HTML, overriding the default
+     * which is to use the current URL path (i.e. the same as the GUI is served on). They may be on the same path since
+     * the HTML is served using GET, while the JSON uses PUT and DELETE with header "Content-Type: application/json".
+     * (Read the 'matsbrokermonitor.js' file for details.)
      */
     void json(Appendable out, Map<String, String[]> requestParameters, String requestBody, AccessControl ac)
             throws IOException, AccessDeniedException;
@@ -86,6 +92,10 @@ public interface MatsBrokerMonitorHtmlGui {
     }
 
     interface AccessControl {
+        default String username() {
+            return "{unknown}";
+        }
+
         default boolean overview() {
             return false;
         }
@@ -107,32 +117,45 @@ public interface MatsBrokerMonitorHtmlGui {
         }
     }
 
-    AccessControl ACCESS_CONTROL_ALLOW_ALL = new AccessControl() {
-        @Override
-        public boolean overview() {
-            return true;
-        }
+    /**
+     * @param username the username to use in the {@link AccessControl#username()} method.
+     * @return an {@link AccessControl} which allows all operations.
+     */
+    static AccessControl getAccessControlAllowAll(String username) {
+        return new AccessControl() {
+            @Override
+            public String username() {
+                return username;
+            }
 
-        @Override
-        public boolean browseQueue(String queueId) {
-            return true;
-        }
+            @Override
+            public boolean overview() {
+                return true;
+            }
 
-        @Override
-        public boolean examineMessage(String fromQueueId) {
-            return true;
-        }
+            @Override
+            public boolean browseQueue(String queueId) {
+                return true;
+            }
 
-        @Override
-        public boolean deleteMessage(String fromQueueId) {
-            return true;
-        }
+            @Override
+            public boolean examineMessage(String fromQueueId) {
+                return true;
+            }
 
-        @Override
-        public boolean reissueMessage(String fromDeadLetterQueueId) {
-            return true;
-        }
-    };
+            @Override
+            public boolean deleteMessage(String fromQueueId) {
+                return true;
+            }
+
+            @Override
+            public boolean reissueMessage(String fromDeadLetterQueueId) {
+                return true;
+            }
+        };
+    }
+
+    AccessControl ACCESS_CONTROL_ALLOW_ALL = getAccessControlAllowAll("{unknown}");
 
     class AccessDeniedException extends RuntimeException {
         public AccessDeniedException(String message) {

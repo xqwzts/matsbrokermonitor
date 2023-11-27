@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Random;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
@@ -21,6 +22,18 @@ public interface Statics {
     DateTimeFormatter DATE_TIME_FORMATTER_MS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
     DateTimeFormatter DATE_TIME_FORMATTER_SEC = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     int FORCE_UPDATE_TIMEOUT = 5000;
+
+    Random RANDOM = new Random();
+
+    default String random() {
+        String ALPHABET =  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        int length = 8;
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            sb.append(ALPHABET.charAt(RANDOM.nextInt(ALPHABET.length())));
+        }
+        return sb.toString();
+    }
 
     static String formatTimestampSpan(long timestamp) {
         long millisAgo = System.currentTimeMillis() - timestamp;
@@ -100,7 +113,5 @@ public interface Statics {
         // Uses ISO8601 with milliseconds and timezone (if present).
         mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
         return mapper;
-
     }
-
 }

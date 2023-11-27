@@ -14,6 +14,9 @@ import java.util.Optional;
 import java.util.SortedMap;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -34,8 +37,6 @@ import io.mats3.serial.MatsTrace.Call.CallType;
 import io.mats3.serial.MatsTrace.Call.Channel;
 import io.mats3.serial.MatsTrace.KeepMatsTrace;
 import io.mats3.serial.MatsTrace.StackState;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * @author Endre Stølsvik 2022-03-13 23:33 - http://stolsvik.com/, endre@stolsvik.com
@@ -142,20 +143,29 @@ public class ExamineMessage {
 
         // :: ACTION BUTTONS
 
-        out.html("<input type='button' id='matsbm_reissue_single' value='Reissue [R]'"
-                + " class='matsbm_button matsbm_button_reissue'"
-                + " onclick='matsbm_reissue_single(event,\"")
-                .DATA(queueId).html("\",\"").DATA(messageSystemId).html("\")'>");
-        out.html("<input type='button' id='matsbm_delete_single' value='Delete [D]'"
-                + " class='matsbm_button matsbm_button_delete'"
-                + " onclick='matsbm_delete_propose_single(event)'>");
-        out.html("<input type='button' id='matsbm_delete_cancel_single' value='Cancel Delete [Esc]'"
-                + " class='matsbm_button matsbm_button_delete_cancel matsbm_button_hidden'"
-                + " onclick='matsbm_delete_cancel_single(event)'>");
-        out.html("<input type='button' id='matsbm_delete_confirm_single' value='Confirm Delete [X]'"
-                + " class='matsbm_button matsbm_button_delete matsbm_button_hidden'"
-                + " onclick='matsbm_delete_confirmed_single(event,\"")
-                .DATA(queueId).html("\",\"").DATA(messageSystemId).html("\")'>");
+        if (matsBrokerDestination.isDlq()) {
+            out.html("<button id='matsbm_reissue_single'"
+                    + " class='matsbm_button matsbm_button_wider matsbm_button_reissue'"
+                    + " onclick='matsbm_reissue_single(event,\"")
+                    .DATA(queueId).html("\",\"").DATA(messageSystemId).html("\")'>"
+                            + "Reissue <b>this message</b> [r]</button>");
+        }
+        out.html("<button id='matsbm_delete_single'"
+                + " class='matsbm_button matsbm_button_wider matsbm_button_delete'"
+                + " onclick='matsbm_delete_single_propose(event)'>"
+                + "Delete <b>this message</b>... [d]</button>");
+
+        out.html("<button id='matsbm_delete_single_cancel'"
+                + " class='matsbm_button matsbm_button_wider matsbm_button_delete_cancel matsbm_button_hidden'"
+                + " onclick='matsbm_delete_single_cancel(event)'>"
+                + "Cancel <b>Delete This</b> [Esc]</button>");
+
+        out.html("<button id='matsbm_delete_single_confirm'"
+                + " class='matsbm_button matsbm_button_wider matsbm_button_delete matsbm_button_hidden'"
+                + " onclick='matsbm_delete_single_confirm(event,\"")
+                .DATA(queueId).html("\",\"").DATA(messageSystemId).html("\")'>"
+                        + "Confirm <b>Delete This</b> [x]</button>");
+
         List<ExamineMessageAddition> examineAdditions = monitorAdditions.stream()
                 .filter(o -> o instanceof ExamineMessageAddition)
                 .map(o -> (ExamineMessageAddition) o)

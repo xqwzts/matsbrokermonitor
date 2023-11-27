@@ -1,7 +1,9 @@
 package io.mats3.matsbrokermonitor.jms;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -140,15 +142,87 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
     }
 
     @Override
-    public Map<String, MatsBrokerMessageMetadata> deleteAllMessages(String queueId, int maxNumberOfMessages)
+    public Map<String, MatsBrokerMessageMetadata> deleteAllMessages(String queueId, int limitMessages)
             throws BrokerIOException {
-        // TODO: Implement!
-        throw new IllegalStateException("Not implemented");
+        if (queueId == null) {
+            throw new NullPointerException("queueId");
+        }
+        if (limitMessages < 0) {
+            throw new IllegalArgumentException("maxNumberOfMessages must be positive! [" + limitMessages + "]");
+        }
+        if (limitMessages == 0) {
+            return Collections.emptyMap();
+        }
+
+        Session session = null;
+        try {
+            long nanosAtStart_CreateSession = System.nanoTime();
+            session = _jmsConnectionHolder.createSession(false);
+            long nanosTaken_CreateSession = System.nanoTime() - nanosAtStart_CreateSession;
+
+            Queue queue = session.createQueue(queueId);
+
+            long nanosAtStart_CreateConsumerAndReceive = System.nanoTime();
+            MessageConsumer consumer = session.createConsumer(queue);
+            long nanosTaken_CreateConsumerAndReceive = System.nanoTime() - nanosAtStart_CreateConsumerAndReceive;
+
+            log.info("DELETING up to [" + limitMessages + "] messages from [" + queue + "]"
+                    + " - con.getSession(): " + ms(nanosTaken_CreateSession) + " ms"
+                    + " - session.createConsumer(): " + ms(nanosTaken_CreateConsumerAndReceive) + " ms");
+
+            Map<String, MatsBrokerMessageMetadata> deletedMessages = new LinkedHashMap<>(limitMessages);
+            int deletedMessagesCount = 0;
+            while (true) {
+                Message message = consumer.receive(RECEIVE_TIMEOUT_MILLIS);
+                try {
+                    if (message == null) {
+                        log.info("DELETE STOPPED - no more messages after [" + deletedMessagesCount + "] messages, "
+                                + " requested [" + limitMessages + "] messages to be deleted.");
+                        break;
+                    }
+                    String messageSystemId = message.getJMSMessageID();
+                    String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
+                    String matsMessageId = message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID);
+                    String toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
+                    MDC.put(MDC_MATS_MESSAGE_SYSTEM_ID, messageSystemId);
+                    MDC.put(MDC_MATS_STAGE_ID, toStageId);
+                    MDC.put(MDC_TRACE_ID, traceId);
+                    MDC.put(MDC_MATS_MESSAGE_ID, matsMessageId);
+                    log.info("DELETED MESSAGE: Received and dropping message from [" + queue + "]!"
+                            + " MsgSysId [" + messageSystemId + "], Message TraceId: [" + traceId + "]");
+                    deletedMessages.put(messageSystemId, new MatsBrokerMessageMetadata(messageSystemId,
+                            null, matsMessageId, traceId, toStageId));
+
+                    deletedMessagesCount++;
+                    if (deletedMessagesCount >= limitMessages) {
+                        log.info("DELETE FINISHED after requested [" + limitMessages + "] messages to be"
+                                + " deleted.");
+                        break;
+                    }
+                }
+                finally {
+                    MDC.remove(MDC_MATS_MESSAGE_SYSTEM_ID);
+                    MDC.remove(MDC_MATS_STAGE_ID);
+                    MDC.remove(MDC_TRACE_ID);
+                    MDC.remove(MDC_MATS_MESSAGE_ID);
+                }
+            }
+            return deletedMessages;
+        }
+        catch (JMSException e) {
+            // Bad, so ditch connection.
+            _jmsConnectionHolder.closeAndNullOutSharedConnection();
+            throw new BrokerIOException("Problems talking to broker."
+                    + " If you retry the operation, a new attempt at making a JMS Connection will be performed.", e);
+        }
+        finally {
+            JmsConnectionHolder.closeIfNonNullIgnoreException(session);
+        }
     }
 
     @Override
     public Map<String, MatsBrokerMessageMetadata> reissueMessages(String deadLetterQueueId,
-            Collection<String> messageSystemIds) {
+            Collection<String> messageSystemIds, String username) {
         if (deadLetterQueueId == null) {
             throw new NullPointerException("deadLetterQueueId");
         }
@@ -156,100 +230,59 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             throw new NullPointerException("messageSystemIds");
         }
 
+        long nanosAtStart_Total = System.nanoTime();
+
+        String randomCookie = random();
+
         Session session = null;
         try {
             long nanosAtStart_CreateSession = System.nanoTime();
             session = _jmsConnectionHolder.createSession(true);
+            Queue dlq = session.createQueue(deadLetterQueueId);
             long nanosTaken_CreateSession = System.nanoTime() - nanosAtStart_CreateSession;
 
-            Queue dlq = session.createQueue(deadLetterQueueId);
+            long nanosAtStart_CreateConsumer = System.nanoTime();
             MessageProducer genericProducer = session.createProducer(null);
+            long nanosTaken_CreateConsumer = System.nanoTime() - nanosAtStart_CreateConsumer;
 
-            // NOTICE: This is not optimal in any way, but to avoid premature optimizations and more complex code
-            // before it is needed, I'll just let it be like this: Single receive-then-send (move), commit tx, loop.
-            // Could have batched harder, both within transaction, and via the 'messageSelector' using an OR-construct.
+            log.info("REISSUING selected [" + messageSystemIds.size() + "] messages from [" + dlq + "]"
+                    + " - con.getSession(): " + ms(nanosTaken_CreateSession) + " ms"
+                    + " - session.createConsumer(): " + ms(nanosTaken_CreateConsumer) + " ms");
 
             Map<String, MatsBrokerMessageMetadata> reissuedMessageIds = new LinkedHashMap<>(messageSystemIds.size());
-            boolean first = true;
+            int reissuedMessageCount = 0;
             for (String messageSystemId : messageSystemIds) {
                 long nanosAtStart_CreateConsumerAndReceive = System.nanoTime();
                 MessageConsumer consumer = session.createConsumer(dlq, "JMSMessageID = '" + messageSystemId + "'");
                 Message message = consumer.receive(RECEIVE_TIMEOUT_MILLIS);
                 long nanosTaken_CreateConsumerAndReceive = System.nanoTime() - nanosAtStart_CreateConsumerAndReceive;
 
-                try {
-                    String extraLog = first ? " - con.getSession(): " + ms(nanosTaken_CreateSession) + " ms" : "";
-                    first = false;
-                    MDC.put(MDC_MATS_MESSAGE_SYSTEM_ID, messageSystemId);
-                    if (message != null) {
-                        String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
-                        String matsMessageId = message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID);
-                        String toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
-                        MDC.put(MDC_MATS_STAGE_ID, toStageId);
-                        MDC.put(MDC_TRACE_ID, traceId);
-                        MDC.put(MDC_MATS_MESSAGE_ID, matsMessageId);
-                        // ?: Do we know which endpoint/queue it originally should go to?
-                        if (toStageId != null) {
-                            // -> Yes, we know which queue it originally came from!
-                            String toQueueName = _matsDestinationPrefix + toStageId;
-                            Queue toQueue = session.createQueue(toQueueName);
-                            // Send it ..
-                            long nanosAtStart_Send = System.nanoTime();
-                            genericProducer.send(toQueue, message);
-                            long nanosTaken_Send = System.nanoTime() - nanosAtStart_Send;
-                            // .. afterwards it has the new JMS Message ID.
-                            String reissuedMsgSysId = message.getJMSMessageID();
-                            MDC.put(MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID, reissuedMsgSysId);
-
-                            log.info("REISSUE MESSAGE: Received and reissued message from dlq [" + dlq
-                                    + "] to [" + toQueue + "]! Original MsgSysId: [" + messageSystemId
-                                    + "], New MsgSysId: [" + reissuedMsgSysId + "], Message TraceId: [" + traceId + "]"
-                                    + extraLog + " - session.createConsumer()+receive(): "
-                                    + ms(nanosTaken_CreateConsumerAndReceive)
-                                    + " - producer.send(): " + ms(nanosTaken_Send));
-
-                            reissuedMessageIds.put(messageSystemId, new MatsBrokerMessageMetadata(messageSystemId,
-                                    reissuedMsgSysId, matsMessageId, traceId, toStageId));
-                        }
-                        else {
-                            // -> No, we don't know which queue it originally came from!
-                            String matsFailedReissueQueueName = _matsDestinationPrefix
-                                    + MatsBrokerBrowseAndActions.MATS_QUEUE_ID_FOR_FAILED_REISSUE;
-                            Queue matsFailedReissueQueue = session.createQueue(matsFailedReissueQueueName);
-                            // Send it ..
-                            long nanosAtStart_Send = System.nanoTime();
-                            genericProducer.send(matsFailedReissueQueue, message);
-                            long nanosTaken_Send = System.nanoTime() - nanosAtStart_Send;
-                            // .. afterwards it has the new JMS Message ID.
-                            String newMsgSysId = message.getJMSMessageID();
-                            log.error("REISSUE FAILED: Found message without JmsMats JMS StringProperty ["
-                                    + JMS_MSG_PROP_TO + "], so don't know where it was originally destined. Sending it"
-                                    + " to a synthetic Mats \"DLQ\" endpoint [" + matsFailedReissueQueue
-                                    + "] to handle it, and get it away from the DLQ. You may inspect it there, and"
-                                    + " either delete it, or if an actual Mats message, code up a consumer for the"
-                                    + " endpoint. Original MsgSysId: [" + messageSystemId + "], New MsgSysId: ["
-                                    + newMsgSysId + "]" + extraLog + " - session.createConsumer()+receive(): "
-                                    + ms(nanosTaken_CreateConsumerAndReceive)
-                                    + " - producer.send(): " + ms(nanosTaken_Send));
-                        }
-                    }
-                    else {
-                        log.info("REISSUE NOT DONE: Did NOT receive a message for id [" + messageSystemId
-                                + "], not reissued!" + extraLog + " - session.createConsumer()+receive(): "
-                                + ms(nanosTaken_CreateConsumerAndReceive));
-                    }
-                    consumer.close();
+                if (message != null) {
+                    reissueMessage(message, randomCookie, username, session, genericProducer, dlq,
+                            nanosTaken_CreateConsumerAndReceive, reissuedMessageIds);
                 }
-                finally {
-                    MDC.remove(MDC_MATS_MESSAGE_SYSTEM_ID);
-                    MDC.remove(MDC_MATS_STAGE_ID);
-                    MDC.remove(MDC_TRACE_ID);
-                    MDC.remove(MDC_MATS_MESSAGE_ID);
-                    MDC.remove(MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID);
+                else {
+                    log.info("REISSUE NOT DONE: Did NOT receive a message for id [" + messageSystemId
+                            + "], not reissued! - message receive: " + ms(nanosTaken_CreateConsumerAndReceive) + " ms");
                 }
-                session.commit();
+                // Close the JMSMessageID-specific consumer.
+                consumer.close();
+
+                reissuedMessageCount++;
+
+                // Commit for each 50th reissued message
+                if ((reissuedMessageCount % 50) == 0) {
+                    session.commit();
+                }
             }
+            // Final commit
+            session.commit();
             genericProducer.close();
+
+            long nanosTaken_Total = System.nanoTime() - nanosAtStart_Total;
+            log.info("REISSUE FINISHED after requested [" + messageSystemIds.size() + "] messages, of which ["
+                    + reissuedMessageIds.size() + "] were reissued. Total time: " + ms(nanosTaken_Total) + " ms.");
+
             return reissuedMessageIds;
         }
         catch (JMSException e) {
@@ -264,10 +297,175 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
     }
 
     @Override
-    public Map<String, MatsBrokerMessageMetadata> reissueAllMessages(String deadLetterQueueId, int maxNumberOfMessages,
-            String randomCookie) throws BrokerIOException {
-        // TODO: Implement!
-        throw new IllegalStateException("Not implemented");
+    public Map<String, MatsBrokerMessageMetadata> reissueAllMessages(String deadLetterQueueId, int limitMessages,
+            String username) throws BrokerIOException {
+        if (deadLetterQueueId == null) {
+            throw new NullPointerException("deadLetterQueueId");
+        }
+        if (limitMessages <= 0) {
+            throw new IllegalArgumentException("limitMessages must be positive! [" + limitMessages + "]");
+        }
+
+        String randomCookie = random();
+
+        long nanosAtStart_Total = System.nanoTime();
+
+        Session session = null;
+        try {
+            long nanosAtStart_CreateSession = System.nanoTime();
+            session = _jmsConnectionHolder.createSession(true);
+            long nanosTaken_CreateSession = System.nanoTime() - nanosAtStart_CreateSession;
+
+            Queue dlq = session.createQueue(deadLetterQueueId);
+            MessageProducer genericProducer = session.createProducer(null);
+
+            long nanosAtStart_CreateConsumer = System.nanoTime();
+            MessageConsumer consumer = session.createConsumer(dlq);
+            long nanosTaken_CreateConsumer = System.nanoTime() - nanosAtStart_CreateConsumer;
+
+            log.info("REISSUING up to [" + limitMessages + "] messages from [" + dlq + "]"
+                    + " - con.getSession(): " + ms(nanosTaken_CreateSession) + " ms"
+                    + " - session.createConsumer(): " + ms(nanosTaken_CreateConsumer) + " ms");
+
+            Map<String, MatsBrokerMessageMetadata> reissuedMessageIds = new LinkedHashMap<>(limitMessages);
+            int reissuedMessageCount = 0;
+            while (true) {
+                long nanosAtStart_Receive = System.nanoTime();
+                Message message = consumer.receive(RECEIVE_TIMEOUT_MILLIS);
+                long nanosTaken_Receive = System.nanoTime() - nanosAtStart_Receive;
+
+                // ?: Did we get a message?
+                if (message == null) {
+                    long nanosTaken_Total = System.nanoTime() - nanosAtStart_Total;
+                    // -> No, no message - reissuing stopped before we got requested number of messages.
+                    log.info("REISSUE STOPPED - no more messages after [" + reissuedMessageCount + "] messages, "
+                            + " requested [" + limitMessages + "] messages. Total time: " + ms(nanosTaken_Total)
+                            + " ms.");
+                    break;
+                }
+
+                // E-> Message is present!
+                reissueMessage(message, randomCookie, username, session, genericProducer, dlq, nanosTaken_Receive,
+                        reissuedMessageIds);
+
+                reissuedMessageCount++;
+                if (reissuedMessageCount >= limitMessages) {
+                    long nanosTaken_Total = System.nanoTime() - nanosAtStart_Total;
+                    log.info("REISSUE FINISHED after requested [" + limitMessages + "] messages."
+                            + " Total time: " + ms(nanosTaken_Total) + " ms.");
+                    break;
+                }
+                // Commit for each 50th reissued message
+                if ((reissuedMessageCount % 50) == 0) {
+                    session.commit();
+                }
+            }
+            // Final commit
+            session.commit();
+            genericProducer.close();
+            return reissuedMessageIds;
+        }
+        catch (JMSException e) {
+            // Bad, so ditch connection.
+            _jmsConnectionHolder.closeAndNullOutSharedConnection();
+            throw new BrokerIOException("Problems talking to broker."
+                    + " If you retry the operation, a new attempt at making a JMS Connection will be performed.", e);
+        }
+        finally {
+            JmsConnectionHolder.closeIfNonNullIgnoreException(session);
+        }
+    }
+
+    private void reissueMessage(Message message, String randomCookie, String username, Session session,
+            MessageProducer genericProducer,
+            Queue dlq, long nanosTaken_Receive, Map<String, MatsBrokerMessageMetadata> reissuedMessagesMap)
+            throws JMSException {
+        try {
+            String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
+            String matsMessageId = message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID);
+            String toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
+            String messageSystemId = message.getJMSMessageID();
+            MDC.put(MDC_MATS_MESSAGE_SYSTEM_ID, messageSystemId);
+            MDC.put(MDC_MATS_STAGE_ID, toStageId);
+            MDC.put(MDC_TRACE_ID, traceId);
+            MDC.put(MDC_MATS_MESSAGE_ID, matsMessageId);
+
+            // :: Modify the message to be reissued
+            // JMS have this strange thing where a received message is has read-only properties.
+            // This can be "fixed" by message.clearProperties() - but with the obvious drawback that
+            // all properties are cleared. So we need to copy off the existing properties, and put them
+            // back on the message after 'clearProperties'.
+            Map<String, Object> existingProperties = new HashMap<>();
+            @SuppressWarnings("unchecked")
+            Enumeration<String> propertyNames = message.getPropertyNames();
+            while (propertyNames.hasMoreElements()) {
+                String propertyName = propertyNames.nextElement();
+                existingProperties.put(propertyName, message.getObjectProperty(propertyName));
+            }
+            // .. and then clear the properties (to make them editable)
+            message.clearProperties();
+            // .. and then put them back on (now editable!)
+            for (Map.Entry<String, Object> entry : existingProperties.entrySet()) {
+                message.setObjectProperty(entry.getKey(), entry.getValue());
+            }
+
+            // Before sending it: Tag the message with the reissue cookie and username.
+            message.setStringProperty(JMS_MSG_PROP_REISSUE_COOKIE, randomCookie);
+            message.setStringProperty(JMS_MSG_PROP_REISSUE_USERNAME, username);
+
+            // ?: Do we know which endpoint/queue it originally should go to?
+            if (toStageId != null) {
+                // -> Yes, we know which queue it originally came from!
+                String toQueueName = _matsDestinationPrefix + toStageId;
+                Queue toQueue = session.createQueue(toQueueName);
+
+                // Send it ..
+                long nanosAtStart_Send = System.nanoTime();
+                genericProducer.send(toQueue, message);
+                long nanosTaken_Send = System.nanoTime() - nanosAtStart_Send;
+
+                // .. afterwards it has the new JMS Message ID.
+                String reissuedMsgSysId = message.getJMSMessageID();
+                MDC.put(MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID, reissuedMsgSysId);
+
+                log.info("REISSUE MESSAGE: Received and reissued message from dlq [" + dlq
+                        + "] to [" + toQueue + "]! Original MsgSysId: [" + messageSystemId
+                        + "], New MsgSysId: [" + reissuedMsgSysId + "], Message TraceId: [" + traceId + "]"
+                        + " - message receive: " + ms(nanosTaken_Receive)
+                        + " - producer.send(): " + ms(nanosTaken_Send));
+
+                reissuedMessagesMap.put(messageSystemId, new MatsBrokerMessageMetadata(messageSystemId,
+                        reissuedMsgSysId, matsMessageId, traceId, toStageId));
+            }
+            else {
+                // -> No, we don't know which queue it originally came from!
+                String matsFailedReissueQueueName = _matsDestinationPrefix
+                        + MatsBrokerBrowseAndActions.MATS_QUEUE_ID_FOR_FAILED_REISSUE;
+                Queue matsFailedReissueQueue = session.createQueue(matsFailedReissueQueueName);
+
+                // Send it ..
+                long nanosAtStart_Send = System.nanoTime();
+                genericProducer.send(matsFailedReissueQueue, message);
+                long nanosTaken_Send = System.nanoTime() - nanosAtStart_Send;
+
+                // .. afterwards it has the new JMS Message ID.
+                String newMsgSysId = message.getJMSMessageID();
+                log.error("REISSUE FAILED: Found message without JmsMats JMS StringProperty ["
+                        + JMS_MSG_PROP_TO + "], so don't know where it was originally destined. Sending it"
+                        + " to a synthetic Mats \"DLQ\" endpoint [" + matsFailedReissueQueue
+                        + "] to handle it, and get it away from the DLQ. You may inspect it there."
+                        + " Original MsgSysId: [" + messageSystemId + "], New MsgSysId: ["
+                        + newMsgSysId + "] - message receive: " + ms(nanosTaken_Receive)
+                        + " - producer.send(): " + ms(nanosTaken_Send));
+            }
+        }
+        finally {
+            MDC.remove(MDC_MATS_MESSAGE_SYSTEM_ID);
+            MDC.remove(MDC_MATS_STAGE_ID);
+            MDC.remove(MDC_TRACE_ID);
+            MDC.remove(MDC_MATS_MESSAGE_ID);
+            MDC.remove(MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID);
+        }
     }
 
     @Override

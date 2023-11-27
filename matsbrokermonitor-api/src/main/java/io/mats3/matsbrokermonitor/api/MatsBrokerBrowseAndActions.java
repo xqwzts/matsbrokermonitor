@@ -79,7 +79,7 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      *
      * @param queueId
      *            the full name of the queue, including mats prefix.
-     * @param maxNumberOfMessages
+     * @param limitMessages
      *            the max number of messages to delete - will typically be the number of messages we got from the last
      *            update from the {@link MatsBrokerMonitor} via
      *            {@link MatsBrokerDestination#getNumberOfQueuedMessages()}.
@@ -88,7 +88,7 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      * @throws BrokerIOException
      *             if problems talking with the broker.
      */
-    Map<String, MatsBrokerMessageMetadata> deleteAllMessages(String queueId, int maxNumberOfMessages)
+    Map<String, MatsBrokerMessageMetadata> deleteAllMessages(String queueId, int limitMessages)
             throws BrokerIOException;
 
     /**
@@ -102,6 +102,8 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      *            the full name of the queue, including mats prefix.
      * @param messageSystemIds
      *            the broker's id for the messages to be reissued, for JMS it is the message.getJMSMessageID().
+     * @param reissuingUsername
+     *            the username of the user reissuing the messages, which will be put on the message as a property.
      * @return a Map of the messageSystemIds of the messages reissued, to an instance of
      *         {@link MatsBrokerMessageMetadata} which contains the metadata of the reissued message, including the new
      *         messageSystemId of the reissued message, if available.
@@ -109,35 +111,38 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      *             if problems talking with the broker.
      */
     Map<String, MatsBrokerMessageMetadata> reissueMessages(String deadLetterQueueId,
-            Collection<String> messageSystemIds) throws BrokerIOException;
+            Collection<String> messageSystemIds, String reissuingUsername) throws BrokerIOException;
 
     /**
      * Reissues all message on the specified Dead Letter Queue, up to the specified max number of messages which should
      * be the number of messages currently on the queue. Note that there is no check that the queueId is actually a DLQ
      * - it is up to the caller to ensure this. The messages reissued will be put on the same queue as they were
      * originally on - which is gotten from a property on the message which is set by the Mats implementation - if this
-     * is missing, the message will be put on a new queue named
+     * is missing, the message will be put on a special queue named
      * <code>"{matsPrefix}{@link #MATS_QUEUE_ID_FOR_FAILED_REISSUE}"</code>, and the message will be logged.
      * <p/>
-     * The reissuing employs a "random cookie" to ensure that if the messages are again DLQed while we are reissuing
-     * them, we will not reissue the same messages again: This is a random string which is put on the message when it is
-     * reissued, and which is checked when we get the message from the DLQ. If the cookie is present, we know that we
-     * have already reissued this message and we're effectively "looping", and we stop the reissuing process.
+     * The reissuing employs a "cookie" to ensure that if the messages are again DLQed while we are reissuing them, we
+     * will not reissue the same messages again: This is a random string which is put on the message when it is
+     * reissued, and which is checked when we get the message from the DLQ. If the same cookie is present, we know that
+     * we have already reissued this message and we're effectively "looping" (reissued messages are again DLQing), and
+     * we stop the reissuing process.
      *
      * @param deadLetterQueueId
      *            the full name of the queue, including mats prefix.
-     * @param maxNumberOfMessages
+     * @param limitMessages
      *            the max number of messages to reissue - will typically be the number of messages we got from the last
      *            update from the {@link MatsBrokerMonitor} via
      *            {@link MatsBrokerDestination#getNumberOfQueuedMessages()}.
+     * @param reissuingUsername
+     *            the username of the user reissuing the messages, which will be put on the message as a property.
      * @return a Map of the messageSystemIds of the messages reissued, to an instance of
      *         {@link MatsBrokerMessageMetadata} which contains the metadata of the reissued message, including the new
      *         messageSystemId of the reissued message, if available.
      * @throws BrokerIOException
      *             if problems talking with the broker.
      */
-    Map<String, MatsBrokerMessageMetadata> reissueAllMessages(String deadLetterQueueId, int maxNumberOfMessages,
-            String randomCookie) throws BrokerIOException;
+    Map<String, MatsBrokerMessageMetadata> reissueAllMessages(String deadLetterQueueId, int limitMessages,
+            String reissuingUsername) throws BrokerIOException;
 
     interface MatsBrokerMessageIterable extends Iterable<MatsBrokerMessageRepresentation>, AutoCloseable {
         /**
