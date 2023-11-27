@@ -133,8 +133,10 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             String queueId = getBrowseQueueId(requestParameters, ac);
             // ----- Passed BROWSE Access Control for specific queueId.
 
+            boolean autoJumpIfSingleMessage = requestParameters.containsKey("autojump");
+
             BrowseQueue.gui_BrowseQueue(_matsBrokerMonitor, _matsBrokerBrowseAndActions, _monitorAdditions, outputter,
-                    queueId, ac);
+                    queueId, ac, autoJumpIfSingleMessage);
         }
         else if (requestParameters.containsKey("examineMessage")) {
             // -> Examine Message

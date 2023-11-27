@@ -549,8 +549,8 @@ public class MatsBrokerMonitor_TestJettyServer {
             brokerMonitorHtmlGui.outputJavaScript(out); // Include just once, use the first.
             localInspect.getJavaScript(out);
             out.println("    </script>");
-            out.println(" <a href=\"sendRequest?count=1\">Send request, count=1</a> - to initialize Initiator"
-                    + " and get some traffic.<br>");
+            out.println(" <a href=\"sendRequest?count=500\">Send request, count=500</a> - for getting some traffic"
+                    + " with messages and DLQs to browse!<br>");
             out.println(" <a href=\".\">Go to menu</a><br><br>");
 
             // :: Bootstrap3 sets the body's font size to 14px.

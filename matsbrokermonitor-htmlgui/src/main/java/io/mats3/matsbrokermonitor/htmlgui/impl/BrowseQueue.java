@@ -37,7 +37,7 @@ class BrowseQueue {
 
     static void gui_BrowseQueue(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, List<? super MonitorAddition> monitorAdditions,
-            Outputter out, String queueId, AccessControl ac) throws IOException {
+            Outputter out, String queueId, AccessControl ac, boolean autoJumpIfSingleMessage) throws IOException {
         out.html("<div id='matsbm_page_browse_queue' class='matsbm_report'>\n");
         out.html("<div class='matsbm_actionbuttons'>\n");
 
@@ -241,12 +241,16 @@ class BrowseQueue {
         out.html("</thead>");
         out.html("<tbody>");
         int messageCount = 0;
+        String firstMessageId = null;
         // Note: AutoCloseable, try-with-resources
         try (matsBrokerMessageIterable) {
             // Notice: Outputting the information in a streaming fashion, so that we don't have to hold on to the
             // MatsBrokerMessageRepresentation instances, which can be large. (They can thus be GCed as soon as we've
             // output their info.)
             for (MatsBrokerMessageRepresentation msgRepr : matsBrokerMessageIterable) {
+                if (firstMessageId == null) {
+                    firstMessageId = msgRepr.getMessageSystemId();
+                }
                 out.html("<tr id='matsbm_msgid_").DATA(msgRepr.getMessageSystemId()).html("'>");
 
                 out.html("<td><div class='matsbm_table_browse_nobreak'>");
@@ -328,6 +332,16 @@ class BrowseQueue {
                     ", but the message broker might have a smaller max browse. ActiveMQ default is 400)</i>\n");
         }
         out.html("</div></div>");
+
+        if (autoJumpIfSingleMessage && (messageCount == 1)) {
+            out.html("<div class='matsbm_autojump'>Single message!</div>\n");
+            out.html("<script>\n"
+                    + "  setTimeout(() => {\n"
+                    + "    window.location.href = window.location.origin + window.location.pathname"
+                    + " + '?examineMessage&destinationId=queue:")
+                    .DATA(queueId).html("&messageSystemId=").DATA(firstMessageId)
+                    .html("';\n  }, 1000);\n</script>\n");
+        }
 
         // If there are no messages, say so.
         if (messageCount == 0) {

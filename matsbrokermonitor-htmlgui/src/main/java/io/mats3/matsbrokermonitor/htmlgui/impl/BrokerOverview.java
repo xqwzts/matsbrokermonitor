@@ -365,6 +365,7 @@ class BrokerOverview {
             out.html("<a class='").html(style).html("' href='?browse&destinationId=")
                     .html("queue:")
                     .DATA(destination.getDestinationName())
+                    .html(destination.getNumberOfQueuedMessages() == 1 ? "&autojump" : "")
                     .html("'>");
         }
         else {

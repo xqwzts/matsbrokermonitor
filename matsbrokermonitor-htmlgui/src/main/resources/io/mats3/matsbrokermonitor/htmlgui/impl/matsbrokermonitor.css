@@ -485,9 +485,6 @@
     transition: background-color 0.7s, color 0.7s, transform 0.7s, padding 0.7s, margin 0.7s, max-width 0.7s
 }
 
-
-
-
 /* TABLE: Browse queue */
 
 #matsbm_table_browse_queue {
@@ -578,6 +575,31 @@
     position: absolute;
     font-size: 1.1em;
     top: 0;
+}
+
+/* Autojump-message if single message */
+@keyframes matsbm_autojump_explode {
+    from {
+        transform: translateX(-50%) scale(0);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(-50%) scale(1);
+        opacity: 1;
+    }
+}
+.matsbm_autojump {
+    display: block;
+    font-size: 100px; /* Adjust the size as needed */
+    position: absolute;
+    top: 200px; /* 200px from the top */
+    left: 50%;
+    text-align: center;
+    width: 100%;
+    padding: 100px;
+    z-index: 1000;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.9) 30%, transparent 70%);
+    animation: matsbm_autojump_explode 0.5s ease-out forwards;
 }
 
 /* ===================== */

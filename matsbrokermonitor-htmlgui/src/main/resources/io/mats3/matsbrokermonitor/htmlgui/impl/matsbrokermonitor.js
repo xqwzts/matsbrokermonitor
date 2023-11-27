@@ -225,7 +225,8 @@ function matsbm_queueview_is_reissue_or_delete_confirm_active() {
     let allDeleteConfirmButtonsHidden =
         document.getElementById("matsbm_delete_selected_confirm").classList.contains("matsbm_button_hidden")
         && document.getElementById("matsbm_delete_all_confirm").classList.contains("matsbm_button_hidden")
-        && document.getElementById("matsbm_reissue_all_confirm").classList.contains("matsbm_button_hidden");
+        && (!document.getElementById("matsbm_reissue_all_confirm")
+            || document.getElementById("matsbm_reissue_all_confirm").classList.contains("matsbm_button_hidden"));
 
     return !allDeleteConfirmButtonsHidden;
 }
