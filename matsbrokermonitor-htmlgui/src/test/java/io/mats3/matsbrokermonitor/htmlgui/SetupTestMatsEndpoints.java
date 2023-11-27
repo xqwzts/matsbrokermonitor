@@ -100,6 +100,11 @@ public class SetupTestMatsEndpoints {
             Assert.assertEquals(new StateTO(1, 2), sto);
             sto.number1 = Integer.MIN_VALUE;
             sto.number2 = Math.E * 2;
+            sto.text = "43289432890532870jklr2jf980gfj234980gj4290gj49g4j290g4j20g423"
+                    + "gj904gj42930gj3490gj4390gj4309gj4239058i34290fgj49032ut609342jtg09234ut9034256tu34"
+                    + "gj34290g432j90g43j09g43j90g432j09g34u5609t43u59043utg9043jg9043j90g g4390gj4390gj943"
+                    + "0gj3490gj4390gj4390gj439g34j90g43kjg940jkg9043j90g43u9543 jit9043i943ui904353490"
+                    + "jg9034jg4309jg4390jg0934jg4039gj4309gj4390";
             context.request(servicePrefix + SERVICE_MID, new DataTO(dto.number, dto.string + ":MidCall2", 7));
         });
         ep.stage(DataTO.class, (context, sto, dto) -> {
@@ -211,6 +216,8 @@ public class SetupTestMatsEndpoints {
     public static class StateTO {
         public int number1;
         public double number2;
+
+        public String text;
 
         public StateTO() {
             // For Jackson JSON-lib which needs default constructor.

@@ -482,6 +482,29 @@ public class ExamineMessage {
         out.html("</div>");
     }
 
+    private static void part_StateAndMessage(Outputter out, MatsTrace<?> matsTrace)
+            throws IOException {
+        out.html("<div id='matsbm_part_state_and_message'>\n");
+        out.html("<h2>Incoming State and Message</h2><br>\n");
+        // State:
+        out.html("<div class='matsbm_box_call_or_state'>\n");
+        Optional<? extends StackState<?>> currentStateO = matsTrace.getCurrentState();
+        if (currentStateO.isPresent()) {
+            out.html("Incoming <b>State</b>: ");
+            out_displaySerializedRepresentation(out, currentStateO.get().getState());
+        }
+        else {
+            out.html("<i>-no incoming state-</i>");
+        }
+        out.html("</div><br>\n");
+
+        // Message:
+        out.html("<div class='matsbm_box_call_or_state'>\n");
+        out.html("Incoming <b>Message</b>: ");
+        out_displaySerializedRepresentation(out, matsTrace.getCurrentCall().getData());
+        out.html("</div></div>\n");
+    }
+
     private static void part_ReplyToStack(Outputter out, MatsTrace<?> matsTrace) throws IOException {
         out.html("<div id='matsbm_part_stack'>");
         out.html("<h2>ReplyTo Stack</h2><br>\n");
@@ -507,10 +530,10 @@ public class ExamineMessage {
                 out.html("<td>").DATA(Integer.toString(i));
                 out.html("<td>").DATA(channel.getMessagingModel().toString()).html(": ").DATA(channel.getId())
                         .html("</td>\n");
-                out.html("<td>");
+                out.html("<td><div class='matsbm_box_call_or_state'>\n");
                 out_displaySerializedRepresentation(out, stateStack.get(i).getState());
-                out.html("</td>\n");
-                out.html("</tr>");
+                out.html("</div></td>\n");
+                out.html("</tr>\n");
             }
             out.html("</tbody></table>");
         }
@@ -940,29 +963,6 @@ public class ExamineMessage {
         out.html("</div>");
     }
 
-    private static void part_StateAndMessage(Outputter out, MatsTrace<?> matsTrace)
-            throws IOException {
-        out.html("<div id='matsbm_part_state_and_message'>\n");
-        out.html("<h2>Incoming State and Message</h2><br>\n");
-        // State:
-        out.html("<div class='matsbm_box_call_or_state'>\n");
-        Optional<? extends StackState<?>> currentStateO = matsTrace.getCurrentState();
-        if (currentStateO.isPresent()) {
-            out.html("Incoming state: ");
-            out_displaySerializedRepresentation(out, currentStateO.get().getState());
-        }
-        else {
-            out.html("<i>-no incoming state-</i>");
-        }
-        out.html("</div><br>\n");
-
-        // Message:
-        out.html("<div class='matsbm_box_call_or_state'>\n");
-        out.html("Incoming message: ");
-        out_displaySerializedRepresentation(out, matsTrace.getCurrentCall().getData());
-        out.html("</div></div>\n");
-    }
-
     /**
      * If String, try to display as JSON, if not just raw. If byte, just display array size.
      */
@@ -980,9 +980,9 @@ public class ExamineMessage {
                 out.html("<div class='matsbm_box_call_or_state_div'>").DATA(jsonData).html("</div>\n");
             }
             catch (JsonProcessingException e) {
-                out.html("Couldn't parse incoming String as json (thus no pretty printing),"
+                out.html("Couldn't parse String as json (thus no pretty printing),"
                         + " so here it is unparsed.<br>");
-                out.DATA(stringData);
+                out.html("<div class='matsbm_box_call_or_state_div'>").DATA(stringData).html("</div>\n");
             }
         }
         else if (data instanceof byte[]) {

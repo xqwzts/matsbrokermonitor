@@ -369,11 +369,17 @@ public class MatsBrokerMonitor_TestJettyServer {
 
             matsFactory.getDefaultInitiator().initiateUnchecked(
                     (msg) -> {
+                        StateTO initialTargetSto = new StateTO(1, 2);
+                        initialTargetSto.text = "43289432890532870jklr2jf980gfj234980gj4290gj49g4j290g4j20g423"
+                                + "gj904gj42930gj3490gj4390gj4309gj4239058i34290fgj49032ut609342jtg09234ut9034256tu34"
+                                + "gj34290g432j90g43j09g43j90g432j09g34u5609t43u59043utg9043jg9043j90g g4390gj4390gj943"
+                                + "0gj3490gj4390gj4390gj439g34j90g43kjg940jkg9043j90g43u9543 jit9043i943ui904353490"
+                                + "jg9034jg4309jg4390jg0934jg4039gj4309gj4390";
                         msg.traceId(MatsTestHelp.traceId() + "_nonExistentEndpoint")
                                 .keepTrace(KeepTrace.FULL)
                                 .from("/sendRequestInitiated")
                                 .to(SERVICE + ".NonExistentService.nonExistentMethod")
-                                .send(dto, new StateTO(1, 2));
+                                .send(dto, initialTargetSto);
                     });
 
             // :: Send a message to the ActiveMQ Global DLQ
