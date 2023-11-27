@@ -260,7 +260,7 @@ public class ExamineMessage {
 
         out.html("<tr>");
         out.html("<td>TraceId</td>");
-        out.html("<td>").DATA(brokerMsg.getTraceId()).html("</td>");
+        out.html("<td class='matsbm_table_browse_breakall'>").DATA(brokerMsg.getTraceId()).html("</td>");
         out.html("</tr>\n");
 
         String initiatingApp = "{no info present}";
@@ -378,16 +378,26 @@ public class ExamineMessage {
         if (matsTrace != null) {
             out.html("<tr>");
             out.html("<td>From App @ Host</td>");
-            out.html("<td>").DATA(matsTrace.getCurrentCall().getCallingAppName()
-                    + "; v." + matsTrace.getCurrentCall().getCallingAppVersion())
-                    .html(" @ ").DATA(matsTrace.getCurrentCall().getCallingHost())
-                    .html("</td>");
+            if (matsTrace.getCallNumber() == 1) {
+                out.html("<td><i>{initial call; same as 'Initiating App @ Host'}</i></td>");
+            }
+            else {
+                out.html("<td>").DATA(matsTrace.getCurrentCall().getCallingAppName()
+                                + "; v." + matsTrace.getCurrentCall().getCallingAppVersion())
+                        .html(" @ ").DATA(matsTrace.getCurrentCall().getCallingHost())
+                        .html("</td>");
+            }
             out.html("</tr>\n");
         }
 
         out.html("<tr>");
         out.html("<td>From</td>");
-        out.html("<td><div class='matsbm_stageid'>").DATA(brokerMsg.getFromStageId()).html("</div></td>");
+        if ((matsTrace != null) && (matsTrace.getCallNumber() == 1)) {
+            out.html("<td><i>{initial call; comes from 'Initiator Id'}</i></td>");
+        }
+        else {
+            out.html("<td><div class='matsbm_stageid'>").DATA(brokerMsg.getFromStageId()).html("</div></td>");
+        }
         out.html("</tr>\n");
 
         if (matsTrace != null) {
@@ -397,9 +407,11 @@ public class ExamineMessage {
             // ?: Is this the initial call, and there is no info on the call (which is expected)
             if (((debugInfo == null) || (debugInfo.trim().isEmpty())) && (matsTrace.getCallNumber() == 1)) {
                 // -> Yes, initial, and call.debugInfo missing: Use info from init.
-                debugInfo = matsTrace.getDebugInfo();
+                out.html("<td><i>{initial call; same as 'Init debug info'}</i></td>");
             }
-            out.html("<td>").html(debugInfoToHtml(debugInfo)).html("</td>");
+            else {
+                out.html("<td>").html(debugInfoToHtml(debugInfo)).html("</td>");
+            }
             out.html("</tr>\n");
         }
 

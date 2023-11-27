@@ -612,18 +612,27 @@
     transition: visibility 0s linear 1s, opacity 1s 0s, transform 1s, background-color 1s;
 }
 
-/* TABLE: Two columns: Flow and Message properties */
+/* TABLE: Two columns for two tables: Flow and Message properties */
 
 .matsbm_table_flow_and_message {
     border-collapse: collapse;
 }
 
-.matsbm_table_flow_and_message td {
+.matsbm_table_flow_and_message > tbody > tr > td {
     vertical-align: top;
     padding-right: 2em;
 }
 
+.matsbm_table_flow_and_message > tbody > tr > td:nth-child(1) {
+    max-width: 70em;
+}
+
 /* TABLE: Flow and Message properties */
+
+/* Keys */
+.matsbm_table_message_props td:nth-child(1) {
+    white-space: nowrap;
+}
 
 .matsbm_table_message_props {
     border-collapse: collapse;
