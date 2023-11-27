@@ -341,7 +341,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             matsFactory.getDefaultInitiator().initiateUnchecked(
                     (msg) -> {
                         for (int i = 0; i < countF; i++) {
-                            msg.traceId(MatsTestHelp.traceId() + "_#" + i)
+                            msg.traceId(MatsTestHelp.traceId() + "_#&'\"<" + i+">")
                                     // ORDINARY messages
                                     .keepTrace(KeepTrace.COMPACT)
                                     .from("/sendRequestInitiated")

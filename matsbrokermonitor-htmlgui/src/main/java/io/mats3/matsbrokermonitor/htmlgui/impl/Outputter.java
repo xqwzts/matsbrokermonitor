@@ -36,10 +36,11 @@ class Outputter {
         if (data == null) {
             return "null";
         }
-        return data.replace("<", "&lt;")
+        // Must first do '&', as otherwise we'll escape the other escapes!
+        return data.replace("&", "&amp;")
+                .replace("<", "&lt;")
                 .replace(">", "&gt;")
-                .replace("&", "&amp;")
-                .replace("\"", "&#x22;")
-                .replace("'", "&#x27;");
+                .replace("\"", "&quot;")
+                .replace("'", "&apos;");
     }
 }
