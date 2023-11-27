@@ -263,21 +263,21 @@ public class ExamineMessage {
         out.html("<td>").DATA(brokerMsg.getTraceId()).html("</td>");
         out.html("</tr>\n");
 
-        String initializingApp = "{no info present}";
+        String initiatingApp = "{no info present}";
         String initiatorId = "{no info present}";
         if (matsTrace != null) {
-            initializingApp = matsTrace.getInitializingAppName() + "; v." + matsTrace.getInitializingAppVersion();
+            initiatingApp = matsTrace.getInitializingAppName() + "; v." + matsTrace.getInitializingAppVersion();
             initiatorId = matsTrace.getInitiatorId();
         }
         // ?: Do we have InitializingApp from MsgSys?
         // TODO: Remove this "if" in 2023.
-        else if (brokerMsg.getInitializingApp() != null) {
-            initializingApp = brokerMsg.getInitializingApp();
+        else if (brokerMsg.getInitiatingApp() != null) {
+            initiatingApp = brokerMsg.getInitiatingApp();
             initiatorId = brokerMsg.getInitiatorId();
         }
 
-        out.html("<tr><td>Initializing App @ Host</td>");
-        out.html("<td>").DATA(initializingApp);
+        out.html("<tr><td>Initiating App @ Host</td>");
+        out.html("<td>").DATA(initiatingApp);
         if (matsTrace != null) {
             out.html(" @ ").DATA(matsTrace.getInitializingHost());
         }
@@ -300,7 +300,7 @@ public class ExamineMessage {
         }
 
         if (matsTrace != null) {
-            out.html("<tr><td>Mats Flow Initialized Timestamp</td>");
+            out.html("<tr><td>Mats Flow Init Timestamp</td>");
             out.html("<td>").DATA(Statics.formatTimestampSpan(matsTrace.getInitializedTimestamp()));
             out.html("</td></tr>\n");
         }

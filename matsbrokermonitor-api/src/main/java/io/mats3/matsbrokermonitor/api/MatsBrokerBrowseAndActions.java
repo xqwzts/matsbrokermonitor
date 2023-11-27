@@ -221,7 +221,7 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
 
         String getFromStageId();
 
-        String getInitializingApp();
+        String getInitiatingApp();
 
         String getInitiatorId();
 

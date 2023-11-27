@@ -735,7 +735,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         private final String _traceId;
         private final String _messageType;
         private final String _fromStageId;
-        private final String _initializingApp;
+        private final String _initiatingApp;
         private final String _initiatorId;
         private final String _toStageId;
         private final boolean _persistent;
@@ -764,7 +764,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             _traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
             _messageType = message.getStringProperty(JMS_MSG_PROP_MESSAGE_TYPE);
             _fromStageId = message.getStringProperty(JMS_MSG_PROP_FROM);
-            _initializingApp = message.getStringProperty(JMS_MSG_PROP_INITIALIZING_APP);
+            _initiatingApp = message.getStringProperty(JMS_MSG_PROP_INITIATING_APP);
             _initiatorId = message.getStringProperty(JMS_MSG_PROP_INITIATOR_ID);
             // Relevant for Global DLQ, where the original id is now effectively lost
             _toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
@@ -817,8 +817,8 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         }
 
         @Override
-        public String getInitializingApp() {
-            return _initializingApp;
+        public String getInitiatingApp() {
+            return _initiatingApp;
         }
 
         @Override

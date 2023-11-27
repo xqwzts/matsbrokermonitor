@@ -280,7 +280,7 @@ class BrowseQueue {
                         .html("</div></td>");
 
                 out.html("<td><div class='matsbm_table_browse_breakall'>");
-                out.DATA(msgRepr.getInitializingApp() != null ? msgRepr.getInitializingApp() : "{missing init app}");
+                out.DATA(msgRepr.getInitiatingApp() != null ? msgRepr.getInitiatingApp() : "{missing init app}");
                 out.html("</div></td>");
 
                 out.html("<td><div class='matsbm_table_browse_breakall'>");
