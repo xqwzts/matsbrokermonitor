@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 
@@ -15,6 +16,8 @@ import io.mats3.MatsEndpoint;
 import io.mats3.MatsFactory;
 import io.mats3.MatsInitiator;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerInfo;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerInfoDto;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestinationDto;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.UpdateEvent;
@@ -81,15 +84,7 @@ public class MatsBrokerMonitorBroadcastAndControl implements Closeable {
                 log.debug("Got UpdateEvent from MBM originating from this MBM/host (fullUpdate:[" + updateEvent
                         .isFullUpdate() + "]) - broadcasting to [" + topicEndpointId + "].");
 
-                NavigableMap<String, MatsBrokerDestination> eventDestinations = updateEvent.getEventDestinations();
-
-                ArrayList<MatsBrokerDestinationDto> destinationDtos = new ArrayList<>(eventDestinations.size());
-                for (MatsBrokerDestination dest : eventDestinations.values()) {
-                    destinationDtos.add(MatsBrokerDestinationDto.of(dest));
-                }
-
-                BroadcastUpdateEventDto dto = new BroadcastUpdateEventDto(
-                        updateEvent.isFullUpdate(), updateEvent.getCorrelationId(), destinationDtos);
+                BroadcastUpdateEventDto dto = BroadcastUpdateEventDto.of(updateEvent);
 
                 matsInitiator.initiateUnchecked(init -> init
                         .traceId("MatsBrokerMonitorBroadcastUpdate:"
@@ -130,36 +125,81 @@ public class MatsBrokerMonitorBroadcastAndControl implements Closeable {
 
     /**
      * NOTE: THIS IS COPIED OVER TO MatsBrokerMonitorBroadcastReceiver
-     * <p/> 
+     * <p/>
      * UpdateEvent DTO from MatsBrokerMonitor, which is sent to SubscriptionTerminator ("topic") EndpointId
      * {@link #BROADCAST_UPDATE_EVENT_TOPIC_ENDPOINT_ID}.
      */
-    private static class BroadcastUpdateEventDto {
+    private static class BroadcastUpdateEventDto implements UpdateEvent {
+        private long suts;
+        private String cid; // nullable
         private boolean fu;
-        private Optional<String> cid;
+        private BrokerInfoDto bi; // nullable
         private List<MatsBrokerDestinationDto> ds;
 
         public BroadcastUpdateEventDto() {
             /* need no-args constructor for deserializing with Jackson */
         }
 
-        public BroadcastUpdateEventDto(boolean fullUpdate, Optional<String> correlationId,
-                List<MatsBrokerDestinationDto> matsBrokerDestinationDtos) {
+        public static BroadcastUpdateEventDto of(UpdateEvent updateEvent) {
+            NavigableMap<String, MatsBrokerDestination> eventDestinations = updateEvent.getEventDestinations();
+
+            ArrayList<MatsBrokerDestinationDto> destinationDtos = new ArrayList<>(eventDestinations.size());
+            for (MatsBrokerDestination dest : eventDestinations.values()) {
+                destinationDtos.add(MatsBrokerDestinationDto.of(dest));
+            }
+
+            BrokerInfoDto brokerInfoDto = null;
+            if (updateEvent.getBrokerInfo().isPresent()) {
+                brokerInfoDto = BrokerInfoDto.of(updateEvent.getBrokerInfo().get());
+            }
+
+            return new BroadcastUpdateEventDto(updateEvent.isFullUpdate(),
+                    updateEvent.getStatisticsUpdateMillis(),
+                    updateEvent.getCorrelationId().orElse(null),
+                    brokerInfoDto,
+                    destinationDtos);
+        }
+
+        public BroadcastUpdateEventDto(boolean fullUpdate, long statisticsUpdateMillis,
+                String correlationId, BrokerInfoDto brokerInfo,
+                List<MatsBrokerDestinationDto> destinations) {
+            this.suts = statisticsUpdateMillis;
             this.fu = fullUpdate;
             this.cid = correlationId;
-            this.ds = matsBrokerDestinationDtos;
+            this.bi = brokerInfo;
+            this.ds = destinations;
         }
 
         public boolean isFullUpdate() {
             return fu;
         }
 
-        public Optional<String> getCorrelationId() {
-            return cid;
+        @Override
+        public boolean isUpdateEventOriginatedOnThisNode() {
+            return false;
         }
 
-        public List<MatsBrokerDestinationDto> getEventDestinations() {
-            return ds;
+        @Override
+        public Optional<BrokerInfo> getBrokerInfo() {
+            return Optional.ofNullable(bi);
+        }
+
+        @Override
+        public long getStatisticsUpdateMillis() {
+            return suts;
+        }
+
+        public Optional<String> getCorrelationId() {
+            return Optional.ofNullable(cid);
+        }
+
+        @Override
+        public NavigableMap<String, MatsBrokerDestination> getEventDestinations() {
+            TreeMap<String, MatsBrokerDestination> ret = new TreeMap<>();
+            for (MatsBrokerDestination dest : ds) {
+                ret.put(dest.getFqDestinationName(), dest);
+            }
+            return ret;
         }
     }
 

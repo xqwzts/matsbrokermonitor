@@ -54,7 +54,7 @@ public interface Statics {
     /**
      * Converts nanos to millis with a sane number of significant digits ("3.5" significant digits), but assuming that
      * this is not used to measure things that take less than 0.001 milliseconds (in which case it will be "rounded" to
-     * 0.0001, 1e-4, as a special value). Takes care of handling the difference between 0 and >0 nanoseconds when
+     * 0.0001, 1e-4, as a special value). Takes care of handling the difference between 0 and &gt;0 nanoseconds when
      * rounding - in that 1 nanosecond will become 0.0001 (1e-4 ms, which if used to measure things that are really
      * short lived might be magnitudes wrong), while 0 will be 0.0 exactly. Note that printing of a double always
      * include the ".0" (unless scientific notation kicks in), which can lead your interpretation slightly astray wrt.

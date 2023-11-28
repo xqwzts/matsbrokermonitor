@@ -1,6 +1,9 @@
 package io.mats3.matsbrokermonitor.api;
 
 import java.io.Closeable;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.OptionalDouble;
@@ -8,7 +11,7 @@ import java.util.OptionalLong;
 import java.util.function.Consumer;
 
 /**
- * Provides a way to get data from the broker which is not possible to glean from the Mats system itself, nor from
+ * Provides a way to get data from the broker which is not possible to glean from the Mats3 system itself, nor from
  * standard ways by the JMS API (or any other known messaging protocol).
  * <p />
  * These data are:
@@ -25,6 +28,8 @@ import java.util.function.Consumer;
  * this includes a schema-like notation "queue://" or "topic://" as prefix. This to handle a queue having the same name
  * as a topic - even though the Mats API forbids this: An "endpointId" fully qualifies a Mats endpoint seen from the
  * MatsFactory's side, no matter if it is e.g. a "terminator" (queue-based) or "subscriptionTerminator" (topic-based).
+ *
+ * @see UpdateEvent for more information about how the information is presented and updated.
  *
  * @author Endre Stølsvik 2021-12-16 23:10 - http://stolsvik.com/, endre@stolsvik.com
  */
@@ -64,8 +69,8 @@ public interface MatsBrokerMonitor extends Closeable {
 
         /**
          * @return a
-         *         <code>Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination MatsBrokerDestination}]</code>
-         *         for currently known Mats-relevant destinations. (FullyQualifiedDestinationName ==
+         *         <code>Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination MatsBrokerDestination}]</code> for
+         *         currently known Mats-relevant destinations. (FullyQualifiedDestinationName ==
          *         {@link MatsBrokerDestination#getFqDestinationName() destination.getFqDestinationName()}).
          */
         NavigableMap<String, MatsBrokerDestination> getMatsDestinations();
@@ -94,15 +99,39 @@ public interface MatsBrokerMonitor extends Closeable {
         Optional<String> getBrokerJson();
     }
 
+    /**
+     * MatsBrokerMonitor will send an {@link UpdateEvent} to all registered listeners when it has received an update
+     * from the broker. This will happen periodically, and when forced by invoking
+     * {@link #forceUpdate(String, boolean)}, and might also be sent when destinations disappear. It is assumed that the
+     * receiver of this event will keep a local copy of the data, and update it with the information in the event. If an
+     * update comes with {@link #isFullUpdate()} <code>false</code>, the receiver should assume that any destinations
+     * not mentioned have zero messages pending. If {@link #isFullUpdate()} is <code>true</code>, the receiver should
+     * consider the {@link #getEventDestinations()} as authoritative information about all currently known
+     * Mats3-relevant destinations on the broker, thus overwriting any local view kept by incremental updates.
+     */
     interface UpdateEvent {
         /**
+         * @return when the MatsBrokerMonitor node created this {@link UpdateEvent}, in millis-since-Epoch.
+         */
+        long getStatisticsUpdateMillis();
+
+        /**
+         * @return the correlationId if this update event is a reply to an invocation of
+         *         {@link #forceUpdate(String, boolean)}, otherwise {@link Optional#empty()}.
+         */
+        Optional<String> getCorrelationId();
+
+        /**
          * A full update will be sent when {@link #forceUpdate(String, boolean)} was invoked with the 'full' parameter
-         * set to <code>true</code>, and will be sent periodically, and will be sent when destinations disappear.
+         * set to <code>true</code>, and will be sent periodically, and might be sent when destinations disappear.
          * <p/>
          * When this is <code>true</code>, the receiver should consider the {@link #getEventDestinations()} as
-         * authoritative information about all currently known destinations on the broker, thus overwriting any local
-         * view kept by incremental updates. {@link MatsBrokerMonitor#getSnapshot() BrokerSnapshots} taken after such an
-         * event will also reflect the new situation.
+         * authoritative information about all currently known Mats3-relevant destinations on the broker, thus
+         * overwriting any local view kept by incremental updates. {@link MatsBrokerMonitor#getSnapshot()
+         * BrokerSnapshots} taken after such an event will also reflect the new situation.
+         * <p/>
+         * When this is <code>false</code>, the receiver shall assume that any destinations not mentioned have zero
+         * messages pending.
          *
          * @return whether this is a full update (<code>true</code>), in which case the receiver should consider the
          *         {@link #getEventDestinations()} as authoritative information about all currently known destinations
@@ -111,23 +140,33 @@ public interface MatsBrokerMonitor extends Closeable {
         boolean isFullUpdate();
 
         /**
-         * @return the correlationId if this update event is a reply to an invocation of
-         *         {@link #forceUpdate(String, boolean)}.
+         * Relevant for the local listeners on the {@link MatsBrokerMonitor} nodes. If this is <code>true</code>, the
+         * {@link MatsBrokerMonitor} node which produced this event is the one which did the actual statistics request
+         * to the broker - there will only be one node with <code>true</code>, all others will have <code>false</code>.
+         * If you are to forward or record the statistics, the node having <code>true</code> here would be the correct
+         * node to do it on.
+         * <p/>
+         * Note: If you are getting this update by the 'matsbrokermonitor-broadcastreceiver' module (via the
+         * 'matsbrokermonitor-broadcastandcontrol' module), this will always return <code>false</code>, as this is then
+         * a "broadcast copy" of the UpdateEvent produced by the node which did the actual statistics request to the
+         * broker (then broadcast by the node that had <code>true</code> here).
+         *
+         * @return <code>true</code> if this UpdateEvent originated on this node - if you are to forward or record the
+         *         statistics, the node having <code>true</code> here would be the correct node to do it from, as there
+         *         will only be one node that has <code>true</code>, all others have <code>false</code>.
          */
-        Optional<String> getCorrelationId();
+        boolean isUpdateEventOriginatedOnThisNode();
+
+        /**
+         * @return a {@link BrokerInfo} instance if available.
+         */
+        Optional<BrokerInfo> getBrokerInfo();
 
         /**
          * @return a Map[FullyQualifiedDestinationName, {@link MatsBrokerDestination}] for either the non-zero
          *         destinations, or if {@link #isFullUpdate()} is true, all destinations.
          */
         NavigableMap<String, MatsBrokerDestination> getEventDestinations();
-
-        /**
-         * @return <code>true</code> if this event was originated on this node - if you are to forward or record the
-         *         statistics, the node having <code>true</code> here would be the correct node to do it on, as there
-         *         will only be one node that has <code>true</code>, all others have <code>false</code>.
-         */
-        boolean isUpdateEventOriginatedOnThisNode();
     }
 
     interface MatsBrokerDestination {
@@ -245,8 +284,55 @@ public interface MatsBrokerMonitor extends Closeable {
     }
 
     /**
-     * A DTO-implementation of {@link MatsBrokerDestination}, which can be sent over Mats. Used by the Broadcaster and
-     * BroadcasterReceiver.
+     * A DTO-implementation of {@link BrokerInfo}, which can be sent over Mats3 (field serialized). Used by the
+     * Broadcaster and BroadcasterReceiver.
+     */
+    class BrokerInfoDto implements BrokerInfo {
+        private String bt;
+        private String bn;
+        private Optional<String> bj;
+
+        public static BrokerInfoDto of(BrokerInfo brokerInfo) {
+            return new BrokerInfoDto(brokerInfo);
+        }
+
+        private BrokerInfoDto() {
+            /* need no-args constructor for deserializing with Jackson */
+        }
+
+        private BrokerInfoDto(BrokerInfo brokerInfo) {
+            bt = brokerInfo.getBrokerType();
+            bn = brokerInfo.getBrokerName();
+            bj = brokerInfo.getBrokerJson();
+        }
+
+        @Override
+        public String getBrokerType() {
+            return bt;
+        }
+
+        @Override
+        public String getBrokerName() {
+            return bn;
+        }
+
+        @Override
+        public Optional<String> getBrokerJson() {
+            return bj;
+        }
+
+        @Override
+        public String toString() {
+            return "BrokerInfoDto{" +
+                    "brokerType='" + bt + '\'' +
+                    ", brokerName='" + bn + '\'' +
+                    ", brokerJson=" + bj.orElse("").length() + " chars}";
+        }
+    }
+
+    /**
+     * A DTO-implementation of {@link MatsBrokerDestination}, which can be sent over Mats3 (field serialized). Used by
+     * the Broadcaster and BroadcasterReceiver.
      */
     class MatsBrokerDestinationDto implements MatsBrokerDestination {
         private long lulm;
@@ -336,6 +422,23 @@ public interface MatsBrokerMonitor extends Closeable {
         @Override
         public OptionalLong getHeadMessageAgeMillis() {
             return age;
+        }
+
+        @Override
+        public String toString() {
+            return "MatsBrokerDestinationImpl{" +
+                    "lastUpdateMillis=" + LocalDateTime.ofInstant(Instant.ofEpochMilli(lulm), ZoneId.systemDefault()) +
+                    ", lastUpdateBrokerMillis=" + lubm +
+                    ", fqDestinationName='" + fqdn + '\'' +
+                    ", destinationName='" + dn + '\'' +
+                    ", matsStageId='" + msid + '\'' +
+                    ", destinationType=" + dt +
+                    ", isDlq=" + dlq +
+                    ", isGlobalDlq=" + gdlq +
+                    ", numberOfQueuedMessages=" + noqm +
+                    ", numberOfInFlightMessages=" + noifm +
+                    ", headMessageAgeMillis=" + age +
+                    '}';
         }
     }
 }

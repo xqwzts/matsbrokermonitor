@@ -66,6 +66,7 @@ import io.mats3.matsbrokermonitor.activemq.ActiveMqMatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.matsbrokermonitor.broadcaster.MatsBrokerMonitorBroadcastAndControl;
 import io.mats3.matsbrokermonitor.broadcastreceiver.MatsBrokerMonitorBroadcastReceiver;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.BrowseQueueTableAddition;
@@ -147,7 +148,13 @@ public class MatsBrokerMonitor_TestJettyServer {
             SetupTestMatsEndpoints.setupMatsTestEndpoints(SERVICE_3, _matsFactory);
 
             MatsBrokerMonitorBroadcastReceiver receiver = MatsBrokerMonitorBroadcastReceiver.install(_matsFactory);
-            receiver.registerListener(updateEvent -> log.info("Received update via Mats fabric: " + updateEvent));
+            receiver.registerListener(updateEvent -> {
+                log.info("Received update via Mats fabric: " + updateEvent);
+                log.info(".. BrokerInfo: " + updateEvent.getBrokerInfo());
+                for (Map.Entry<String, MatsBrokerDestination> entry : updateEvent.getEventDestinations().entrySet()) {
+                    log.info("  .. Destination [" + entry.getKey() + "]: " + entry.getValue());
+                }
+            });
             sc.setAttribute(MatsBrokerMonitorBroadcastReceiver.class.getName(), receiver);
 
             _matsFactory.start();
@@ -341,7 +348,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             matsFactory.getDefaultInitiator().initiateUnchecked(
                     (msg) -> {
                         for (int i = 0; i < countF; i++) {
-                            msg.traceId(MatsTestHelp.traceId() + "_#&'\"<" + i+">")
+                            msg.traceId(MatsTestHelp.traceId() + "_#&'\"<" + i + ">")
                                     // ORDINARY messages
                                     .keepTrace(KeepTrace.COMPACT)
                                     .from("/sendRequestInitiated")

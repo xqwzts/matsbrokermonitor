@@ -13,8 +13,6 @@ public interface Statics {
     String ACTIVE_MQ_GLOBAL_DLQ_NAME = "ActiveMQ.DLQ";
     String INDIVIDUAL_DLQ_PREFIX = "DLQ.";
 
-    // :: Two different scavenge intervals - first the primary source, then "follower".
-
     int SCAVENGE_OLD_STATS_SECONDS = 10 * 60;
     int MAX_NUMBER_OF_OUTSTANDING_CORRELATION_IDS = 150;
 
@@ -25,9 +23,6 @@ public interface Statics {
     int CHILL_MILLIS_WAIT_AFTER_THROWABLE_IN_RECEIVE_LOOPS = 30 * 1000;
     int TIMEOUT_MILLIS_FOR_LAST_MESSAGE_IN_BATCH_FOR_DESTINATION_STATS = 250;
     int TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN = 500;
-
-    // Time between each logline we want logged
-    long LOGLINE_SUPPRESSION_MILLIS = 15 * 60 * 1000;
 
     // :: For ActiveMqMatsBrokerMonitor:
 
@@ -47,16 +42,9 @@ public interface Statics {
     String QUERY_REPLY_STATISTICS_TOPIC = "matsbrokermonitor.MatsBrokerMonitor.ActiveMQ.Statistics";
 
     /**
-     * Truncate milliseconds to 3 decimals.
+     * Divide out nanos to ms with 3 decimals.
      */
-    default double ms3(double ms) {
-        return Math.round(ms * 1000d) / 1000d;
-    }
-
-    /**
-     * Truncate milliseconds to 3 decimals.
-     */
-    default double nanos3(long nanosTaken) {
+    default double ms3(long nanosTaken) {
         return Math.round(nanosTaken / 1000d) / 1000d;
     }
 

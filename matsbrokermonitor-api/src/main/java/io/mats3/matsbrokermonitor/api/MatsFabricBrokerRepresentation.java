@@ -92,13 +92,13 @@ public interface MatsFabricBrokerRepresentation extends MatsFabricAggregates {
      *         with messages which probably should be looked into.
      */
     default long getMaxStageNumberOfDlqMessages() {
-        Stream<Long> globalDlqNum = getDefaultGlobalDlq().map(MatsBrokerDestination::getNumberOfQueuedMessages)
-                .map(Stream::of).orElseGet(Stream::empty); // Java 8 missing optional.stream()
+        Stream<Long> globalDlqNum = getDefaultGlobalDlq()
+                .map(MatsBrokerDestination::getNumberOfQueuedMessages).stream();
 
-        Stream<Long> stagesMax = getEndpoints().values().stream()
+        Stream<Long> stagesDlqMax = getEndpoints().values().stream()
                 .map(MatsEndpointBrokerRepresentation::getMaxStageNumberOfDlqMessages);
 
-        return Stream.concat(globalDlqNum, stagesMax)
+        return Stream.concat(globalDlqNum, stagesDlqMax)
                 .max(Comparator.naturalOrder())
                 .orElse(0L);
     }

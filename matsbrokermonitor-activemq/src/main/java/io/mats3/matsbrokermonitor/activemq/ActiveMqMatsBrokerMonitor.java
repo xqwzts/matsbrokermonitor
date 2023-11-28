@@ -78,7 +78,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
     /**
      * Convenience method where the {@link ActiveMqBrokerStatsQuerierImpl} is instantiated locally based on the supplied
-     * JMS {@link ConnectionFactory}, using default updateInterval of 1 minute, and using supplied
+     * JMS {@link ConnectionFactory}, using default updateInterval of 2.5 minutes, and using supplied
      * MatsDestinationPrefix.
      *
      * @param jmsConnectionFactory
@@ -301,21 +301,19 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         @Override
         public String toString() {
             return "MatsBrokerDestinationImpl{" +
-                    "_lastUpdateMillis=" + LocalDateTime.ofInstant(Instant.ofEpochMilli(_lastUpdateMillis),
+                    "lastUpdateMillis=" + LocalDateTime.ofInstant(Instant.ofEpochMilli(_lastUpdateMillis),
                             ZoneId.systemDefault()) +
-                    ", _lastUpdateBrokerMillis=" + (_lastUpdateBrokerMillis == 0 ? "{not present}"
+                    ", lastUpdateBrokerMillis=" + (_lastUpdateBrokerMillis == 0 ? "{not present}"
                             : LocalDateTime.ofInstant(Instant.ofEpochMilli(_lastUpdateBrokerMillis),
                                     ZoneId.systemDefault())) +
-                    ", _destinationName='" + _destinationName + '\'' +
-                    ", _matsStageId='" + _matsStageId + '\'' +
-                    ", _destinationType=" + _destinationType +
-                    ", _isDlq=" + _isDlq +
-                    ", _isGlobalDlq=" + _isDefaultGlobalDlq +
-                    ", _numberOfQueuedMessages=" + _numberOfQueuedMessages +
-                    ", _numberOfInFlightMessages=" + (_numberOfInFlightMessages == 0
-                            ? "{not present}"
-                            : _numberOfInFlightMessages) +
-                    ", _headMessageAgeMillis=" + (_headMessageAgeMillis == 0
+                    ", destinationName='" + _destinationName + '\'' +
+                    ", matsStageId='" + _matsStageId + '\'' +
+                    ", destinationType=" + _destinationType +
+                    ", isDlq=" + _isDlq +
+                    ", isGlobalDlq=" + _isDefaultGlobalDlq +
+                    ", numberOfQueuedMessages=" + _numberOfQueuedMessages +
+                    ", numberOfInFlightMessages=" + _numberOfInFlightMessages +
+                    ", headMessageAgeMillis=" + (_headMessageAgeMillis == 0
                             ? "{not present}"
                             : _headMessageAgeMillis) +
                     '}';
@@ -350,26 +348,30 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
     }
 
     private static class UpdateEventImpl implements UpdateEvent {
+        private final long _statisticsUpdateMillis;
         private final String _correlationId; // nullable
         private final boolean _isFullUpdate;
+        private final boolean _updateEventOriginatedOnThisNode;
+        private final BrokerInfo _brokerInfo; // nullable
         private final NavigableMap<String, MatsBrokerDestination> _eventDestinations;
-        private final boolean _statsEventOriginatedOnThisNode;
         private final String _originatingNodeId;
 
-        public UpdateEventImpl(String correlationId, boolean isFullUpdate,
-                NavigableMap<String, MatsBrokerDestination> eventDestinations,
-                boolean statsEventOriginatedOnThisNode,
+        public UpdateEventImpl(long statisticsUpdateMillis, String correlationId, boolean isFullUpdate,
+                BrokerInfo brokerInfo, NavigableMap<String, MatsBrokerDestination> eventDestinations,
+                boolean updateEventOriginatedOnThisNode,
                 String originatingNodeId) {
+            _statisticsUpdateMillis = statisticsUpdateMillis;
             _correlationId = correlationId;
             _isFullUpdate = isFullUpdate;
+            _updateEventOriginatedOnThisNode = updateEventOriginatedOnThisNode;
+            _brokerInfo = brokerInfo;
             _eventDestinations = eventDestinations;
-            _statsEventOriginatedOnThisNode = statsEventOriginatedOnThisNode;
             _originatingNodeId = originatingNodeId;
         }
 
         @Override
-        public boolean isFullUpdate() {
-            return _isFullUpdate;
+        public long getStatisticsUpdateMillis() {
+            return _statisticsUpdateMillis;
         }
 
         @Override
@@ -378,22 +380,35 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         }
 
         @Override
+        public boolean isFullUpdate() {
+            return _isFullUpdate;
+        }
+
+        @Override
+        public boolean isUpdateEventOriginatedOnThisNode() {
+            return _updateEventOriginatedOnThisNode;
+        }
+
+        @Override
+        public Optional<BrokerInfo> getBrokerInfo() {
+            return Optional.ofNullable(_brokerInfo);
+        }
+
+        @Override
         public NavigableMap<String, MatsBrokerDestination> getEventDestinations() {
             return _eventDestinations;
         }
 
         @Override
-        public boolean isUpdateEventOriginatedOnThisNode() {
-            return _statsEventOriginatedOnThisNode;
-        }
-
-        @Override
         public String toString() {
             return "UpdateEventImpl{" +
-                    "correlationId='" + _correlationId + '\'' +
+                    "statisticsUpdateMillis=" + LocalDateTime.ofInstant(Instant.ofEpochMilli(_statisticsUpdateMillis),
+                            ZoneId.systemDefault()) +
+                    ", correlationId='" + _correlationId + '\'' +
                     ", isFullUpdate=" + _isFullUpdate +
+                    ", updateEventOriginatedOnThisNode=" + _updateEventOriginatedOnThisNode +
+                    ", brokerInfo=" + _brokerInfo +
                     ", eventDestinations=" + _eventDestinations.size() +
-                    ", statsEventOriginatedOnThisNode=" + _statsEventOriginatedOnThisNode +
                     ", originatingNodeId='" + _originatingNodeId + '\'' +
                     '}';
         }
@@ -511,8 +526,8 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         TreeMap<String, MatsBrokerDestination> eventDestinations = isFullUpdate
                 ? matsDestinationsMap
                 : matsDestinationsMapNonZero;
-        UpdateEventImpl update = new UpdateEventImpl(event.getCorrelationId().orElse(null),
-                isFullUpdate, eventDestinations, event.isStatsEventOriginatedOnThisNode(),
+        UpdateEventImpl update = new UpdateEventImpl(System.currentTimeMillis(), event.getCorrelationId().orElse(null),
+                isFullUpdate, brokerInfo, eventDestinations, event.isStatsEventOriginatedOnThisNode(),
                 event.getOriginatingNodeId().orElse(null));
         for (Consumer<UpdateEvent> listener : _listeners) {
             try {
