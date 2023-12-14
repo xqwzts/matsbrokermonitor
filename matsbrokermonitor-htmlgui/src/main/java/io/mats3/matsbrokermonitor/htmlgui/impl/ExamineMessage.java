@@ -383,7 +383,7 @@ public class ExamineMessage {
             }
             else {
                 out.html("<td>").DATA(matsTrace.getCurrentCall().getCallingAppName()
-                                + "; v." + matsTrace.getCurrentCall().getCallingAppVersion())
+                        + "; v." + matsTrace.getCurrentCall().getCallingAppVersion())
                         .html(" @ ").DATA(matsTrace.getCurrentCall().getCallingHost())
                         .html("</td>");
             }
@@ -574,17 +574,20 @@ public class ExamineMessage {
         List<? extends Call<?>> callFlow = matsTrace.getCallFlow();
         List<? extends StackState<?>> stateFlow = matsTrace.getStateFlow();
 
+        // :: Run through the actual state flow, and build a string of the heights
         StringBuilder actualStateHeightsFromStateFlow = new StringBuilder();
         stateFlow.forEach(stackState -> actualStateHeightsFromStateFlow.append(stackState.getHeight()).append(':'));
 
+        // :: Run through the call flow, and build two strings of the heights: One for the case where we assume
+        // initialState, and one for the case where we assume normal (no initialState).
         StringBuilder stateHeightsFromCallFlow_normal = new StringBuilder();
         StringBuilder stateHeightsFromCallFlow_initialState = new StringBuilder();
         boolean initiationIsSend = callFlow.get(0).getCallType() == CallType.SEND;
         for (int i = 0; i < callFlow.size(); i++) {
-            // ?: Assuming initialState: Are we BEFORE the initial call which is a SEND?
+            // ?: For the case w/ initialState: Are we BEFORE the initial call which is a SEND?
             if ((i == 0) && initiationIsSend) {
                 // -> Yes, before initial call which was SEND.
-                // A SEND send does NOT add state itself, since there is no replyTo / no terminator to receive it.
+                // A SEND call does NOT add state itself, since there is no replyTo / no terminator to receive it.
                 // Since we assume initialState, it added initialState at level 0 for targeted endpoint.
                 // This latter we add here, since it isn't represented in the call flow.
                 stateHeightsFromCallFlow_initialState.append("0:");
@@ -598,7 +601,7 @@ public class ExamineMessage {
                 stateHeightsFromCallFlow_normal.append(call.getReplyStackHeight()).append(':');
                 stateHeightsFromCallFlow_initialState.append(call.getReplyStackHeight()).append(':');
             }
-            // ?: Assuming initialState: Are we AFTER the initial call which is a REQUEST?
+            // ?: For the case w/ initialState: Are we AFTER the initial call which is a REQUEST?
             if ((i == 0) && (!initiationIsSend)) {
                 // -> Yes, after initial call which was REQUEST.
                 // A REQUEST adds a state at level 0 for the message to the replyTo / terminator.
@@ -608,15 +611,15 @@ public class ExamineMessage {
             }
         }
 
+        // :: Compare the actual state flow with the two state flows we deduced from the call flow
         int initialStateStatus; // 1:normal, 2:initialState, -1:neither (can't deduce, can't resolve states)
         // ?: Was this a /normal/ flow, without initialState from initiation?
-        if (actualStateHeightsFromStateFlow.toString().equals(stateHeightsFromCallFlow_normal.toString())) {
+        if (actualStateHeightsFromStateFlow.toString().contentEquals(stateHeightsFromCallFlow_normal)) {
             // -> Yes, /normal/ flow
             initialStateStatus = 1;
         }
         // ?: Was this an initiation with initialState to the called endpoint?
-        else if (actualStateHeightsFromStateFlow.toString().equals(stateHeightsFromCallFlow_initialState
-                .toString())) {
+        else if (actualStateHeightsFromStateFlow.toString().contentEquals(stateHeightsFromCallFlow_initialState)) {
             // -> Yes, initiation with initialState.
             initialStateStatus = 2;
         }
@@ -700,8 +703,7 @@ public class ExamineMessage {
                 + "</svg>");
 
         int highestStackHeight = 0;
-        for (int i = 0; i < callFlow.size(); i++) {
-            Call<?> currentCall = callFlow.get(i);
+        for (Call<?> currentCall : callFlow) {
             highestStackHeight = Math.max(highestStackHeight, currentCall.getReplyStackHeight());
         }
 
@@ -935,10 +937,22 @@ public class ExamineMessage {
             if ((matsTrace.getKeepTrace() == KeepMatsTrace.FULL)
                     || (i == (callFlow.size() - 1))) {
                 out.html("<div class='matsbm_box_call_or_state'>\n");
-                StackState<?> stackState = callToState.get(currentCall);
-                if (stackState != null) {
+
+                Object state;
+                // ?: Is this the last call?
+                if (i == (callFlow.size() - 1)) {
+                    // -> Yes, so fetch state from current call
+                    Optional<? extends StackState<?>> currentStateO = matsTrace.getCurrentState();
+                    state = currentStateO.<Object>map(StackState::getState).orElse(null);
+                }
+                else{
+                    // -> No, so fetch state from the callToState map
+                    StackState<?> stackState = callToState.get(currentCall);
+                    state = stackState != null ? stackState.getState() : null;
+                }
+                if (state != null) {
                     out.html("Incoming state: ");
-                    out_displaySerializedRepresentation(out, stackState.getState());
+                    out_displaySerializedRepresentation(out, state);
                 }
                 else {
                     out.html("<i>-no incoming state-</i>");
