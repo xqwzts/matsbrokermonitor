@@ -14,22 +14,25 @@ public interface Statics {
      */
     long RECEIVE_TIMEOUT_MILLIS = 750;
 
+    // :: MDC Keys
 
     String MDC_MATS_MESSAGE_SYSTEM_ID = "mats.MsgSysId";
-
     String MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID = "mats.ReissuedMsgSysId";
     String MDC_MATS_MESSAGE_ID = "mats.MatsMsgId";
 
-    String JMS_MSG_PROP_REISSUE_COOKIE = "mats.ReissueCookie";
-    String JMS_MSG_PROP_REISSUE_USERNAME = "mats.ReissueUsername";
+    // .. the following are copied from JmsMatsFactory
 
-    // COPIED FROM JmsMatsFactory
-
-    // MDC Keys
     String MDC_TRACE_ID = "traceId";
     String MDC_MATS_STAGE_ID = "mats.StageId";
 
-    // JMS Properties put on the JMSMessage via set[String|Long|Boolean]Property(..)
+    // ===== JMS Properties put on the JMSMessage via set[String|Long|Boolean]Property(..)
+    // NOTICE: "." is not allowed by JMS (and Apache Artemis complains!), so we use "_".
+
+    String JMS_MSG_PROP_REISSUE_COOKIE = "mats_ReissueCookie";
+    String JMS_MSG_PROP_REISSUE_USERNAME = "mats_ReissueUsername";
+
+    // .. the following are copied from JmsMatsFactory
+
     String JMS_MSG_PROP_TRACE_ID = "mats_TraceId"; // String
     String JMS_MSG_PROP_MATS_MESSAGE_ID = "mats_MsgId"; // String
     String JMS_MSG_PROP_DISPATCH_TYPE = "mats_DispatchType"; // String
@@ -40,9 +43,18 @@ public interface Statics {
     String JMS_MSG_PROP_TO = "mats_To"; // String
     String JMS_MSG_PROP_AUDIT = "mats_Audit"; // Boolean
 
+    // :: For 'Mats Managed DLQ Divert' - note that most of these should be cleared when reissued from DLQ!
+    String JMS_MSG_PROP_DLQ_EXCEPTION = "mats_dlq_Exception"; // String (not set if DLQed on receive-side)
+    String JMS_MSG_PROP_DLQ_REFUSED = "mats_dlq_Refused"; // Boolean (not set if DLQed on receive-side)
+    String JMS_MSG_PROP_DLQ_DELIVERY_COUNT = "mats_dlq_DeliveryCount"; // Integer
+    String JMS_MSG_PROP_DLQ_DLQ_COUNT = "mats_dlq_DlqCount"; // Integer (NOTE: should be kept when reissued from DLQ!)
+    String JMS_MSG_PROP_DLQ_APP_VERSION_AND_HOST = "mats_dlq_AppAndVersion"; // String
+    String JMS_MSG_PROP_DLQ_STAGE_ORIGIN = "mats_dlq_StageOrigin"; // String
+
     Random RANDOM = new Random();
+
     default String random() {
-        String ALPHABET =  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        String ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         int length = 8;
         StringBuilder sb = new StringBuilder(length);
         for (int i = 0; i < length; i++) {

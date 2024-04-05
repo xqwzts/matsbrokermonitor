@@ -34,6 +34,9 @@ public class SetupTestMatsEndpoints {
     // If present as TraceProperty with Boolean.TRUE, the randomThrow(context) won't throw!
     static final String DONT_THROW = "DONT_THROW";
 
+    // If present as TraceProperty with Boolean.TRUE, the mid-service will throw!
+    static final String THROW = "THROW!";
+
     public static void setupLeafService(String servicePrefix, MatsFactory matsFactory) {
         MatsEndpoint<DataTO, Void> single = matsFactory.single(servicePrefix + SERVICE_LEAF, DataTO.class, DataTO.class,
                 (context, dto) -> {
@@ -70,6 +73,12 @@ public class SetupTestMatsEndpoints {
         ep.lastStage(DataTO.class, (context, sto, dto) -> {
             // Only assert number2, as number1 is differing between calls (it is the multiplier for MidService).
             Assert.assertEquals(Math.E, sto.number2, 0d);
+
+            // Check if we are directed to throw!
+            if (context.getTraceProperty(THROW, Boolean.class) == Boolean.TRUE) {
+                throw new RuntimeException("Throwing as directed by TraceProperty!");
+            }
+
             // Use the 'multiplier' in the request to formulate the reply.. I.e. multiply the number..!
             return new DataTO(dto.number * sto.number1, dto.string + ":FromMidService");
         });

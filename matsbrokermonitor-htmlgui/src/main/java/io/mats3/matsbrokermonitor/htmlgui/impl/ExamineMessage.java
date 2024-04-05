@@ -56,15 +56,15 @@ public class ExamineMessage {
 
         // :: Verify that we have the queue in the stats
         // (Otherwise we'll make the queue by just browsing for the message)
-        Collection<MatsBrokerDestination> values = matsBrokerMonitor.getSnapshot()
+        Collection<MatsBrokerDestination> brokerDestinations = matsBrokerMonitor.getSnapshot()
                 .map(BrokerSnapshot::getMatsDestinations)
                 .map(SortedMap::values)
                 .orElseGet(Collections::emptySet);
 
         MatsBrokerDestination matsBrokerDestination = null;
-        for (MatsBrokerDestination dest : values) {
-            if ((dest.getDestinationType() == DestinationType.QUEUE) && queueId.equals(dest.getDestinationName())) {
-                matsBrokerDestination = dest;
+        for (MatsBrokerDestination d : brokerDestinations) {
+            if ((d.getDestinationType() == DestinationType.QUEUE) && queueId.equals(d.getDestinationName())) {
+                matsBrokerDestination = d;
             }
         }
         if (matsBrokerDestination == null) {
@@ -91,7 +91,7 @@ public class ExamineMessage {
             // Don't output last </div>, as caller does it.
             return;
         }
-        if (!matsBrokerMessageRepresentationO.isPresent()) {
+        if (matsBrokerMessageRepresentationO.isEmpty()) {
             out.html("</div>");
             out.html("<h1>No such message!</h1><br>\n");
             out.html("<b>MessageSystemId:</b> ").DATA(messageSystemId).html(".<br>\n");
@@ -181,7 +181,11 @@ public class ExamineMessage {
 
         part_FlowAndMessageProperties(out, msgRepr, matsTrace, matsTraceDecompressedLength);
 
-        // :: MATS TRACE!
+        // :: DLQ Exception, if any
+
+        part_DlqInformation(out, matsBrokerDestination.isDlq(), msgRepr, matsTrace);
+
+        // :: MATS TRACE! - do we have any?!
 
         if (matsTrace == null) {
             // -> No MatsTrace, why?
@@ -197,7 +201,7 @@ public class ExamineMessage {
             }
         }
         else {
-            // -> We do have a MatsTrace, output what we can
+            // -> We do have a MatsTrace, output what we can!
 
             // :: INCOMING STATE AND MESSAGE
 
@@ -263,15 +267,13 @@ public class ExamineMessage {
         out.html("<td class='matsbm_table_browse_breakall'>").DATA(brokerMsg.getTraceId()).html("</td>");
         out.html("</tr>\n");
 
-        String initiatingApp = "{no info present}";
-        String initiatorId = "{no info present}";
+        String initiatingApp;
+        String initiatorId;
         if (matsTrace != null) {
             initiatingApp = matsTrace.getInitializingAppName() + "; v." + matsTrace.getInitializingAppVersion();
             initiatorId = matsTrace.getInitiatorId();
         }
-        // ?: Do we have InitializingApp from MsgSys?
-        // TODO: Remove this "if" in 2023.
-        else if (brokerMsg.getInitiatingApp() != null) {
+        else {
             initiatingApp = brokerMsg.getInitiatingApp();
             initiatorId = brokerMsg.getInitiatorId();
         }
@@ -505,6 +507,145 @@ public class ExamineMessage {
         out.html("</div></div>\n");
     }
 
+    private static void part_DlqInformation(Outputter out, boolean isDestinationDlq,
+            MatsBrokerMessageRepresentation brokerMsg, MatsTrace<?> matsTrace)
+            throws IOException {
+        // These three properties are added by Mats3 when performing 'Mats Managed DLQ Divert', and they are cleared
+        // on reissue, implying that they shall only be present on the message when it is Mats3 that has just DLQed it.
+        // (This does not hold for the DLQ count, which is a counter that is increased each time the message is
+        // reissued and then DLQed again - and it is thus NOT cleared upon reissue.)
+        boolean hasDlqInformation = brokerMsg.getDlqDeliveryCount().isPresent()
+                || brokerMsg.getDlqStageOrigin().isPresent()
+                || brokerMsg.getDlqAppVersionAndHost().isPresent();
+        // ?: Do we have any DLQ information on the message?
+        if (!hasDlqInformation) {
+            // -> No DLQ information on message, but is this still a DLQ queue?
+            if (isDestinationDlq) {
+                // -> Yes, this is a DLQ queue - so point out that there's no DLQ information.
+                out.html("<div id='matsbm_part_dlq_information'>\n");
+                out.html("<h2>DLQ Information</h2><br>\n");
+                out.html("<i>-no DLQ information on message, even though this is a Dead Letter Queue-</i><br>\n");
+                out.html("<br>This probably means that the message was DLQ'ed by the message broker, and not on the"
+                        + " client side employing <i>'Mats Managed DLQ Divert'</i>.<br/>\n");
+                if ((matsTrace != null) && (matsTrace.getTimeToLive() > 0)) {
+                    out.html("<br><b>There's good reasons to believe that it timed out while on queue</b>, since"
+                            + " the Time-To-Live was " + matsTrace.getTimeToLive() + " ms, and this message"
+                            + " now resides on a DLQ without any DLQ information.<br>\n");
+                }
+                out.html("</div>\n");
+            }
+            return;
+        }
+
+        out.html("<div id='matsbm_part_dlq_information'>\n");
+        out.html("<h2>DLQ Information</h2><br>\n");
+
+        // ?: Do we have App and Version? (This SHALL be present if we have any DLQ information, but hey ho)
+        if (brokerMsg.getDlqAppVersionAndHost().isPresent()) {
+            String appVersionAndHostname = brokerMsg.getDlqAppVersionAndHost().get();
+            // Split the string into three, app, version and hostname, by first semicolon, then "@"
+            String[] parts = appVersionAndHostname.split("[;@]", 3);
+            String app = parts[0];
+            String version = parts[1];
+            String hostname = parts[2];
+
+            out.html("&nbsp;&nbsp;DLQ'ed by Stage: <div class='matsbm_stageid'>")
+                    .DATA(brokerMsg.getToStageId());
+            out.html("</div><br/>&nbsp;&nbsp;Application: <b>").DATA(app).html("</b> v.<b>")
+                    .DATA(version);
+            out.html("</b><br/>&nbsp;&nbsp;Running on Host: <b>").DATA(hostname).html("</b><br><br>\n");
+        }
+
+        // ?: Is this a refused message? (I.e. the message was refused by the stage, by throwing
+        // MatsMessageRefuseException)
+        // (Note: This will only be present if stacktrace is also present..)
+        if (brokerMsg.isDlqMessageRefused().isPresent()) {
+            if (brokerMsg.isDlqMessageRefused().get()) {
+                out.html("&nbsp;&nbsp;<b>Message was refused by the Stage!</b>"
+                        + " &nbsp;&nbsp;<i>(Raised <code>MatsRefuseMessageException</code>)</i><br><br>\n");
+            }
+            else if (brokerMsg.getDlqDeliveryCount().isPresent() && (brokerMsg.getDlqDeliveryCount().get() > 1)) {
+                out.html("&nbsp;&nbsp;<b>Message failed delivery multiple times, and thus DLQ'ed!</b>"
+                        + " &nbsp;&nbsp;<i>(Processing raised some Exception on every attempt)</i><br><br>\n");
+            }
+            else {
+                out.html("&nbsp;&nbsp;<b>Reason for DLQ isn't conclusive!</b>"
+                        + " - you should probably check logs.<br><br>\n");
+            }
+        }
+
+        // ?: Are we missing the reason Exception?
+        if (brokerMsg.getDlqExceptionStacktrace().isEmpty()) {
+            // -> Yes, missing Exception, which implies that the message was DLQed on the receive side, before
+            // processing started.
+            out.html("&nbsp;&nbsp;<span style='color: red;'><b>Missing reason for DLQ!</b></span> This implies that the"
+                    + " DLQ was performed on the reception side of the processing (before processing started).<br>\n"
+                    + "&nbsp;&nbsp;This is a fallback mechanism in case the normal DLQ handling fails: If Stage"
+                    + " processing is finished and Mats3 has started to send any outgoing messages, but then<br>\n"
+                    + "&nbsp;&nbsp;get into problems with the sending, or with committing of database, it cannot"
+                    + " anymore divert the message to DLQ even though the delivery count has reached max.<br>\n"
+                    + "&nbsp;&nbsp;Mats3 thus needs to rollback, which results in a new redelivery. Mats3 then"
+                    + " catches the exceeded delivery count on the receive side and thus directly divert to DLQ.<br>\n"
+                    + "&nbsp;&nbsp;<b>You will need to check logs!</b><br><br>\n");
+        }
+
+        // ?: Do we have a delivery count? (This SHALL be present if we have any DLQ information, but hey ho)
+        if (brokerMsg.getDlqDeliveryCount().isPresent()) {
+            out.html("&nbsp;&nbsp;Attempted deliveries: <b>").DATA(Integer.toString(brokerMsg
+                    .getDlqDeliveryCount().get())).html("</b> &nbsp;&nbsp;&nbsp;<i>(How many times this message was"
+                            + " attempted delivered to the Stage.)</i><br>\n");
+        }
+
+        // ?: Do we have a DLQ count? (This SHALL be present if we have any DLQ information, but hey ho)
+        if (brokerMsg.getDlqCount().isPresent()) {
+            out.html("&nbsp;&nbsp;DLQ count: <b>").DATA(Integer.toString(brokerMsg.getDlqCount().get()))
+                    .html("</b> &nbsp;&nbsp;&nbsp;<i>(How many times this message has ended up on DLQ -"
+                            + " will increase after reissue and subsequent new DLQ again!)</i><br>\n");
+        }
+
+        // ?: Do we have a Last Reissued Username? (Added by MatsBrokerMonitor on reissue, thus only present if
+        // already reissued)
+        if (brokerMsg.getDlqLastReissuedUsername().isPresent()) {
+            out.html("&nbsp;&nbsp;Last reissued by: <b>").DATA(brokerMsg.getDlqLastReissuedUsername().get())
+                    .html("</b> &nbsp;&nbsp;&nbsp;<i>(The user which used MatsBrokerMonitor to reissue this message"
+                            + " from the DLQ last time.)</i><br>\n");
+        }
+
+        // ?: Do we have a Stage Origin? (This SHALL be present if we have any DLQ information, but hey ho)
+        if (brokerMsg.getDlqStageOrigin().isPresent()) {
+            out.html("<br/><div class='matsbm_box_call_or_state'>\n"
+                    + "<b>Stage Origin</b> (\"Debug Info\"):\n"
+                    + "<div class='matsbm_box_call_or_state_div'>");
+            String debugInfo = brokerMsg.getDlqStageOrigin().get();
+            if (debugInfo.trim().isEmpty()) {
+                debugInfo = "{none present}";
+            }
+            debugInfo = Outputter.ESCAPE(debugInfo).replace(";", "\n");
+            if (brokerMsg.getDlqAppVersionAndHost().isPresent()) {
+                String appVersionAndHostname = brokerMsg.getDlqAppVersionAndHost().get();
+                String[] parts = appVersionAndHostname.split("[;@]", 3);
+                String app = parts[0];
+                String version = parts[1];
+                String hostname = parts[2];
+                debugInfo = "<i><b>" + app + "</b> v.<b>" + version + "</b> @ <b>" + hostname + "</b></i>\n"
+                        + debugInfo;
+            }
+            out.html(debugInfo);
+            out.html("</div></div><br>\n");
+        }
+
+        // ?: Do we have a stacktrace?
+        if (brokerMsg.getDlqExceptionStacktrace().isPresent()) {
+            // -> Yes, we have a stacktrace
+            out.html("<br/><div class='matsbm_box_call_or_state'>\n");
+            out.html("Final <b>Exception</b> which caused the DLQ:");
+            out.html("<div class='matsbm_box_call_or_state_div'>");
+            out.DATA(brokerMsg.getDlqExceptionStacktrace().get());
+            out.html("</div></div><br>\n");
+        }
+        out.html("</div>\n");
+    }
+
     private static void part_ReplyToStack(Outputter out, MatsTrace<?> matsTrace) throws IOException {
         out.html("<div id='matsbm_part_stack'>");
         out.html("<h2>ReplyTo Stack</h2><br>\n");
@@ -687,7 +828,9 @@ public class ExamineMessage {
         }
         else {
             out.html("<b>NOTICE!! This Mats Flow was initiated with KeepTrace.MINIMAL, which removes all information"
-                    + " about all calls other than the current to save space (hopefully you've increased performance).</b><br>\n");
+                    + " about all calls other than the current to save space.</b><br>");
+            out.html("<i>(hopefully you've got massive increased performance in exchange for"
+                    + " this considerably reduced debuggability!)</i><br>\n");
             out.html("You'll have to use your centralized logging system and search with either the FlowId or TraceId"
                     + " to piece together what lead up to the current call.<br>\n");
         }
@@ -886,12 +1029,13 @@ public class ExamineMessage {
         }
         // If DLQ, then explanation-row about crashed processing
         if (isDlq) {
-            out.html("<tr class='matsbm_table_matstrace_dlqrow'><td colspan=3></td>");
-            out.html("<td colspan='").DATA(highestStackHeight + 4)
-                    .html("'>This message resides on a DLQ, which means that the final call failed processing on "
-                            + " <div class='matsbm_stageid'>")
+            out.html("<tr class='matsbm_table_matstrace_dlqrow'>");
+            out.html("<td colspan='").DATA(highestStackHeight + 7)
+                    .html("' style='width: 1200px; text-align: center;'>This message resides on a DLQ, which means"
+                            + " that the final call failed processing on <div class='matsbm_stageid'>")
                     .DATA(matsTrace.getCurrentCall().getTo().getId())
-                    .html("</div> - You'll have to use your logging system to understand what happened there.</td>");
+                    .html("</div><br>Either you have some good info above in the 'DLQ information' section above, or"
+                            + " you'll have to use your logging system to understand what happened there.</td>");
             out.html("</tr>");
         }
 
@@ -943,9 +1087,9 @@ public class ExamineMessage {
                 if (i == (callFlow.size() - 1)) {
                     // -> Yes, so fetch state from current call
                     Optional<? extends StackState<?>> currentStateO = matsTrace.getCurrentState();
-                    state = currentStateO.<Object>map(StackState::getState).orElse(null);
+                    state = currentStateO.<Object> map(StackState::getState).orElse(null);
                 }
-                else{
+                else {
                     // -> No, so fetch state from the callToState map
                     StackState<?> stackState = callToState.get(currentCall);
                     state = stackState != null ? stackState.getState() : null;
@@ -1010,6 +1154,6 @@ public class ExamineMessage {
             debugInfo = "{none present}";
         }
         debugInfo = Outputter.ESCAPE(debugInfo).replace(";", "<br>\n");
-        return "<code>" + debugInfo + "</code>";
+        return "<code class='matsbm_table_browse_breakall'>" + debugInfo + "</code>";
     }
 }

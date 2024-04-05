@@ -23,13 +23,19 @@ import java.util.function.Consumer;
  * <li>Biggest point: <b>The number of messages on all the destinations and Dead Letter Queues.</b></li>
  * <li>Bonus point: The age of any head (first) message on the queue.</li>
  * </ul>
- *
+ * <p/>
  * Note: "Fully Qualified Destination Name" means that the name fully specifies the queue or topic, e.g. for ActiveMQ
  * this includes a schema-like notation "queue://" or "topic://" as prefix. This to handle a queue having the same name
  * as a topic - even though the Mats API forbids this: An "endpointId" fully qualifies a Mats endpoint seen from the
  * MatsFactory's side, no matter if it is e.g. a "terminator" (queue-based) or "subscriptionTerminator" (topic-based).
+ * <p/>
+ * Note: This is the "monitor the queues" part of the MatsBrokerMonitor. The "browse the queues and actions on messages"
+ * part is found in {@link MatsBrokerBrowseAndActions}. The reason for this separation of the API is that the pieces
+ * defined in this piece are not part of a standard JMS API and must be implemented specifically for each broker, while
+ * the "control" part can be implemented using standard JMS API.
  *
  * @see UpdateEvent for more information about how the information is presented and updated.
+ * @see MatsBrokerBrowseAndActions for the API to browse and act upon the messages on the destinations.
  *
  * @author Endre Stølsvik 2021-12-16 23:10 - http://stolsvik.com/, endre@stolsvik.com
  */

@@ -1,7 +1,5 @@
 package io.mats3.matsbrokermonitor.htmlgui;
 
-import static io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.ACCESS_CONTROL_ALLOW_ALL;
-
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URL;
@@ -122,11 +120,14 @@ public class MatsBrokerMonitor_TestJettyServer {
                     JmsMatsJmsSessionHandler_Pooling.create(connFactory, PoolingKeyInitiator.FACTORY,
                             PoolingKeyStageProcessor.FACTORY),
                     matsSerializer);
-            // Configure the MatsFactory for testing (remember, we're running two instances in same JVM)
-            // .. Concurrency of only 2
-            FactoryConfig factoryConfig = _matsFactory.getFactoryConfig();
+            // Hold endpoints
             _matsFactory.holdEndpointsUntilFactoryIsStarted();
+            // Configure the MatsFactory for testing (remember, we're running two instances in same JVM)
+            FactoryConfig factoryConfig = _matsFactory.getFactoryConfig();
+            // .. Concurrency of only 2
             factoryConfig.setConcurrency(SetupTestMatsEndpoints.BASE_CONCURRENCY);
+            // .. Mats Managed DLQ Divert, only a few deliveries
+            ((JmsMatsFactory) _matsFactory).setMatsManagedDlqDivert(3);
             // .. Use port number of current server as postfix for name of MatsFactory, and of nodename
             Integer portNumber = (Integer) sc.getAttribute(CONTEXT_ATTRIBUTE_PORTNUMBER);
             factoryConfig.setName(getClass().getSimpleName() + "_" + portNumber);
@@ -348,9 +349,18 @@ public class MatsBrokerMonitor_TestJettyServer {
             matsFactory.getDefaultInitiator().initiateUnchecked(
                     (msg) -> {
                         for (int i = 0; i < countF; i++) {
+
+                            KeepTrace keepTrace = KeepTrace.FULL;
+                            if (i % 3 == 0) {
+                                keepTrace = KeepTrace.COMPACT;
+                            }
+                            else if (i % 3 == 1) {
+                                keepTrace = KeepTrace.MINIMAL;
+                            }
+
                             msg.traceId(MatsTestHelp.traceId() + "_#&'\"<" + i + ">")
                                     // ORDINARY messages
-                                    .keepTrace(KeepTrace.COMPACT)
+                                    .keepTrace(keepTrace)
                                     .from("/sendRequestInitiated")
                                     .to(SERVICE_1 + SetupTestMatsEndpoints.SERVICE_MAIN)
                                     .replyTo(SERVICE_1 + SetupTestMatsEndpoints.TERMINATOR, sto)
@@ -360,6 +370,18 @@ public class MatsBrokerMonitor_TestJettyServer {
             double msTaken_sendMessages = (System.nanoTime() - nanosStart_sendMessages) / 1_000_000d;
             out.println(".. [" + count + "] requests sent, took [" + msTaken_sendMessages + "] ms.");
             out.println();
+
+            out.println("Sending a message that will throw on 'midMethod' Stage2!\n");
+            matsFactory.getDefaultInitiator().initiateUnchecked(
+                    (msg) -> {
+                        msg.traceId(MatsTestHelp.traceId() + "_shallThrowOnMidMethodStage2")
+                                .keepTrace(KeepTrace.FULL)
+                                .from("/sendRequestInitiated")
+                                .to(SERVICE_1 + SetupTestMatsEndpoints.SERVICE_MAIN)
+                                .replyTo(SERVICE_1 + SetupTestMatsEndpoints.TERMINATOR, sto)
+                                .setTraceProperty(SetupTestMatsEndpoints.THROW, true)
+                                .request(dto, new StateTO(1, 2));
+                    });
 
             // :: Send a message to a non-existent endpoint, to have an endpoint with a non-consumed message
             matsFactory.getDefaultInitiator().initiateUnchecked(
@@ -490,7 +512,8 @@ public class MatsBrokerMonitor_TestJettyServer {
             String body = req.getReader().lines().collect(Collectors.joining("\n"));
             res.setContentType("application/json; charset=utf-8");
             PrintWriter out = res.getWriter();
-            brokerMonitorHtmlGui.json(out, req.getParameterMap(), body, ACCESS_CONTROL_ALLOW_ALL);
+            brokerMonitorHtmlGui.json(out, req.getParameterMap(), body, MatsBrokerMonitorHtmlGui
+                    .getAccessControlAllowAll(System.getProperty("user.name", "-unknown-")));
         }
 
         @Override
@@ -567,7 +590,8 @@ public class MatsBrokerMonitor_TestJettyServer {
             }
             out.println("<h1>MatsBrokerMonitor HTML embedded GUI</h1>");
             Map<String, String[]> parameterMap = req.getParameterMap();
-            brokerMonitorHtmlGui.html(out, parameterMap, ACCESS_CONTROL_ALLOW_ALL);
+            brokerMonitorHtmlGui.html(out, parameterMap, MatsBrokerMonitorHtmlGui
+                    .getAccessControlAllowAll(System.getProperty("user.name", "-unknown-")));
             if (includeBootstrap3) {
                 out.write("</div>\n");
             }

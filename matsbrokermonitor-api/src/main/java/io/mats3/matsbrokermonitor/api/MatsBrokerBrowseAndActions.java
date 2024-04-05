@@ -8,6 +8,16 @@ import java.util.Optional;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 
 /**
+ * API for browsing queues and performing actions on messages of a Mats Broker. This is the API that the Mats Broker
+ * Monitor uses to browse and perform actions on the broker.
+ * <p/>
+ * Note: This is the "read queues and actions on messages" API, which complement the "monitor the broker" API which is
+ * {@link MatsBrokerMonitor}. The reason for this separation of the API is that the pieces defined in this piece can be
+ * done with ordinary JMS operations, while the operations in the monitor API are not part of a standard JMS API and
+ * must be implemented specifically for each broker.
+ *
+ * @see MatsBrokerMonitor
+ *
  * @author Endre Stølsvik 2022-01-15 00:08 - http://stolsvik.com/, endre@stolsvik.com
  */
 public interface MatsBrokerBrowseAndActions extends Closeable {
@@ -234,6 +244,83 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
         boolean isPersistent();
 
         boolean isInteractive();
+
+        // DLQ
+
+        /**
+         * For messages residing on a DLQ: Returns the exception stacktrace that caused the DLQ if available. Depending
+         * on how the message was DLQed, this might not be available: E.g. for <i>Mats Managed Dlq Divert</i>, if the
+         * message was DLQed on the receive side, the exception stacktrace is not available, while if the message was
+         * DLQed while still in the processing side, the exception stacktrace is available. If the message was DLQed by
+         * the message broker, the exception stacktrace is not available.
+         *
+         * @return the exception stacktrace that caused the DLQ if available. Depending on how the message was DLQed,
+         *         this might not be available.
+         */
+        Optional<String> getDlqExceptionStacktrace();
+
+        /**
+         * For messages residing on a DLQ: Returns whether the message was DLQed "on purpose", i.e. refused by the
+         * consumer by throwing <code>MatsRefuseMessageException</code> (<code>true</code>), or if it was DLQed due to
+         * an excessive number of reissues where the processing stage failed (raised some RuntimeException)
+         * (<code>false</code>). If the message was DLQed by the message broker, or the DLQing happened on the reception
+         * side, this will be <code>empty</code>.
+         *
+         * @return whether the message was DLQed "on purpose", i.e. refused by the consumer by throwing
+         *         <code>MatsRefuseMessageException</code> (<code>true</code>), or <code>empty</code> if not DLQed (by
+         *         Mats3).
+         */
+        Optional<Boolean> isDlqMessageRefused();
+
+        /**
+         * For messages residing on a DLQ: For <i>Mats Managed Dlq Divert</i>, this is the number of times the message
+         * was attempted delivered to the stage, but failed (raised some Exception). If the message was DLQed by the
+         * message broker, this will be <code>empty</code>.
+         *
+         * @return the number of times the message was attempted delivered to the stage, but failed (raised some
+         *         Exception), or <code>empty</code> if not DLQed (by Mats3).
+         */
+        Optional<Integer> getDlqDeliveryCount();
+
+        /**
+         * For messages residing on a DLQ: For <i>Mats Managed Dlq Divert</i>, this is the number of times this message
+         * has been DLQed (a message can be DLQed, then manually reissued - and then it DLQs again). If the message was
+         * DLQed by the message broker, this will be <code>empty</code> (If this message was previously DLQed by Mats,
+         * and then subsequently DLQed by the broker, this count will not reflect the new DLQ - the count will just
+         * stick around from the previous DLQ. This should never happen, though).
+         *
+         * @return the number of times this message has been DLQed, or <code>empty</code> if not DLQed (by Mats3).
+         */
+        Optional<Integer> getDlqCount();
+
+        /**
+         * For messages residing on a DLQ: For <i>Mats Managed Dlq Divert</i>, this is the name of the application,
+         * version and hostname, separated by ";" and "@", that DLQed this message. If the message was DLQed by the
+         * message broker, this will be <code>empty</code>
+         *
+         * @return the name of the application, version and host, separated by ";" and "@", that DLQed this message or
+         *         <code>empty</code> if not DLQed (by Mats3).
+         */
+        Optional<String> getDlqAppVersionAndHost();
+
+        /**
+         * For messages residing on a DLQ: For <i>Mats Managed Dlq Divert</i>, this is the "Origin" ("debug info") of
+         * the Stage that DLQed this message - i.e. <i>where</i> in the Application source code the stage was defined.
+         * If the message was DLQed by the message broker, this will be <code>empty</code>.
+         * <p/>
+         * Note that the StageId that processed the message can be found by {@link #getToStageId()}.
+         *
+         * @return the "stage origin" of the Mats Stage that processed this message and then DLQed it, if available.
+         */
+        Optional<String> getDlqStageOrigin();
+
+        /**
+         * For messages residing on a DLQ: The username of the user that reissued this message from the DLQ via
+         * MatsBrokerMonitor (assuming that the message has already been tried reissued!).
+         *
+         * @return the username of the user that reissued this message from the DLQ via MatsBrokerMonitor, if available.
+         */
+        Optional<String> getDlqLastReissuedUsername();
 
         /**
          * @return the timestamp (millis-from-epoch) when the message will expire, or <code>0</code> if never.

@@ -2,6 +2,10 @@ import java.nio.charset.Charset
 
 rootProject.name = 'matsbrokermonitor'
 
+// To work against source of Mats3: Include the Mats3 project, sibling to this project.
+// NOTE! This should never be committed!! NOTE!
+includeBuild '../mats3'
+
 include 'matsbrokermonitor-api', 'matsbrokermonitor-activemq', 'matsbrokermonitor-jms',
         'matsbrokermonitor-htmlgui', 'matsbrokermonitor-app',
         'matsbrokermonitor-broadcastandcontrol', 'matsbrokermonitor-broadcastreceiver'

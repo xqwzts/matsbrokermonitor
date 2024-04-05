@@ -721,8 +721,12 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
             setTimeout(() => {
                 // Make the entire message view "fade out to nothingness", either red or green.
                 document.getElementById('matsbm_part_flow_and_message_props').classList.add('matsbm_part_hidden_' + action);
+
                 if (document.getElementById('matsbm_part_state_and_message')) {
                     document.getElementById('matsbm_part_state_and_message').classList.add('matsbm_part_hidden_' + action);
+                }
+                if (document.getElementById('matsbm_part_dlq_information')) {
+                    document.getElementById('matsbm_part_dlq_information').classList.add('matsbm_part_hidden_' + action);
                 }
                 if (document.getElementById('matsbm_part_stack')) {
                     document.getElementById('matsbm_part_stack').classList.add('matsbm_part_hidden_' + action);

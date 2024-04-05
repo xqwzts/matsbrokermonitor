@@ -607,8 +607,8 @@
 /* ===================== */
 
 /* PARTS */
-#matsbm_part_flow_and_message_props, #matsbm_part_state_and_message, #matsbm_part_stack,
-#matsbm_part_matstrace, #matsbm_part_msgrepr_tostring {
+#matsbm_part_flow_and_message_props, #matsbm_part_dlq_information, #matsbm_part_state_and_message,
+#matsbm_part_stack, #matsbm_part_matstrace, #matsbm_part_msgrepr_tostring {
     padding: 1em;
     margin-bottom: 1.5em;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
@@ -830,7 +830,8 @@
 .matsbm_table_matstrace_dlqrow {
     background-color: #f44336;
     color: white;
-    line-height: 3em;
+    line-height: 1.5em;
+    height: 5em !important;
 }
 
 /* CALL MODAL */
@@ -909,6 +910,7 @@
     background: white;
     overflow: auto;
     max-height: 350px;
+    padding: 0.5em;
     white-space: pre;
     font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;;
     font-size: 0.9em;

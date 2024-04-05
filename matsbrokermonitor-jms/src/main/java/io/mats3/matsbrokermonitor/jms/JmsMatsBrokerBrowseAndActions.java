@@ -377,9 +377,8 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
     }
 
     private void reissueMessage(Message message, String randomCookie, String username, Session session,
-            MessageProducer genericProducer,
-            Queue dlq, long nanosTaken_Receive, Map<String, MatsBrokerMessageMetadata> reissuedMessagesMap)
-            throws JMSException {
+            MessageProducer genericProducer, Queue dlq, long nanosTaken_Receive,
+            Map<String, MatsBrokerMessageMetadata> reissuedMessagesMap) throws JMSException {
         try {
             String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
             String matsMessageId = message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID);
@@ -406,6 +405,11 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             message.clearProperties();
             // .. and then put them back on (now editable!)
             for (Map.Entry<String, Object> entry : existingProperties.entrySet()) {
+                // .. but remove the DLQ-specific properties *except* the DLQ_COUNT, which we want to keep so as
+                // to be able to see how many times it has been DLQed.
+                if (entry.getKey().startsWith("mats_dlq_") && !(entry.getKey().equals(JMS_MSG_PROP_DLQ_DLQ_COUNT))) {
+                    continue;
+                }
                 message.setObjectProperty(entry.getKey(), entry.getValue());
             }
 
@@ -439,6 +443,8 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             }
             else {
                 // -> No, we don't know which queue it originally came from!
+                // Send it to a synthetic Mats "DLQ" endpoint for failed reissue - where it just has to be deleted
+                // after inspection.
                 String matsFailedReissueQueueName = _matsDestinationPrefix
                         + MatsBrokerBrowseAndActions.MATS_QUEUE_ID_FOR_FAILED_REISSUE;
                 Queue matsFailedReissueQueue = session.createQueue(matsFailedReissueQueueName);
@@ -728,7 +734,6 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
 
     private static class JmsMatsBrokerMessageRepresentationImpl implements MatsBrokerMessageRepresentation {
         private final Message _jmsMessage;
-
         private final String _messageSystemId;
         private final String _matsMessageId;
         private final long _timestamp;
@@ -741,6 +746,17 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         private final boolean _persistent;
         private final boolean _interactive;
         private final long _expirationTimestamp;
+
+        // :: 'Mats Managed DLQ Divert' props
+        private final String _dlq_ExceptionStacktrace; // nullable
+        private final Boolean _dlq_MessageRefused; // nullable
+        private final Integer _dlq_DeliveryCount; // Integer
+        private final Integer _dlq_DlqCount; // nullable
+        private final String _dlq_StageOrigin; // nullable
+        private final String _dlq_AppVersionAndNode; // nullable
+        private final String _dlq_LastReissuedUsername; // nullable
+
+        // :: MatsTrace
         private final byte[] _matsTraceBytes; // nullable
         private final String _matsTraceMeta; // nullable
 
@@ -771,6 +787,29 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             _persistent = message.getJMSDeliveryMode() == DeliveryMode.PERSISTENT;
             _interactive = message.getJMSPriority() > 4; // Mats-JMS uses 9 for "interactive"
             _expirationTimestamp = message.getJMSExpiration();
+
+            // :: If DLQed message
+            _dlq_ExceptionStacktrace = message.propertyExists(JMS_MSG_PROP_DLQ_EXCEPTION)
+                    ? message.getStringProperty(JMS_MSG_PROP_DLQ_EXCEPTION)
+                    : null;
+            _dlq_MessageRefused = message.propertyExists(JMS_MSG_PROP_DLQ_REFUSED)
+                    ? message.getBooleanProperty(JMS_MSG_PROP_DLQ_REFUSED)
+                    : null;
+            _dlq_DeliveryCount = message.propertyExists(JMS_MSG_PROP_DLQ_DELIVERY_COUNT)
+                    ? message.getIntProperty(JMS_MSG_PROP_DLQ_DELIVERY_COUNT)
+                    : null;
+            _dlq_DlqCount = message.propertyExists(JMS_MSG_PROP_DLQ_DLQ_COUNT)
+                    ? message.getIntProperty(JMS_MSG_PROP_DLQ_DLQ_COUNT)
+                    : null;
+            _dlq_StageOrigin = message.propertyExists(JMS_MSG_PROP_DLQ_STAGE_ORIGIN)
+                    ? message.getStringProperty(JMS_MSG_PROP_DLQ_STAGE_ORIGIN)
+                    : null;
+            _dlq_AppVersionAndNode = message.propertyExists(JMS_MSG_PROP_DLQ_APP_VERSION_AND_HOST)
+                    ? message.getStringProperty(JMS_MSG_PROP_DLQ_APP_VERSION_AND_HOST)
+                    : null;
+            _dlq_LastReissuedUsername = message.propertyExists(JMS_MSG_PROP_REISSUE_USERNAME)
+                    ? message.getStringProperty(JMS_MSG_PROP_REISSUE_USERNAME)
+                    : null;
 
             // Handle MatsTrace
             byte[] matsTraceBytes = null;
@@ -839,6 +878,41 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         @Override
         public boolean isInteractive() {
             return _interactive;
+        }
+
+        @Override
+        public Optional<String> getDlqExceptionStacktrace() {
+            return Optional.ofNullable(_dlq_ExceptionStacktrace);
+        }
+
+        @Override
+        public Optional<Boolean> isDlqMessageRefused() {
+            return Optional.ofNullable(_dlq_MessageRefused);
+        }
+
+        @Override
+        public Optional<Integer> getDlqDeliveryCount() {
+            return Optional.ofNullable(_dlq_DeliveryCount);
+        }
+
+        @Override
+        public Optional<Integer> getDlqCount() {
+            return Optional.ofNullable(_dlq_DlqCount);
+        }
+
+        @Override
+        public Optional<String> getDlqAppVersionAndHost() {
+            return Optional.ofNullable(_dlq_AppVersionAndNode);
+        }
+
+        @Override
+        public Optional<String> getDlqStageOrigin() {
+            return Optional.ofNullable(_dlq_StageOrigin);
+        }
+
+        @Override
+        public Optional<String> getDlqLastReissuedUsername() {
+            return Optional.ofNullable(_dlq_LastReissuedUsername);
         }
 
         @Override
