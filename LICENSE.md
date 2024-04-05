@@ -1,9 +1,10 @@
-Copyright (c) 2022 Endre Stølsvik, licensed under Polyform Perimeter 1.0.0 with examples
+Copyright (c) 2021-2024 Endre Stølsvik, licensed under Polyform Perimeter 1.0.0 with examples
 
 # Examples of what is NOT allowed to do with the software under this license
 
-As any type of service provider, for example cloud service providers, offering paid or free
-services to customers or clients, you or your company may not:
+(Noncompete) As any type of service provider, for example cloud service providers, offering
+paid or free services to customers or clients, you or your company may not compete with
+the software by for example:
 
 * Use the software to offer any kind of message broker monitoring
 * Use the software to offer any kind of Mats introspection, tracing,
