@@ -14,19 +14,19 @@ allprojects {
 
 // Versions for all libraries used throughout the subprojects
 ext {
-    matsVersion = '0.19.12-2023-11-12'
+    matsVersion = '0.19.15-2024-04-05'
 
-    slf4jVersion = '2.0.9' // Only CompileOnly
+    slf4jVersion = '2.0.12' // Only CompileOnly
     jmsApiDependency = 'jakarta.jms:jakarta.jms-api:2.0.3' // Following Mats3's lead. Only CompileOnly.
-    jacksonVersion = '2.15.3'
+    jacksonVersion = '2.17.0'
 
     // === For testing
     activeMqVersion = '5.18.3'
-    artemisMqVersion = '2.31.2'
-    springVersion = '5.3.30' // Spring 6 depends on Java 17 and Jakarta EE 9+
+    artemisMqVersion = '2.33.0'
+    springVersion = '5.3.33' // Spring 6 depends on Java 17 and Jakarta EE 9+
     junitVersion = '4.13.2'
-    logbackVersion = '1.4.11'
-    jettyVersion = '9.4.53.v20231009'
+    logbackVersion = '1.5.3'
+    jettyVersion = '9.4.54.v20240208'
 }
 
 subprojects {
