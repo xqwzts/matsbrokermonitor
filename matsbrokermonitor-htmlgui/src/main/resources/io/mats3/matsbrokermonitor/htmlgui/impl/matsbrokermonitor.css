@@ -1,5 +1,10 @@
 /* Using "native font stacks" of Bootstrap 5 */
 
+:root {
+    --matsbm-actionbuttons-height: 11.7em;
+    --matsbm-actionbuttons-sticky-adjust: 11.65em;
+}
+
 .matsbm_report {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
     font-weight: 400;
@@ -66,6 +71,7 @@
     position: sticky;
     border-radius: 5px;
     top: 0;
+    height: var(--matsbm-actionbuttons-height);
     margin: 0.5em 0 0 0;
     padding: 0 0.3em;
     background: #d0d0d0;
@@ -496,13 +502,13 @@
 
 #matsbm_table_browse_queue thead th {
     position: sticky;
-    top: 11em;
+    top: var(--matsbm-actionbuttons-sticky-adjust);
     background-color: #009879;
     color: #ffffff;
 }
 
 #matsbm_table_browse_queue th, #matsbm_table_browse_queue td {
-    padding: 0.5em 0.5em 0.5em 0.5em;
+    padding: 0.5em;
 }
 
 #matsbm_table_browse_queue tbody tr {
@@ -663,7 +669,7 @@
 
 .matsbm_table_message_props thead th {
     position: sticky;
-    top: 9.7em;
+    top: var(--matsbm-actionbuttons-sticky-adjust);
     background-color: #009879;
     color: #ffffff;
 }
@@ -697,13 +703,13 @@
 
 .matsbm_table_replytostack thead th {
     position: sticky;
-    top: 9.7em;
+    top: var(--matsbm-actionbuttons-sticky-adjust);
     background-color: #009879;
     color: #ffffff;
 }
 
 .matsbm_table_replytostack th, .matsbm_table_replytostack td {
-    padding: 0.5em 0.5em 0.5em 0.5em;
+    padding: 0.5em;
 }
 
 .matsbm_table_replytostack tbody tr {
@@ -733,13 +739,13 @@
 
 .matsbm_table_matstrace thead th {
     position: sticky;
-    top: 9.7em;
+    top: var(--matsbm-actionbuttons-sticky-adjust);
     background-color: #009879;
     color: #ffffff;
 }
 
 .matsbm_table_matstrace th, .matsbm_table_matstrace td {
-    padding: 0.1em 0.5em 0.1em 0.5em;
+    padding: 0.5em;
 }
 
 .matsbm_table_matstrace tr {

@@ -79,8 +79,7 @@ class BrowseQueue {
         // ?: Is this the Global DLQ?
         if (matsBrokerDestination.isDefaultGlobalDlq()) {
             // -> Yes, global DLQ
-            out.html("Browsing the <h1>Global DLQ</h1>, fully qualified name: '")
-                    .DATA(matsBrokerDestination.getFqDestinationName()).html("'");
+            out.html("<h1>Browsing the <i>Global DLQ</i></h1>");
         }
         else {
             // -> No, not the Global DLQ
@@ -98,15 +97,14 @@ class BrowseQueue {
                 out.html(" named ").DATA(matsBrokerDestination.getDestinationName()).html("</h1>");
             }
         }
+        out.html("<br/>Fully Qualified Queue Name: <code><b>").DATA(matsBrokerDestination.getFqDestinationName())
+                .html("</b></code><br>\n");
         out.html("</div>\n"); // /matsbm_heading
-
-        out.html("Broker Queue '").DATA(queueId).html("'<br>\n");
 
         out.html("At ").DATA(Statics.formatTimestampSpan(matsBrokerDestination.getLastUpdateLocalMillis()))
                 .html(" it had <b>").DATA(numberOfQueuedMessages).html(" messages</b>");
         if (matsBrokerDestination.getNumberOfInflightMessages().isPresent()) {
-            out.html(" of which ")
-                    .DATA(matsBrokerDestination.getNumberOfInflightMessages().getAsLong())
+            out.html(" of which ").DATA(matsBrokerDestination.getNumberOfInflightMessages().getAsLong())
                     .html(" were in-flight");
         }
         out.html(".");

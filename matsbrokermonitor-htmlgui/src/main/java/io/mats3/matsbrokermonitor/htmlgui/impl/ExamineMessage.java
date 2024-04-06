@@ -105,8 +105,7 @@ public class ExamineMessage {
         // ?: Is this the Global DLQ?
         if (matsBrokerDestination.isDefaultGlobalDlq()) {
             // -> Yes, global DLQ
-            out.html("<h1>Examine Message from Global DLQ</h1>, fully qualified name: '")
-                    .DATA(matsBrokerDestination.getFqDestinationName()).html("'");
+            out.html("<h1>Examine Message from <i>Global DLQ</i></h1>\n");
         }
         else {
             // -> No, not the Global DLQ
@@ -124,7 +123,8 @@ public class ExamineMessage {
                 out.html(" named ").DATA(matsBrokerDestination.getDestinationName()).html("</h1>");
             }
         }
-
+        out.html("<br/>Fully Qualified Queue Name: <code><b>").DATA(matsBrokerDestination.getFqDestinationName())
+                .html("</b></code><br>\n");
         out.html("</div>\n"); // /matsbm_heading
 
         MatsBrokerMessageRepresentation msgRepr = matsBrokerMessageRepresentationO.get();
