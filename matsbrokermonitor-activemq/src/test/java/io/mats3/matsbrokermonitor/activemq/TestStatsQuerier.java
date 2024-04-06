@@ -27,6 +27,8 @@ import io.mats3.matsbrokermonitor.activemq.ActiveMqBrokerStatsQuerier.Destinatio
 import io.mats3.test.broker.MatsTestBroker;
 
 /**
+ * Tests basics of StatsQuerier.
+ * 
  * @author Endre Stølsvik 2022-03-27 11:38 - http://stolsvik.com/, endre@stolsvik.com
  */
 public class TestStatsQuerier {
@@ -61,12 +63,12 @@ public class TestStatsQuerier {
         // Should block until messages delivered to queues
         session.commit();
 
-        // :: ACT
+        // :: ACT 0
 
         // Create the StatsQuerier
         ActiveMqBrokerStatsQuerierImpl statsQuerier = ActiveMqBrokerStatsQuerierImpl.create(connectionFactory);
 
-        CountDownLatch[] latchX = new CountDownLatch[1];
+        CountDownLatch[] latchX = new CountDownLatch[] { new CountDownLatch(1) };
         String[] correlationIdX = new String[1];
         boolean[] fullUpdateX = new boolean[1];
         boolean[] sameNode = new boolean[1];
@@ -74,31 +76,33 @@ public class TestStatsQuerier {
             log.info("### EVENT, correlationId: [" + statsEvent.getCorrelationId() + "].");
             correlationIdX[0] = statsEvent.getCorrelationId().orElse(null);
             fullUpdateX[0] = statsEvent.isFullUpdate();
-            latchX[0].countDown();
             sameNode[0] = statsEvent.isStatsEventOriginatedOnThisNode();
+
+            // Ping the latch
+            latchX[0].countDown();
         };
         statsQuerier.registerListener(eventListener);
         statsQuerier.start();
 
-        // :: ASSERT
+        // :: ASSERT 0
 
         // We should get an update ASAP, and this should be a full, since none has ever been sent.
-        latchX[0] = new CountDownLatch(1);
         boolean await = latchX[0].await(20, TimeUnit.SECONDS);
         Assert.assertTrue("Didn't get update from StatsQuerier.", await);
+        log.info("###! StatsQuerier evidently got its first update.");
 
         Assert.assertNull(correlationIdX[0]);
         Assert.assertTrue(fullUpdateX[0]);
         Assert.assertTrue(sameNode[0]);
 
-        // :: ACT
+        // :: ACT 1
 
         // Force update, non-full
         latchX[0] = new CountDownLatch(1);
         String correlationId = UUID.randomUUID().toString();
         statsQuerier.forceUpdate(correlationId, false);
 
-        // :: ASSERT
+        // :: ASSERT 1
 
         await = latchX[0].await(20, TimeUnit.SECONDS);
         Assert.assertTrue("Didn't get update from StatsQuerier.", await);
@@ -107,14 +111,14 @@ public class TestStatsQuerier {
         Assert.assertFalse(fullUpdateX[0]);
         Assert.assertTrue(sameNode[0]);
 
-        // :: ACT
+        // :: ACT 2
 
         // Force update, full
         latchX[0] = new CountDownLatch(1);
         correlationId = UUID.randomUUID().toString();
         statsQuerier.forceUpdate(correlationId, true);
 
-        // :: ASSERT
+        // :: ASSERT 2
 
         await = latchX[0].await(20, TimeUnit.SECONDS);
         Assert.assertTrue("Didn't get update from StatsQuerier.", await);
@@ -128,6 +132,7 @@ public class TestStatsQuerier {
 
         // :: ASSERT contents.
 
+        // Assert that the StatsQuerier has the broker-stats and destination-stats
         Optional<BrokerStatsDto> brokerStatsO = statsQuerier.getCurrentBrokerStatsDto();
         Assert.assertTrue("BrokerStats not present", brokerStatsO.isPresent());
         ConcurrentNavigableMap<String, DestinationStatsDto> destinationStats = statsQuerier
