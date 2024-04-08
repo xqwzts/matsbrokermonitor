@@ -335,64 +335,19 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 // Just to point out that there is no need to save these messages if they cannot be handled.
                 producer.setDeliveryMode(DeliveryMode.NON_PERSISTENT);
 
-                /*
-                 * So, here I'll throw in a bit of premature optimization: If the MatsDestinationPrefix is a proper
-                 * "path-based" prefix with a dot as last character, like it is per default ("mats."), we'll use a
-                 * specific query that only requests these. However, we'll then also need to ask specifically for the
-                 * DLQs, which again are pre-prefixed with "DLQ.", and for the global DLQ just in case the user hasn't
-                 * configured his message broker sanely with /individual DLQ policies/.
-                 *
-                 * Thus: If the MatsDestinationPrefix isn't set, or it is a crap prefix that cannot be used in the
-                 * wildcard syntax of ActiveMQ (e.g. "endre:", which doesn't end in a dot), we ask one query to get
-                 * every single queue and topic (well, two, since one for queues and one for topics, go figure) - but
-                 * then get tons of replies which we don't care about (at least all advisory topics for every single
-                 * queue and topic, and these statistics queues and topics - as well as any other queues that the user
-                 * also run on the ActiveMQ instance). If it is a good prefix that can be used with the wildcard syntax,
-                 * we have to ask three queries (well, four), but only get exactly the ones we care about.
-                 *
-                 * (The reason for this badness is my current main user of Mats which for legacy reasons employ such a
-                 * bad prefix.)
-                 */
-
                 Queue requestQueuesQueue_main;
                 Topic requestTopicsTopic_main;
-                Queue requestQueuesQueue_individualDlq;
-                Queue requestQueuesQueue_globalDlq;
 
-                // ?: Do we have a proper "path-style" prefix, i.e. ending with a "."?
-                if ((_matsDestinationPrefix != null) && _matsDestinationPrefix.endsWith(".")) {
-                    // -> Yes, this is a proper "path-style" prefix, so we can reduce the query from "all" to "mats
-                    // only".
-                    String queryRequestDestination_specific = QUERY_REQUEST_DESTINATION_PREFIX + "."
-                            + _matsDestinationPrefix + ">";
-                    String queryRequestDestination_specific_DLQ = QUERY_REQUEST_DESTINATION_PREFIX + ".DLQ."
-                            + _matsDestinationPrefix + ">";
-                    log.info("The matsDestinationPrefix was set to [" + _matsDestinationPrefix + "], and it is a proper"
-                            + " \"path-style\" prefix (i.e. ending with a dot), thus restricting the query destination"
-                            + " by employing [" + queryRequestDestination_specific + "], ["
-                            + queryRequestDestination_specific_DLQ + "]"
-                            + " and the Global DLQ [" + Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME + "]");
-                    requestQueuesQueue_main = session.createQueue(queryRequestDestination_specific);
-                    requestTopicsTopic_main = session.createTopic(queryRequestDestination_specific);
-                    requestQueuesQueue_individualDlq = session.createQueue(queryRequestDestination_specific_DLQ);
-                    requestQueuesQueue_globalDlq = session.createQueue(QUERY_REQUEST_DESTINATION_PREFIX + "."
-                            + Statics.ACTIVE_MQ_GLOBAL_DLQ_NAME);
-                }
-                else {
-                    // -> No, this is a bad prefix that cannot utilize the wildcard syntax, so have to ask for every
-                    // single queue and topic.
-                    String queryRequestDestination_all = QUERY_REQUEST_DESTINATION_PREFIX + ".>";
+                // -> No, this is a bad prefix that cannot utilize the wildcard syntax, so have to ask for every
+                // single queue and topic.
+                String queryRequestDestination_all = QUERY_REQUEST_DESTINATION_PREFIX + ".>";
 
-                    log.info("The matsDestinationPrefix was set to [" + _matsDestinationPrefix + "], but this isn't"
-                            + " a proper \"path-style\" prefix (it is not ending with a dot), thus cannot restrict"
-                            + " the query to mats-specific destinations, but must query for all destinations by"
-                            + " employing [" + queryRequestDestination_all + "]");
-                    requestQueuesQueue_main = session.createQueue(queryRequestDestination_all);
-                    requestTopicsTopic_main = session.createTopic(queryRequestDestination_all);
-                    // Since the two above gets all queues and topics, the DLQs will also be gotten.
-                    requestQueuesQueue_individualDlq = null;
-                    requestQueuesQueue_globalDlq = null;
-                }
+                log.info("The matsDestinationPrefix was set to [" + _matsDestinationPrefix + "], but this isn't"
+                        + " a proper \"path-style\" prefix (it is not ending with a dot), thus cannot restrict"
+                        + " the query to mats-specific destinations, but must query for all destinations by"
+                        + " employing [" + queryRequestDestination_all + "]");
+                requestQueuesQueue_main = session.createQueue(queryRequestDestination_all);
+                requestTopicsTopic_main = session.createTopic(queryRequestDestination_all);
 
                 // :: Create queue for the "zero-termination", sent in a separate request query
                 // NOTE: We just ask for a queue which shall not be there, but request the "zero termination".
@@ -437,28 +392,6 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     _nanosAtStart_RequestQuery = System.nanoTime();
                     producer.send(requestQueuesQueue_main, requestQueuesMsg);
                     producer.send(requestTopicsTopic_main, requestTopicsMsg);
-
-                    // ?: Are we using a proper "path-style" mats destination prefix?
-                    if (requestQueuesQueue_individualDlq != null) {
-                        // -> Yes, we're using a "path-style" mats destination prefix.
-                        // The main queue (and topic) query is then a specific query for only those relevant queues.
-                        // Therefore, we'll also need to ask for the individual DLQs, and for the ActiveMQ Global DLQ.
-                        // (Asking for the Global DLQ is just to point things out for users that haven't configured
-                        // individual DLQ policy. We won't try to fix this problem fully, i.e. won't "distribute"
-                        // these DLQs to the individual mats stages they really belong to, as it is pretty much
-                        // infeasible if there are more than very few, and that the proper fix is very simple: Use a
-                        // frikkin' individual DLQ policy.)
-                        Message requestIndividualDlqMsg = session.createMessage();
-                        set_includeFirstMessageTimestamp(requestIndividualDlqMsg);
-                        requestIndividualDlqMsg.setJMSReplyTo(replyStatisticsTopic);
-
-                        Message requestGlobalDlqMsg = session.createMessage();
-                        set_includeFirstMessageTimestamp(requestGlobalDlqMsg);
-                        requestGlobalDlqMsg.setJMSReplyTo(replyStatisticsTopic);
-
-                        producer.send(requestQueuesQueue_individualDlq, requestIndividualDlqMsg);
-                        producer.send(requestQueuesQueue_globalDlq, requestGlobalDlqMsg);
-                    }
 
                     // :: Send the null-termination query (query w/o any destination replies, only the null-terminator)
 
@@ -709,7 +642,6 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                     requestSameNode = _nodeId.equals(originatingNodeId);
                 }
             }
-
 
             // :: Log the update with metrics.
 
