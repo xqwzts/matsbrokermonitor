@@ -29,7 +29,7 @@ In addition, for the DLQs, you'd want two more features:
    and caught and thus DLQ'ed, but which was then manually fixed.
 
 _(Just since it is important enough to be mentioned right away: You should always configure your message broker to use
-an_ Individual Dead Letter Queue _strategy. This is strangely not the default for any of the common brokers, instead
+an _Individual Dead Letter Queue_ strategy. This is strangely not the default for any of the common brokers, instead
 using a single DLQ which all unprocessable messages for any queue end up on. But all brokers have configurable ways to
 get a separate DLQ for every Queue, using the common DLQ name pattern `"DLQ.{originalQueueName}"`. You really want this
 if you employ Mats, at least for the Mats destinations!)_
@@ -48,3 +48,4 @@ The second set of requirements can be fulfilled by the JMS API itself, using the
 inspect a queue, and JMS consume and produce to move a message from a DLQ back onto the incoming queue for the relevant
 Mats stage. This functionality thus works across any broker that implements the JMS API. And is defined in the
 `MatsBrokerBrowseAndActions`, and the JMS implementation is `JmsMatsBrokerBrowseAndActions`.
+

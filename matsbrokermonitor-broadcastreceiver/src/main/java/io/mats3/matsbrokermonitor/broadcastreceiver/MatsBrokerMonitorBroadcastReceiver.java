@@ -38,7 +38,7 @@ public class MatsBrokerMonitorBroadcastReceiver implements Closeable {
      * <p/>
      * Value is <code>"mats.MatsBrokerMonitorBroadcastUpdate"</code>.
      */
-    private static final String BROADCAST_UPDATE_EVENT_TOPIC_ENDPOINT_ID = "mats.MatsBrokerMonitorBroadcastUpdate";
+    private static final String BROADCAST_UPDATE_EVENT_TOPIC_ENDPOINT_ID = "mats.MatsBrokerMonitor.broadcastUpdate";
 
     /**
      * Copied from MatsInterceptable.MatsLoggingInterceptor.
@@ -54,7 +54,7 @@ public class MatsBrokerMonitorBroadcastReceiver implements Closeable {
      * <p/>
      * Value is <code>"mats.MatsBrokerMonitorControl"</code>.
      */
-    public static final String MATSBROKERMONITOR_CONTROL = "mats.MatsBrokerMonitorControl";
+    public static final String MATSBROKERMONITOR_CONTROL = "mats.MatsBrokerMonitor.control";
 
     private MatsEndpoint<Void, Void> _broadcastReceiver;
 

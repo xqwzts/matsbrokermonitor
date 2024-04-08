@@ -37,14 +37,14 @@ public class MatsBrokerMonitorBroadcastAndControl implements Closeable {
      * <p/>
      * Value is <code>"mats.MatsBrokerMonitorBroadcastUpdate"</code>.
      */
-    public static final String BROADCAST_UPDATE_EVENT_TOPIC_ENDPOINT_ID = "mats.MatsBrokerMonitorBroadcastUpdate";
+    public static final String BROADCAST_UPDATE_EVENT_TOPIC_ENDPOINT_ID = "mats.MatsBrokerMonitor.broadcastUpdate";
 
     /**
      * The EndpointId to which one may request operations, currently forceUpdate.
      * <p/>
      * Value is <code>"mats.MatsBrokerMonitorControl"</code>.
      */
-    public static final String MATSBROKERMONITOR_CONTROL = "mats.MatsBrokerMonitorControl";
+    public static final String MATSBROKERMONITOR_CONTROL = "mats.MatsBrokerMonitor.control";
 
     /**
      * Copied from MatsInterceptable.MatsLoggingInterceptor

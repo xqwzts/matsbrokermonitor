@@ -12,6 +12,7 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import javax.jms.Connection;
@@ -91,7 +92,7 @@ public class MatsBrokerMonitor_TestJettyServer {
 
     private static final Logger log = LoggerFactory.getLogger(MatsBrokerMonitor_TestJettyServer.class);
 
-    public static final String MATS_DESTINATION_PREFIX = "mats.";
+    public static final String MATS_DESTINATION_PREFIX = "endre:";
 
     private static String SERVICE = "MatsTestBrokerMonitor";
     private static String SERVICE_1 = SERVICE + ".FirstSubService";
@@ -168,9 +169,9 @@ public class MatsBrokerMonitor_TestJettyServer {
             MatsBrokerMonitor matsBrokerMonitor1 = ActiveMqMatsBrokerMonitor
                     .createWithDestinationPrefix(connFactory, MATS_DESTINATION_PREFIX, 15_000);
             // Register a dummy listener
-            matsBrokerMonitor1.registerListener(destinationUpdateEvent -> {
-                log.info("Listener for MBM #1 at TestJettyServer: Got update! " + destinationUpdateEvent);
-                destinationUpdateEvent.getEventDestinations().forEach((fqName, matsBrokerDestination) -> log
+            matsBrokerMonitor1.registerListener(updateEvent -> {
+                log.info("Listener for MBM #1 at TestJettyServer: Got update! " + updateEvent);
+                updateEvent.getEventDestinations().forEach((fqName, matsBrokerDestination) -> log
                         .info(".. event destinations: [" + fqName + "] = [" + matsBrokerDestination + "]"));
             });
             MatsBrokerMonitorBroadcastAndControl.install(matsBrokerMonitor1, _matsFactory);
@@ -194,7 +195,7 @@ public class MatsBrokerMonitor_TestJettyServer {
                 @Override
                 public String getColumnHeadingHtml(String queueId) {
                     // return null;
-                    return "<th>Added table heading: " + queueId.substring(0, 4) + "</th>";
+                    return "<th>Added table heading: " + queueId.substring(0, 3) + "</th>";
                 }
 
                 @Override
@@ -411,17 +412,52 @@ public class MatsBrokerMonitor_TestJettyServer {
                                 .send(dto, initialTargetSto);
                     });
 
-            // :: Send a message to the ActiveMQ Global DLQ
+            // :: Send a message to the ActiveMQ and Artemis Global DLQs
             // Get JMS ConnectionFactory from ServletContext
             ConnectionFactory connFactory = (ConnectionFactory) req.getServletContext()
                     .getAttribute(ConnectionFactory.class.getName());
             try {
                 Connection connection = connFactory.createConnection();
                 Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
-                Queue dlq = session.createQueue("ActiveMQ.DLQ");
-                MessageProducer producer = session.createProducer(dlq);
-                Message message = session.createMessage();
-                producer.send(message);
+                MessageProducer producer = session.createProducer(null); // Generic producer
+
+                Consumer<String> sendToDLQ = dlqName -> {
+                    try {
+                        Queue dlq = session.createQueue(dlqName);
+                        Message message = session.createMessage();
+                        producer.send(dlq, message);
+                    }
+                    catch (JMSException e) {
+                        throw new RuntimeException("Couldn't send a message to DLQ.");
+                    }
+                };
+
+                // Std: queue://mats.MatsTestBrokerMonitor.FirstSubService.private.leafMethod
+                // DLQ: queue://DLQ.mats.MatsTestBrokerMonitor.FirstSubService.private.leafMethod
+                // Muted DLQ: queue://DLQ.mats.mats.MUTED.MatsTestBrokerMonitor.FirstSubService.private.leafMethod
+                // np_ia: queue://mats.mats.NPIA.MatsTestBrokerMonitor.FirstSubService.private.leafMethod
+                // DLQ np_ia: queue://DLQ.mats.mats.NPIA.MatsTestBrokerMonitor.FirstSubService.private.leafMethod
+                // Wiretap: queue://mats.mats.WIRETAP.MatsTestBrokerMonitor.FirstSubService.private.leafMethod
+
+                sendToDLQ.accept("ActiveMQ.DLQ");
+                sendToDLQ.accept("DLQ");
+                sendToDLQ.accept("TestQueue.RandomQueue");
+                sendToDLQ.accept("DLQ.TestQueue.RandomQueue");
+
+                // :: Types of queues
+                // Standard
+                sendToDLQ.accept(MATS_DESTINATION_PREFIX + "FakeMatsEndpoint.someMethod");
+                sendToDLQ.accept("DLQ." + MATS_DESTINATION_PREFIX + "FakeMatsEndpoint.someMethod");
+                sendToDLQ.accept("DLQ." + MATS_DESTINATION_PREFIX + "mats.MUTED.FakeMatsEndpoint.someMethod");
+
+                // Non-persistent Interactive
+                sendToDLQ.accept(MATS_DESTINATION_PREFIX + "mats.NPIA.FakeMatsEndpoint.someMethod");
+                sendToDLQ.accept("DLQ." + MATS_DESTINATION_PREFIX + "mats.NPIA.FakeMatsEndpoint.someMethod");
+                // Using same MUTED as normal.
+
+                // Wiretap
+                sendToDLQ.accept(MATS_DESTINATION_PREFIX + "mats.WIRETAP.FakeMatsEndpoint.someMethod");
+
                 connection.close();
             }
             catch (JMSException e) {
@@ -518,17 +554,12 @@ public class MatsBrokerMonitor_TestJettyServer {
 
         @Override
         protected void doGet(HttpServletRequest req, HttpServletResponse res) throws IOException {
-            // :: MatsBrokerMonitorHtmlGUI instance
-            MatsBrokerMonitorHtmlGui brokerMonitorHtmlGui = (MatsBrokerMonitorHtmlGui) req.getServletContext()
-                    .getAttribute("matsBrokerMonitorHtmlGui1");
-
             res.setContentType("text/html; charset=utf-8");
 
             PrintWriter out = res.getWriter();
 
-            // :: LocalHtmlInspectForMatsFactory instance
-            LocalHtmlInspectForMatsFactory localInspect = (LocalHtmlInspectForMatsFactory) req.getServletContext()
-                    .getAttribute(LocalHtmlInspectForMatsFactory.class.getName());
+            // NOTE! This stuff here is just to verify that MatsBrokerMonitor is totally self-sufficient wrt. its
+            // JavaScript and CSS, i.e. that it works with, and without, a toolkit like Bootstrap.
 
             boolean includeBootstrap3 = req.getParameter("includeBootstrap3") != null;
             boolean includeBootstrap4 = req.getParameter("includeBootstrap4") != null;
@@ -568,6 +599,22 @@ public class MatsBrokerMonitor_TestJettyServer {
                         + " crossorigin=\"anonymous\"></script>\n");
             }
             out.println("  </head>");
+
+            outputMatsBrokerMonitorAndLocalInspect(req, out, includeBootstrap3);
+
+            out.println("</html>");
+        }
+
+        private static void outputMatsBrokerMonitorAndLocalInspect(HttpServletRequest req, PrintWriter out,
+                boolean includeBootstrap3) throws IOException {
+            // :: MatsBrokerMonitorHtmlGUI instance
+            MatsBrokerMonitorHtmlGui brokerMonitorHtmlGui = (MatsBrokerMonitorHtmlGui) req.getServletContext()
+                    .getAttribute("matsBrokerMonitorHtmlGui1");
+
+            // :: LocalHtmlInspectForMatsFactory instance
+            LocalHtmlInspectForMatsFactory localInspect = (LocalHtmlInspectForMatsFactory) req.getServletContext()
+                    .getAttribute(LocalHtmlInspectForMatsFactory.class.getName());
+
             // NOTE: Setting "margin: 0" just to be able to compare against the Bootstrap-versions without too
             // much "accidental difference" due to the Bootstrap's setting of margin=0.
             out.println("  <body style=\"margin: 0;\">");
@@ -588,7 +635,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             if (includeBootstrap3) {
                 out.write("<div style=\"font-size: 114.29%\">\n");
             }
-            out.println("<h1>MatsBrokerMonitor HTML embedded GUI</h1>");
+            out.println("    <h1>MatsBrokerMonitor HTML embedded GUI</h1>");
             Map<String, String[]> parameterMap = req.getParameterMap();
             brokerMonitorHtmlGui.html(out, parameterMap, MatsBrokerMonitorHtmlGui
                     .getAccessControlAllowAll(System.getProperty("user.name", "-unknown-")));
@@ -597,11 +644,9 @@ public class MatsBrokerMonitor_TestJettyServer {
             }
 
             // Localinspect
-            out.write("<h1>LocalHtmlInspectForMatsFactory</h1>\n");
+            out.write("    <h1>LocalHtmlInspectForMatsFactory</h1>\n");
             localInspect.createFactoryReport(out, true, true, true);
-
             out.println("  </body>");
-            out.println("</html>");
         }
     }
 

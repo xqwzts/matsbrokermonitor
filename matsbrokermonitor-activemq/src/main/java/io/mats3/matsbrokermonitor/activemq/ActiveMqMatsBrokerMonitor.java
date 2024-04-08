@@ -437,16 +437,8 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
             // Whether this is the global DLQ
             boolean isGlobalDlq = ACTIVE_MQ_GLOBAL_DLQ_NAME.equals(destinationName);
 
-            // Whether we care about this destination: Either Mats stage or individual DLQ for such, or global DLQ
-            boolean matsRelevant = isMatsStageDestination || isMatsStageDlq || isGlobalDlq;
-
-            // ?: Do we care?
-            if (!matsRelevant) {
-                // -> No, so go to next.
-                continue;
-            }
-
-            // ----- This is a Mats relevant destination!
+            // Whether this is a DLQ at all.
+            boolean isAnyDlq = destinationName.startsWith(GENERIC_DLQ_START);
 
             // Is this a queue?
             DestinationType destinationType = fqDestinationName.startsWith("queue://")
@@ -454,7 +446,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
                     : DestinationType.TOPIC;
 
             // Whether this is a DLQ: Individual DLQ or global DLQ.
-            boolean isDlq = isMatsStageDlq || isGlobalDlq;
+            boolean isDlq = isMatsStageDlq || isGlobalDlq || isAnyDlq;
 
             // :: Find the MatsStageId for this destination, chop off "mats." or "DLQ.mats."
             String matsStageId;

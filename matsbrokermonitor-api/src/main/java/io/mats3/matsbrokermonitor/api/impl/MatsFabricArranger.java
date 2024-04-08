@@ -1,8 +1,10 @@
 package io.mats3.matsbrokermonitor.api.impl;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
@@ -35,6 +37,7 @@ public final class MatsFabricArranger {
             Collection<MatsBrokerDestination> matsBrokerDestinations) {
         MatsBrokerDestination globalDlq = null;
         SortedMap<String, MatsEndpointBrokerRepresentationImpl> endpointBrokerRepresentations = new TreeMap<>();
+        List<MatsBrokerDestination> remainingDestinations = new ArrayList<>();
         for (MatsBrokerDestination matsBrokerDestination : matsBrokerDestinations) {
             // ?: Is this the Global DLQ?
             if (matsBrokerDestination.isDefaultGlobalDlq()) {
@@ -43,8 +46,9 @@ public final class MatsFabricArranger {
                 continue;
             }
             // ?: Is there a Mats StageId (also EndpointId)?
-            if (!matsBrokerDestination.getMatsStageId().isPresent()) {
-                // -> No, no StageId, so ditch this, and continue.
+            if (matsBrokerDestination.getMatsStageId().isEmpty()) {
+                // -> No, no StageId, so put it in the "remaining destinations" list.
+                remainingDestinations.add(matsBrokerDestination);
                 continue;
             }
             // :: Find which Endpoint this queue/topic relates to,
@@ -105,7 +109,7 @@ public final class MatsFabricArranger {
 
         return new MatsFabricBrokerRepresentationImpl(globalDlq,
                 matsServiceBrokerRepresentations,
-                endpointBrokerRepresentations);
+                endpointBrokerRepresentations, remainingDestinations);
     }
 
     static class MatsFabricBrokerRepresentationImpl implements MatsFabricBrokerRepresentation {
@@ -113,12 +117,16 @@ public final class MatsFabricArranger {
         private final Map<String, ? extends MatsEndpointGroupBrokerRepresentation> _matsServiceBrokerRepresentations;
         private final Map<String, ? extends MatsEndpointBrokerRepresentation> _matsEndpointBrokerRepresentations;
 
+        private final List<MatsBrokerDestination> _remainingDestinations;
+
         public MatsFabricBrokerRepresentationImpl(MatsBrokerDestination globalDlq,
                 Map<String, ? extends MatsEndpointGroupBrokerRepresentation> matsServiceBrokerRepresentations,
-                Map<String, ? extends MatsEndpointBrokerRepresentation> matsEndpointBrokerRepresentations) {
+                Map<String, ? extends MatsEndpointBrokerRepresentation> matsEndpointBrokerRepresentations,
+                List<MatsBrokerDestination> remainingDestinations) {
             _matsServiceBrokerRepresentations = matsServiceBrokerRepresentations;
             _matsEndpointBrokerRepresentations = matsEndpointBrokerRepresentations;
             _globalDlq = globalDlq;
+            _remainingDestinations = remainingDestinations;
         }
 
         @Override
@@ -134,6 +142,11 @@ public final class MatsFabricArranger {
         @Override
         public Map<String, MatsEndpointGroupBrokerRepresentation> getEndpointGroups() {
             return Collections.unmodifiableMap(_matsServiceBrokerRepresentations);
+        }
+
+        @Override
+        public List<MatsBrokerDestination> getRemainingDestinations() {
+            return Collections.unmodifiableList(_remainingDestinations);
         }
     }
 

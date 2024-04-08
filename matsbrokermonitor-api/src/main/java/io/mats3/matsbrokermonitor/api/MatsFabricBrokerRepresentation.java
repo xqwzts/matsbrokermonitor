@@ -2,6 +2,7 @@ package io.mats3.matsbrokermonitor.api;
 
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -76,10 +77,16 @@ public interface MatsFabricBrokerRepresentation extends MatsFabricAggregates {
     }
 
     default OptionalLong getOldestDlqMessageAgeMillis() {
-        return getEndpoints().values().stream()
+        Stream<Long> endpointDlqs = getEndpoints().values().stream()
                 .map(MatsEndpointBrokerRepresentation::getOldestDlqMessageAgeMillis)
                 .filter(OptionalLong::isPresent)
-                .map(OptionalLong::getAsLong)
+                .map(OptionalLong::getAsLong);
+        Stream<Long> globalDlq = getDefaultGlobalDlq().stream()
+                .map(MatsBrokerDestination::getHeadMessageAgeMillis)
+                .filter(OptionalLong::isPresent)
+                .map(OptionalLong::getAsLong);
+
+        return Stream.concat(endpointDlqs, globalDlq)
                 .max(Comparator.naturalOrder())
                 .map(OptionalLong::of)
                 .orElse(OptionalLong.empty());
@@ -104,8 +111,9 @@ public interface MatsFabricBrokerRepresentation extends MatsFabricAggregates {
     }
 
     /**
-     * @return the default global DLQ, if there is such a thing in the connected broker. There should really not be, as
-     *         the broker should be configured to use an "individual DLQ policy" whereby each queue gets its own DLQ.
+     * @return the default global DLQ, if there is such a thing in the connected broker. This should ideally not be in
+     *         use, as the broker should be configured to use some kind of "individual DLQ policy" whereby each queue
+     *         gets its own DLQ (brokers do support this).
      */
     Optional<MatsBrokerDestination> getDefaultGlobalDlq();
 
@@ -125,10 +133,16 @@ public interface MatsFabricBrokerRepresentation extends MatsFabricAggregates {
     Map<String, MatsEndpointGroupBrokerRepresentation> getEndpointGroups();
 
     /**
+     * @return the {@link MatsBrokerDestination}s which are left over after the stacking, i.e. those which are not part
+     *         of any Endpoint.
+     */
+    List<MatsBrokerDestination> getRemainingDestinations();
+
+    /**
      * Representation of a Mats Endpoint (which contains all stages) as seen from the "Mats Fabric", i.e. as seen from
      * the Broker.
      */
-    interface MatsEndpointBrokerRepresentation extends MatsFabricAggregates  {
+    interface MatsEndpointBrokerRepresentation extends MatsFabricAggregates {
         String getEndpointId();
 
         Map<Integer, MatsStageBrokerRepresentation> getStages();
@@ -184,6 +198,7 @@ public interface MatsFabricBrokerRepresentation extends MatsFabricAggregates {
                     .map(OptionalLong::of)
                     .orElse(OptionalLong.empty());
         }
+
         /**
          * @return the max of {@link MatsStageBrokerRepresentation#getNumberOfDlqMessages()
          *         stage.getNumberOfDeadLetterMessages()} for {@link #getStages() all stages} of the Endpoint.

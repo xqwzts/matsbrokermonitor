@@ -257,6 +257,10 @@
     max-height: 100000px;
 }
 
+.matsbm_endpoint_group_remaining {
+    background: #e8e8f0;
+}
+
 /* table: Endpoints in EndpointGroup box */
 
 .matsbm_table_endpointgroup {

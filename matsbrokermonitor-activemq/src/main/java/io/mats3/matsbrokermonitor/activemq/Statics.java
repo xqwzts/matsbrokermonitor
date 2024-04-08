@@ -11,7 +11,8 @@ public interface Statics {
     // :: For ActiveMqMatsBrokerMonitor + ActiveMqBrokerStatsQuerierImpl:
 
     String ACTIVE_MQ_GLOBAL_DLQ_NAME = "ActiveMQ.DLQ";
-    String INDIVIDUAL_DLQ_PREFIX = "DLQ.";
+    String GENERIC_DLQ_START = "DLQ";
+    String INDIVIDUAL_DLQ_PREFIX = GENERIC_DLQ_START + ".";
 
     int SCAVENGE_OLD_STATS_SECONDS = 10 * 60;
     int MAX_NUMBER_OF_OUTSTANDING_CORRELATION_IDS = 150;
