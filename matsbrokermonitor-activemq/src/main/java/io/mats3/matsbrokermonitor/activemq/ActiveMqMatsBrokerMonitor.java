@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import io.mats3.matsbrokermonitor.activemq.ActiveMqBrokerStatsQuerier.ActiveMqBrokerStatsEvent;
 import io.mats3.matsbrokermonitor.activemq.ActiveMqBrokerStatsQuerier.DestinationStatsDto;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType;
 
 /**
  * @author Endre Stølsvik 2021-12-27 14:40 - http://stolsvik.com/, endre@stolsvik.com
@@ -32,7 +33,6 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
     private final ActiveMqBrokerStatsQuerier _querier;
 
     private final String _matsDestinationPrefix;
-    private final String _matsDestinationIndividualDlqPrefix;
 
     /**
      * Creates an instance, supplying both the querier and the MatsDestinationPrefix.
@@ -125,7 +125,6 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         _querier.registerListener(this::eventFromQuerier);
 
         _matsDestinationPrefix = matsDestinationPrefix;
-        _matsDestinationIndividualDlqPrefix = INDIVIDUAL_DLQ_PREFIX + matsDestinationPrefix;
     }
 
     @Override
@@ -169,11 +168,11 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         private final long _lastUpdateBrokerMillis;
         private final NavigableMap<String, MatsBrokerDestination> _matsDestinations;
         private final BrokerInfo _brokerInfo; // nullable
-        private final OptionalDouble _requestReplyLatencyMillis;
+        private final Double _requestReplyLatencyMillis; // nullable
 
         public BrokerSnapshotImpl(long lastUpdateLocalMillis, long lastUpdateBrokerMillis,
                 NavigableMap<String, MatsBrokerDestination> matsDestinations,
-                BrokerInfo brokerInfo, OptionalDouble requestReplyLatencyMillis) {
+                BrokerInfo brokerInfo, Double requestReplyLatencyMillis) {
             _lastUpdateLocalMillis = lastUpdateLocalMillis;
             _lastUpdateBrokerMillis = lastUpdateBrokerMillis;
             _matsDestinations = matsDestinations;
@@ -192,8 +191,10 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         }
 
         @Override
-        public OptionalDouble getStatisticsUpdateMillis() {
-            return _requestReplyLatencyMillis;
+        public OptionalDouble getStatisticsRequestReplyLatencyMillis() {
+            return _requestReplyLatencyMillis == null
+                    ? OptionalDouble.empty()
+                    : OptionalDouble.of(_requestReplyLatencyMillis);
         }
 
         @Override
@@ -213,7 +214,8 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         private final String _fqDestinationName;
         private final String _destinationName;
         private final String _matsStageId;
-        private final DestinationType _destinationType;
+        private final StageDestinationType _stageDestinationType; // nullable
+        private final DestinationType _destinationType; // nullable
         private final boolean _isDlq;
         private final boolean _isDefaultGlobalDlq;
         private final long _numberOfQueuedMessages;
@@ -221,7 +223,8 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         private final long _headMessageAgeMillis;
 
         public MatsBrokerDestinationImpl(long lastUpdateMillis, long lastUpdateBrokerMillis, String fqDestinationName,
-                String destinationName, String matsStageId, DestinationType destinationType, boolean isDlq,
+                String destinationName, String matsStageId, StageDestinationType stageDestinationType,
+                DestinationType destinationType, boolean isDlq,
                 boolean isDefaultGlobalDlq, long numberOfQueuedMessages, long numberOfInFlightMessages,
                 long headMessageAgeMillis) {
             _lastUpdateMillis = lastUpdateMillis;
@@ -229,6 +232,7 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
             _fqDestinationName = fqDestinationName;
             _destinationName = destinationName;
             _matsStageId = matsStageId;
+            _stageDestinationType = stageDestinationType;
             _destinationType = destinationType;
             _isDlq = isDlq;
             _isDefaultGlobalDlq = isDefaultGlobalDlq;
@@ -271,13 +275,18 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
         }
 
         @Override
-        public boolean isDefaultGlobalDlq() {
+        public boolean isBrokerDefaultGlobalDlq() {
             return _isDefaultGlobalDlq;
         }
 
         @Override
         public Optional<String> getMatsStageId() {
             return Optional.ofNullable(_matsStageId);
+        }
+
+        @Override
+        public Optional<StageDestinationType> getStageDestinationType() {
+            return Optional.ofNullable(_stageDestinationType);
         }
 
         @Override
@@ -428,44 +437,38 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
             // DestinationName: remove both "queue://" and "topic://", both are 8 length.
             String destinationName = fqDestinationName.substring(8);
 
-            // Whether this is a queue/topic for a MatsStage
-            boolean isMatsStageDestination = destinationName.startsWith(_matsDestinationPrefix);
-
-            // Whether this is an individual DLQ for a MatsStage
-            boolean isMatsStageDlq = destinationName.startsWith(_matsDestinationIndividualDlqPrefix);
-
             // Whether this is the global DLQ
             boolean isGlobalDlq = ACTIVE_MQ_GLOBAL_DLQ_NAME.equals(destinationName);
 
             // Whether this is a DLQ at all.
-            boolean isAnyDlq = destinationName.startsWith(GENERIC_DLQ_START);
+            boolean isAnyDlq = destinationName.startsWith(DLQ_PREFIX);
 
             // Is this a queue?
-            DestinationType destinationType = fqDestinationName.startsWith("queue://")
-                    ? DestinationType.QUEUE
-                    : DestinationType.TOPIC;
+            MatsBrokerDestination.DestinationType destinationType = fqDestinationName.startsWith("queue://")
+                    ? MatsBrokerDestination.DestinationType.QUEUE
+                    : MatsBrokerDestination.DestinationType.TOPIC;
 
             // Whether this is a DLQ: Individual DLQ or global DLQ.
-            boolean isDlq = isMatsStageDlq || isGlobalDlq || isAnyDlq;
+            boolean isDlq = isGlobalDlq || isAnyDlq;
 
             // :: Find the MatsStageId for this destination, chop off "mats." or "DLQ.mats."
-            String matsStageId;
-            if (isMatsStageDestination) {
-                matsStageId = destinationName.substring(_matsDestinationPrefix.length());
-            }
-            else if (isMatsStageDlq) {
-                matsStageId = destinationName.substring(_matsDestinationIndividualDlqPrefix.length());
-            }
-            else {
-                matsStageId = null;
+
+            StageDestinationType stageDestinationType = null;
+            String matsStageId = null;
+            for (StageDestinationType sdt : StageDestinationType.values()) {
+                String prefixToEvaluate = (sdt.isDlq() ? DLQ_PREFIX + "." : "")
+                        + _matsDestinationPrefix + sdt.getMidfix();
+                if (destinationName.startsWith(prefixToEvaluate)) {
+                    stageDestinationType = sdt;
+                    matsStageId = destinationName.substring(prefixToEvaluate.length());
+                    break;
+                }
             }
 
             DestinationStatsDto stats = entry.getValue();
 
             long numberOfQueuedMessages = stats.size;
-
             long numberOfInflightMessages = stats.inflightCount;
-
             long lastUpdateMillis = stats.statsReceived.toEpochMilli();
             long lastUpdateBrokerMillis = stats.brokerTime.toEpochMilli();
 
@@ -479,8 +482,9 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
             // Create the representation
             MatsBrokerDestinationImpl matsBrokerDestination = new MatsBrokerDestinationImpl(lastUpdateMillis,
-                    lastUpdateBrokerMillis, fqDestinationName, destinationName, matsStageId, destinationType, isDlq,
-                    isGlobalDlq, numberOfQueuedMessages, numberOfInflightMessages, headMessageAgeMillis);
+                    lastUpdateBrokerMillis, fqDestinationName, destinationName, matsStageId, stageDestinationType,
+                    destinationType, isDlq, isGlobalDlq, numberOfQueuedMessages, numberOfInflightMessages,
+                    headMessageAgeMillis);
             // Put it in the map.
             matsDestinationsMap.put(fqDestinationName, matsBrokerDestination);
             // ?: Does it has non-zero queue count?
@@ -503,7 +507,9 @@ public class ActiveMqMatsBrokerMonitor implements MatsBrokerMonitor, Statics {
 
         // :: Create the new BrokerSnapshot, store it in volatile field.
         _brokerSnapshot = new BrokerSnapshotImpl(nowMillis, latestUpdateBrokerMillis, matsDestinationsMap, brokerInfo,
-                event.getStatsRequestReplyLatencyMillis());
+                event.getStatsRequestReplyLatencyMillis().isPresent()
+                        ? event.getStatsRequestReplyLatencyMillis().getAsDouble()
+                        : null);
 
         // ::: Notify listeners
 

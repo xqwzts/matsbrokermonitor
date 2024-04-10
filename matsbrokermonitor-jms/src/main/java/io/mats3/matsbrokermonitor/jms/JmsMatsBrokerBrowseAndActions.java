@@ -336,15 +336,30 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
 
                 // ?: Did we get a message?
                 if (message == null) {
+                    // -> No, no message - queue became empty before we got the requested number of messages.
                     long nanosTaken_Total = System.nanoTime() - nanosAtStart_Total;
-                    // -> No, no message - reissuing stopped before we got requested number of messages.
                     log.info("REISSUE STOPPED - no more messages after [" + reissuedMessageCount + "] messages, "
                             + " requested [" + limitMessages + "] messages. Total time: " + ms(nanosTaken_Total)
                             + " ms.");
                     break;
                 }
 
-                // E-> Message is present!
+                // ?: Have we reissued the message already in this reissue operation?
+                if (message.propertyExists(JMS_MSG_PROP_REISSUE_COOKIE) && randomCookie.equals(
+                        message.getStringProperty(JMS_MSG_PROP_REISSUE_COOKIE))) {
+                    // -> Yes, we've already been through this message - must be "looping" where reissued messages
+                    // again end up on the DLQ.
+                    long nanosTaken_Total = System.nanoTime() - nanosAtStart_Total;
+                    log.info("REISSUE STOPPED: Message [" + message.getJMSMessageID() + "] has already been reissued"
+                            + " by this reissue operation, seems like we are \"looping\". This happened"
+                            + " after [" + reissuedMessageCount + "] messages, requested [" + limitMessages
+                            + "] messages. Total time: " + ms(nanosTaken_Total) + " ms.");
+                    break;
+                }
+
+                // ----- We got a message, and it is not already reissued in this reissue operation.
+
+                // :: Reissue!
                 reissueMessage(message, randomCookie, username, session, genericProducer, dlq, nanosTaken_Receive,
                         reissuedMessageIds);
 
@@ -445,9 +460,13 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                 // -> No, we don't know which queue it originally came from!
                 // Send it to a synthetic Mats "DLQ" endpoint for failed reissue - where it just has to be deleted
                 // after inspection.
-                String matsFailedReissueQueueName = _matsDestinationPrefix
-                        + MatsBrokerBrowseAndActions.MATS_QUEUE_ID_FOR_FAILED_REISSUE;
-                Queue matsFailedReissueQueue = session.createQueue(matsFailedReissueQueueName);
+                Queue matsFailedReissueQueue = session.createQueue(
+                        MatsBrokerBrowseAndActions.QUEUE_ID_FOR_FAILED_REISSUE);
+
+                // Add a reason to it.
+                message.setStringProperty(JMS_MSG_PROP_REISSUE_FAILED_REASON, "Message lacks '"
+                        + JMS_MSG_PROP_TO + "' property on the message,  so don't know where it was originally destined"
+                        + " - sending it to '" + QUEUE_ID_FOR_FAILED_REISSUE + "' for inspection and deletion!");
 
                 // Send it ..
                 long nanosAtStart_Send = System.nanoTime();

@@ -11,9 +11,7 @@ public interface Statics {
     // :: For ActiveMqMatsBrokerMonitor + ActiveMqBrokerStatsQuerierImpl:
 
     String ACTIVE_MQ_GLOBAL_DLQ_NAME = "ActiveMQ.DLQ";
-    String GENERIC_DLQ_START = "DLQ";
-    String INDIVIDUAL_DLQ_PREFIX = GENERIC_DLQ_START + ".";
-
+    String DLQ_PREFIX = "DLQ";
     int SCAVENGE_OLD_STATS_SECONDS = 10 * 60;
     int MAX_NUMBER_OF_OUTSTANDING_CORRELATION_IDS = 150;
 
@@ -23,7 +21,7 @@ public interface Statics {
     int CHILL_MILLIS_BEFORE_FIRST_STATS_REQUEST = 500;
     int CHILL_MILLIS_WAIT_AFTER_THROWABLE_IN_RECEIVE_LOOPS = 30 * 1000;
     int TIMEOUT_MILLIS_FOR_LAST_MESSAGE_IN_BATCH_FOR_DESTINATION_STATS = 250;
-    int TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN = 500;
+    int TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN = 2500;
 
     // :: For ActiveMqMatsBrokerMonitor:
 

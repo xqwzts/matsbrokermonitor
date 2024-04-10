@@ -152,13 +152,16 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
         // First set _runStatus to CLOSED, so that any loops and checks will exit.
         _runStatus = RunStatus.CLOSED;
         log.info("Asked to close. Set runStatus to CLOSED, closing Connections and interrupting threads.");
+
         // Notify the request sender - it'll close the Connection on its way out.
         synchronized (_waitObject_And_ForceUpdateOutstandingCorrelationIds) {
             _waitObject_And_ForceUpdateOutstandingCorrelationIds.notifyAll();
         }
-        // Closing Connections for the receiver - they'll wake up from 'con.receive()'.
+
+        // Closing Connections for the receiver - the thread will wake up from 'con.receive()'.
         closeConnectionIfNonNullIgnoreException(_receiveDestinationsStatsReplyMessages_Connection);
-        // Check that all threads exit
+
+        // Check that both threads exit
         try {
             _sendStatsRequestMessages_Thread.join(TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN);
             _receiveDestinationsStatsReplyMessages_Thread.join(TIMEOUT_MILLIS_GRACEFUL_THREAD_SHUTDOWN);

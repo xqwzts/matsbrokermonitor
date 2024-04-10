@@ -23,13 +23,14 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 public interface MatsBrokerBrowseAndActions extends Closeable {
 
     /**
-     * Synthetic "DLQ" for failed reissues where we could not determine original queue, as we have no other place to put
-     * messages where we cannot deduce the original queue.
+     * Synthetic DLQ for failed reissues where we could not determine original queue. We have very little recourse when
+     * this happens, and we don't want to delete the message either. Letting it lay on the original DLQ is not a good
+     * solution either - you want them out of the way. Therefore, we put them on another DLQ instead. However, the only
+     * solution MatsBrokerMonitor provide after this move is to delete the message after inspection.
      * <p/>
-     * Value is <code>"MatsBrokerMonitorFailedReissues"</code>, prefixed with the Mats prefix (which default is
-     * "mats.").
+     * Value is <code>"DLQ.MatsBrokerMonitor.FailedReissues"</code>.
      */
-    String MATS_QUEUE_ID_FOR_FAILED_REISSUE = "MatsBrokerMonitorFailedReissues";
+    String QUEUE_ID_FOR_FAILED_REISSUE = "DLQ.MatsBrokerMonitor.FailedReissues";
 
     void start();
 
@@ -105,8 +106,8 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      * Reissues the specified message Ids on the specified Dead Letter Queue. Note that there is no check that the
      * queueId is actually a DLQ - it is up to the caller to ensure this. The messages reissued will be put on the same
      * queue as they were originally on - which is gotten from a property on the message which is set by the Mats
-     * implementation - if this is missing, the message will be put on a new queue named
-     * <code>"{matsPrefix}{@link #MATS_QUEUE_ID_FOR_FAILED_REISSUE}"</code>, and the message will be logged.
+     * implementation - if this is missing, the message will be put on a new synthetic DLQ named
+     * <code>{@link #QUEUE_ID_FOR_FAILED_REISSUE}"</code>, and the message will be logged.
      *
      * @param deadLetterQueueId
      *            the full name of the queue, including mats prefix.
@@ -128,8 +129,8 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      * be the number of messages currently on the queue. Note that there is no check that the queueId is actually a DLQ
      * - it is up to the caller to ensure this. The messages reissued will be put on the same queue as they were
      * originally on - which is gotten from a property on the message which is set by the Mats implementation - if this
-     * is missing, the message will be put on a special queue named
-     * <code>"{matsPrefix}{@link #MATS_QUEUE_ID_FOR_FAILED_REISSUE}"</code>, and the message will be logged.
+     * is missing, the message will be put on a new synthetic DLQ named
+     * <code>"{@link #QUEUE_ID_FOR_FAILED_REISSUE}"</code>, and the message will be logged.
      * <p/>
      * The reissuing employs a "cookie" to ensure that if the messages are again DLQed while we are reissuing them, we
      * will not reissue the same messages again: This is a random string which is put on the message when it is

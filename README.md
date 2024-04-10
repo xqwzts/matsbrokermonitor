@@ -48,4 +48,3 @@ The second set of requirements can be fulfilled by the JMS API itself, using the
 inspect a queue, and JMS consume and produce to move a message from a DLQ back onto the incoming queue for the relevant
 Mats stage. This functionality thus works across any broker that implements the JMS API. And is defined in the
 `MatsBrokerBrowseAndActions`, and the JMS implementation is `JmsMatsBrokerBrowseAndActions`.
-

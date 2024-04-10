@@ -66,6 +66,7 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType;
 import io.mats3.matsbrokermonitor.broadcaster.MatsBrokerMonitorBroadcastAndControl;
 import io.mats3.matsbrokermonitor.broadcastreceiver.MatsBrokerMonitorBroadcastReceiver;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.BrowseQueueTableAddition;
@@ -432,13 +433,6 @@ public class MatsBrokerMonitor_TestJettyServer {
                     }
                 };
 
-                // Std: queue://mats.MatsTestBrokerMonitor.FirstSubService.private.leafMethod
-                // DLQ: queue://DLQ.mats.MatsTestBrokerMonitor.FirstSubService.private.leafMethod
-                // Muted DLQ: queue://DLQ.mats.mats.MUTED.MatsTestBrokerMonitor.FirstSubService.private.leafMethod
-                // np_ia: queue://mats.mats.NPIA.MatsTestBrokerMonitor.FirstSubService.private.leafMethod
-                // DLQ np_ia: queue://DLQ.mats.mats.NPIA.MatsTestBrokerMonitor.FirstSubService.private.leafMethod
-                // Wiretap: queue://mats.mats.WIRETAP.MatsTestBrokerMonitor.FirstSubService.private.leafMethod
-
                 sendToDLQ.accept("ActiveMQ.DLQ");
                 sendToDLQ.accept("DLQ");
                 sendToDLQ.accept("TestQueue.RandomQueue");
@@ -446,17 +440,24 @@ public class MatsBrokerMonitor_TestJettyServer {
 
                 // :: Types of queues
                 // Standard
-                sendToDLQ.accept(MATS_DESTINATION_PREFIX + "FakeMatsEndpoint.someMethod");
-                sendToDLQ.accept("DLQ." + MATS_DESTINATION_PREFIX + "FakeMatsEndpoint.someMethod");
-                sendToDLQ.accept("DLQ." + MATS_DESTINATION_PREFIX + "mats.MUTED.FakeMatsEndpoint.someMethod");
+                sendToDLQ.accept(MATS_DESTINATION_PREFIX
+                        + StageDestinationType.STANDARD.getMidfix() + "FakeMatsEndpoint.someMethod");
+                sendToDLQ.accept("DLQ." + MATS_DESTINATION_PREFIX
+                        + StageDestinationType.DEAD_LETTER_QUEUE.getMidfix() + "FakeMatsEndpoint.someMethod");
+                sendToDLQ.accept("DLQ." + MATS_DESTINATION_PREFIX
+                        + StageDestinationType.MUTED_DEAD_LETTER_QUEUE.getMidfix() + "FakeMatsEndpoint.someMethod");
 
                 // Non-persistent Interactive
-                sendToDLQ.accept(MATS_DESTINATION_PREFIX + "mats.NPIA.FakeMatsEndpoint.someMethod");
-                sendToDLQ.accept("DLQ." + MATS_DESTINATION_PREFIX + "mats.NPIA.FakeMatsEndpoint.someMethod");
-                // Using same MUTED as normal.
+                sendToDLQ.accept(MATS_DESTINATION_PREFIX
+                        + StageDestinationType.NON_PERSISTENT_INTERACTIVE.getMidfix() + "FakeMatsEndpoint.someMethod");
+                sendToDLQ.accept("DLQ." + MATS_DESTINATION_PREFIX
+                        + StageDestinationType.DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE.getMidfix()
+                        + "FakeMatsEndpoint.someMethod");
+                // !NOTE! Using same MUTED as normal.
 
                 // Wiretap
-                sendToDLQ.accept(MATS_DESTINATION_PREFIX + "mats.WIRETAP.FakeMatsEndpoint.someMethod");
+                sendToDLQ.accept(MATS_DESTINATION_PREFIX
+                        + StageDestinationType.WIRETAP.getMidfix() + "FakeMatsEndpoint.someMethod");
 
                 connection.close();
             }

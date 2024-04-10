@@ -30,6 +30,7 @@ public interface Statics {
 
     String JMS_MSG_PROP_REISSUE_COOKIE = "mats_ReissueCookie";
     String JMS_MSG_PROP_REISSUE_USERNAME = "mats_ReissueUsername";
+    String JMS_MSG_PROP_REISSUE_FAILED_REASON = "mats_FailedReissueReason"; // If reissue fails.
 
     // .. the following are copied from JmsMatsFactory
 

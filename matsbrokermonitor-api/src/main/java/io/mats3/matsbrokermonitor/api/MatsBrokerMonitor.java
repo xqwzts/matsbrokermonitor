@@ -61,7 +61,7 @@ public interface MatsBrokerMonitor extends Closeable {
         long getLastUpdateLocalMillis();
 
         /**
-         * @return the millis-since-epoch <i>on the broker side</i> when this was last updated. Compare to
+         * @return the millis-since-epoch <i>on the broker side</i> when this was last updated, if available. Compare to
          *         {@link #getLastUpdateLocalMillis()}.
          */
         OptionalLong getLastUpdateBrokerMillis();
@@ -71,7 +71,7 @@ public interface MatsBrokerMonitor extends Closeable {
          *         were started, to the (last) response was received (Only available on the node which performed the
          *         job).
          */
-        OptionalDouble getStatisticsUpdateMillis();
+        OptionalDouble getStatisticsRequestReplyLatencyMillis();
 
         /**
          * @return a
@@ -176,9 +176,101 @@ public interface MatsBrokerMonitor extends Closeable {
     }
 
     interface MatsBrokerDestination {
-
         String STAGE_ATTRIBUTE_DESTINATION = "mats.mbm.Queue";
         String STAGE_ATTRIBUTE_DLQ = "mats.mbm.DLQ";
+
+        /**
+         * Queue or Topic.
+         */
+        enum DestinationType {
+            QUEUE, TOPIC;
+        }
+
+        /**
+         * Mats-specific Stage Destination Type of this destination, which is a categorization of the different
+         * destinations a Mats Stage can have
+         */
+        enum StageDestinationType {
+
+            // THE ORDERING OF THE ENUM VALUES IS IMPORTANT!! They are checked in order of '.values()' return.
+            // The reason is that we first need to check those that actually have a midfix, and then those without,
+            // otherwise all will match the ones without midfix!
+
+            /**
+             * <i>Non-Persistent Interactive</i> Mats destination, e.g.
+             * "[matsQueuePrefix]matssys.NPIA.ExampleService.someMethod.stage2". This is a special destination for
+             * messages that are marked as non-persistent, and are interactive (i.e. request-reply where a human is
+             * waiting). This queue is consumed by a special non-transactional consumer to process these messages as
+             * fast as possible. The guaranteed delivery aspect is thus out the window, but since the messages are
+             * marked as non-persistent anyway, this is not a problem.
+             */
+            NON_PERSISTENT_INTERACTIVE(false, "matssys.NPIA."),
+
+            /**
+             * <i>Dead Letter Queue for a Non-Persistent Interactive</i> Mats destination, e.g.
+             * "DLQ.[matsQueuePrefix]matssys.NPIA.ExampleService.someMethod.stage2".
+             * <p/>
+             * <b>Note: This is not in use by 'Mats Managed DLQ Divert', as the DLQ for NPIA will be the same as for the
+             * standard queue.</b> However, if the broker ends up DLQing the NPIA messages, it will employ its standard
+             * DLQ handling, which typically is to prefix the existing queue name by "DLQ.". Thus, we will have to
+             * handle this DLQ too.
+             */
+            DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE(true, "matssys.NPIA."),
+
+            /**
+             * <i>"Muted" Dead Letter Queue</i> for a standard Mats destination, e.g.
+             * "DLQ.[matsQueuePrefix]matssys.MUTED_DLQ.ExampleService.someMethod.stage2". This is used when we have a
+             * DLQ message that we do not want to have warnings on anymore, because we're already aware of the problem,
+             * and are working on it.
+             * <p/>
+             * <b>Note: There is only one "Muted" DLQ, even though there could potentially be two DLQs
+             * ({@link #DEAD_LETTER_QUEUE} and {@link #DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE}).
+             */
+            MUTED_DEAD_LETTER_QUEUE(true, "matssys.MUTED_DLQ."),
+
+            /**
+             * <i>Wiretap</i> Mats destination, e.g.
+             * "[matsQueuePrefix]matssys.WIRETAP.ExampleService.someMethod.stage2". This is a feature whereby you can
+             * configure a MatsFactory to produce a copy of all messages sent to a specific Mats Stage and put this copy
+             * on the corresponding Wiretap destination. This is useful for debugging.
+             */
+            WIRETAP(false, "matssys.WIRETAP."),
+
+            /**
+             * <i>Standard</i> Mats destination, e.g. "[matsQueuePrefix]ExampleService.someMethod.stage2" - this is
+             * where the ordinary Mats Stage processors are consuming from.
+             */
+            STANDARD(false, ""),
+
+            /**
+             * <i>Dead Letter Queue</i> for a {@link #STANDARD standard Mats destination}, e.g.
+             * "DLQ.[matsQueuePrefix]ExampleService.someMethod.stage2".
+             */
+            DEAD_LETTER_QUEUE(true, ""),
+
+            /**
+             * Of unknown type - this will never be utilized from the MatsBrokerMonitor. This is to protect against
+             * serialization errors on the receiving side if the enum is later extended and the client isn't updated
+             * when receiving an update event - we use String as the serialization format.
+             */
+            UNKNOWN(false, "");
+
+            private final boolean _dlq;
+            private final String _midfix;
+
+            StageDestinationType(boolean dlq, String midfix) {
+                _dlq = dlq;
+                _midfix = midfix;
+            }
+
+            public boolean isDlq() {
+                return _dlq;
+            }
+
+            public String getMidfix() {
+                return _midfix;
+            }
+        }
 
         /**
          * @return the millis-since-Epoch when this was last updated, using the time of this receiving computer. Compare
@@ -220,38 +312,47 @@ public interface MatsBrokerMonitor extends Closeable {
         boolean isDlq();
 
         /**
-         * If the broker isn't properly configured with a broker-specific <i>Individual Dead Letter Queue policy</i>
-         * where each queue gets its own DLQ (being the original queue name prefixed with "DLQ."), then there will be a
-         * global DLQ. This is not very good - but it will nevertheless be reported. The method
-         * {@link #getMatsStageId()} will then return {@link Optional#empty()}, while get {@link #getDestinationName()}
-         * will be the actual DLQ name (e.g. for ActiveMQ, it is <code>"ActiveMQ.DLQ"</code>, while for Artemis it is
-         * <code>"DLQ"</code>).
+         * Returns whether this is the <i>Broker-specific Global DLQ</i>. If the broker isn't properly configured with a
+         * broker-specific <i>Individual Dead Letter Queue policy</i> where each queue gets its own DLQ (being the
+         * original queue name prefixed with "DLQ."), then there will be a Global DLQ. This is an unfortunate setup when
+         * using Mats3, since it will lump all processing errors for all stages, important or not, into a big heap, and
+         * this MatsBrokerMonitor cannot then nicely show where each problem is. If this destination represents the
+         * Global DLQ, then this method will return <code>true</code>. The method {@link #getMatsStageId()} will then
+         * return {@link Optional#empty()}, while {@link #getDestinationName()} will be the actual DLQ name (e.g. for
+         * ActiveMQ, it is <code>"ActiveMQ.DLQ"</code>, while for Artemis it is <code>"DLQ"</code>) - and the
+         * {@link #getFqDestinationName()} will be the fully qualified name, e.g. <code>"queue://ActiveMQ.DLQ"</code>.
          * <p/>
          * <b>Note: It is highly recommended to configure the broker with an individual DLQ policy!</b>
          *
          * @return whether this is the global DLQ for the broker ({@link #isDlq()} will then also return
          *         <code>true</code>).
          */
-        boolean isDefaultGlobalDlq();
+        boolean isBrokerDefaultGlobalDlq();
 
         /**
-         * If this {@link #getDestinationName()} represent a Mats Stage (both a normal Queue or Topic for a Mats Stage,
-         * or an individual DLQ for a Mats Stage), then this will be the StageId - i.e. the destination name with the
-         * MatsDestinationPrefix (default "mats."), and any "DLQ." prefix (thus standard/default "DLQ.mats.") cropped
-         * off.
+         * If this {@link #getDestinationName()} represent a Mats Stage (e.g. a Queue or Topic for a Mats Stage, or an
+         * individual DLQ for a Mats Stage, or any other of the {@link StageDestinationType}), then this will be the
+         * StageId - i.e. the destination name where the mats-specifics are cropped off, e.g. MatsDestinationPrefix
+         * (default "mats."), and any "DLQ." prefix (thus standard/default "DLQ.mats.") and any other prefixes
+         * representing the different QueueTypes (e.g. "mats.WIRETAP." for Wiretap). Thus, if this is a DLQ, then this
+         * will be the Mats StageId for which it is the DLQ.
          * <p/>
-         * If the broker isn't properly configured with a broker-specific <i>Individual Dead Letter Queue policy</i>
-         * where each queue gets its own DLQ (being the original queue name prefixed with "DLQ."), then there will be a
-         * global DLQ. This is not very good - but it will nevertheless be reported. This method will then return
-         * {@link Optional#empty()}, while get {@link #getDestinationName()} will be the actual DLQ name (e.g. for
-         * ActiveMQ, it is <code>"ActiveMQ.DLQ"</code>, while for Artemis it is <code>"DLQ"</code>).
-         * <p/>
-         * <b>Note: It is highly recommended to configure the broker with an individual DLQ policy!</b>
+         * <b>Please read the information about Global DLQ here: {@link #isBrokerDefaultGlobalDlq()}</b>
          *
          * @return the Mats StageId if the {@link #getDestinationName()} represent a Mats Stage, or DLQ for such.
-         * @see #getDestinationName()
+         * @see #getStageDestinationType() for the categorization of the type of stage destination this is.
+         * @see #getDestinationName() for the raw destination name.
+         * @see #getFqDestinationName() for the fully qualified destination name.
          */
         Optional<String> getMatsStageId();
+
+        /**
+         * @return the Mats-specific {@link StageDestinationType} of this destination, which is a categorization of the
+         *         different destinations a Mats Stage can have (standard, DLQ, Muted DLQ, Wiretap etc). If this
+         *         destination does not represent a Mats Stage, it will return {@link Optional#empty()}.
+         * @see #getMatsStageId() for the StageId.
+         */
+        Optional<StageDestinationType> getStageDestinationType();
 
         /**
          * @return the number of messages on this destination <i>when this update was produced</i> (i.e. from the
@@ -280,13 +381,6 @@ public interface MatsBrokerMonitor extends Closeable {
          *         consumers), while the queue actually still progresses since consumer 2 is still chugging along.
          */
         OptionalLong getHeadMessageAgeMillis();
-    }
-
-    /**
-     * Queue or Topic.
-     */
-    enum DestinationType {
-        QUEUE, TOPIC;
     }
 
     /**
@@ -349,6 +443,7 @@ public interface MatsBrokerMonitor extends Closeable {
         private boolean dlq;
         private boolean gdlq;
         private Optional<String> msid;
+        private Optional<String> mdt; // Use String for serialization, as we might have an older client missing enums.
         private long noqm;
         private OptionalLong noifm;
         private OptionalLong age;
@@ -368,8 +463,9 @@ public interface MatsBrokerMonitor extends Closeable {
             dn = matsBrokerDestination.getDestinationName();
             dt = matsBrokerDestination.getDestinationType();
             dlq = matsBrokerDestination.isDlq();
-            gdlq = matsBrokerDestination.isDefaultGlobalDlq();
+            gdlq = matsBrokerDestination.isBrokerDefaultGlobalDlq();
             msid = matsBrokerDestination.getMatsStageId();
+            mdt = matsBrokerDestination.getStageDestinationType().map(Enum::name);
             noqm = matsBrokerDestination.getNumberOfQueuedMessages();
             noifm = matsBrokerDestination.getNumberOfInflightMessages();
             age = matsBrokerDestination.getHeadMessageAgeMillis();
@@ -406,13 +502,30 @@ public interface MatsBrokerMonitor extends Closeable {
         }
 
         @Override
-        public boolean isDefaultGlobalDlq() {
+        public boolean isBrokerDefaultGlobalDlq() {
             return gdlq;
         }
 
         @Override
         public Optional<String> getMatsStageId() {
             return msid;
+        }
+
+        @Override
+        public Optional<StageDestinationType> getStageDestinationType() {
+            // ?: Is it empty?
+            if (mdt.isEmpty()) {
+                // -> Yes, it is empty, return empty.
+                return Optional.empty();
+            }
+            // Handle unknown types if this is deserialized from a DTO and the client is not updated.
+            try {
+                return Optional.of(StageDestinationType.valueOf(mdt.get()));
+            }
+            catch (IllegalArgumentException e) {
+                // If the enum is unknown, we return the UNKNOWN type.
+                return Optional.of(StageDestinationType.UNKNOWN);
+            }
         }
 
         @Override

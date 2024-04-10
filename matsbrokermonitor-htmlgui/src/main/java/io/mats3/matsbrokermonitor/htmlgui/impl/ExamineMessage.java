@@ -25,8 +25,8 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.BrokerIOExcepti
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerSnapshot;
-import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.DestinationType;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.DestinationType;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.ExamineMessageAddition;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.MonitorAddition;
 import io.mats3.serial.MatsSerializer;
@@ -103,7 +103,7 @@ public class ExamineMessage {
 
         out.html("<div class='matsbm_heading'>");
         // ?: Is this the Global DLQ?
-        if (matsBrokerDestination.isDefaultGlobalDlq()) {
+        if (matsBrokerDestination.isBrokerDefaultGlobalDlq()) {
             // -> Yes, global DLQ
             out.html("<h1>Examine Message from <i>Global DLQ</i></h1>\n");
         }
@@ -191,13 +191,15 @@ public class ExamineMessage {
             // -> No MatsTrace, why?
             if (msgRepr.getMatsTraceBytes().isPresent()) {
                 // -> Seemingly because we don't have a MatsSerializer, and thus cannot deserialize the present bytes.
-                out.html("<br><h2>NOTICE! There is a serialized MatsTrace byte array in the message, but I am"
-                        + " constructed without a MatsSerializer, so I can't decipher it!</h2><br>\n");
+                out.html("<div id='matsbm_part_matstrace'>");
+                out.html("<h2>NOTICE! There is a serialized MatsTrace byte array in the message, but I am"
+                        + " constructed without a MatsSerializer, so I can't decipher it!</h2><br></div>\n");
             }
             else {
                 // -> Evidently because there was no MatsTrace in the message.
-                out.html("<br><h2>NOTICE! Missing MatsTrace information from the message, so cannot show"
-                        + " call trace information!</h2><br>\n");
+                out.html("<div id='matsbm_part_matstrace'>");
+                out.html("<h2>NOTICE! Missing MatsTrace information from the message, so cannot show"
+                        + " call trace information!</h2><br></div>\n");
             }
         }
         else {

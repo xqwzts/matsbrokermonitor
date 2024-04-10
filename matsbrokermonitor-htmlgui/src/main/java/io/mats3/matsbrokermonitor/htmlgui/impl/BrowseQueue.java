@@ -20,7 +20,6 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessa
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessageRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerSnapshot;
-import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.DestinationType;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.BrowseQueueTableAddition;
@@ -50,7 +49,7 @@ class BrowseQueue {
 
         MatsBrokerDestination matsBrokerDestination = null;
         for (MatsBrokerDestination dest : values) {
-            if ((dest.getDestinationType() == DestinationType.QUEUE) && queueId.equals(dest.getDestinationName())) {
+            if ((dest.getDestinationType() == MatsBrokerDestination.DestinationType.QUEUE) && queueId.equals(dest.getDestinationName())) {
                 matsBrokerDestination = dest;
             }
         }
@@ -77,7 +76,7 @@ class BrowseQueue {
         // :: HEADING
 
         // ?: Is this the Global DLQ?
-        if (matsBrokerDestination.isDefaultGlobalDlq()) {
+        if (matsBrokerDestination.isBrokerDefaultGlobalDlq()) {
             // -> Yes, global DLQ
             out.html("<h1>Browsing the <i>Global DLQ</i></h1>");
         }
