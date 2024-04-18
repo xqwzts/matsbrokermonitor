@@ -23,6 +23,8 @@ public interface Statics {
     DateTimeFormatter DATE_TIME_FORMATTER_SEC = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     int FORCE_UPDATE_TIMEOUT = 5000;
 
+    String MATS3_HTML = "Mats<sup style='font-size: 75%;'>3</sup>";
+
     Random RANDOM = new Random();
 
     default String random() {

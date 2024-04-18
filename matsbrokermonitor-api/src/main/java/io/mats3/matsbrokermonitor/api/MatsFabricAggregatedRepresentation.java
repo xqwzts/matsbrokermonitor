@@ -1,4 +1,4 @@
-package io.mats3.matsbrokermonitor.api.aggregator;
+package io.mats3.matsbrokermonitor.api;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -17,7 +17,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType;
 
@@ -29,7 +28,7 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.St
  *
  * @author Endre Stølsvik 2022-01-07 00:36, 2024-04-08 21:43 - http://stolsvik.com/, endre@stolsvik.com
  */
-public interface MatsFabricAggregatedRepresentation extends MatsFabricAggregates {
+public interface MatsFabricAggregatedRepresentation {
 
     /**
      * @param matsDestinations
@@ -49,7 +48,8 @@ public interface MatsFabricAggregatedRepresentation extends MatsFabricAggregates
     }
 
     /**
-     * @return the max of {@link MatsEndpointBrokerRepresentation#getOldestStageHeadMessageAgeMillis(StageDestinationType)
+     * @return the max of
+     *         {@link MatsEndpointBrokerRepresentation#getOldestStageHeadMessageAgeMillis(StageDestinationType)
      *         endpoint.getOldestMessageAgeMillis(queueType)} for {@link #getEndpoints() all endpoints} of the Mats
      *         fabric, if no Endpoint has a message, {@link OptionalLong#empty()} is returned.
      */
@@ -97,16 +97,109 @@ public interface MatsFabricAggregatedRepresentation extends MatsFabricAggregates
     Map<String, MatsEndpointGroupBrokerRepresentation> getEndpointGroups();
 
     /**
+     * Return the {@link MatsStageBrokerRepresentation} for the specified destinationName, or {@link Optional#empty()}
+     * if no such Stage was found in the stack. Each Stage can have multiple Queues connected to it, most obviously the
+     * "standard" and "DLQ" queues, but indeed all specified by {@link StageDestinationType}. If you have a
+     * destinationName, you can find the Stage for it by using this method - and then you can get a reference to all the
+     * other queues connected to that stage.
+     * <p/>
+     * Note: This method only searches for the Stage in the stacked representation (as gotten by
+     * {@link #stack(Collection)}) by comparing against the {@link MatsBrokerDestination#getDestinationName()} from the
+     * MatsBrokerDestination instances present in the stages represented in the stack. This means that if you have a
+     * relevant destinationName for a particular Mats Stage (say e.g. the DLQ like "DLQ.SomeService.someMethod.stage1"
+     * for a Stage), but that DLQ was not present in the broker when the stack was created, this method will return
+     * Optional.empty().
+     * 
+     * @param destinationName
+     *            the DestinationName to find the Stage for, e.g. "mats.SomeService.someMethod.stage1", or
+     *            "DLQ.mats.matssys.NPIA.SomeService.someMethod.stage1".
+     * @return the {@link MatsStageBrokerRepresentation} for the specified destinationName, or {@link Optional#empty()}
+     *         if no such Stage was found in the stack.
+     */
+    default Optional<MatsStageBrokerRepresentation> findStageForDestinationName(String destinationName) {
+        // Go through all Endpoints, and then all Stages of each Endpoint, and then all Destinations of each Stage.
+        for (MatsEndpointBrokerRepresentation endpoint : getEndpoints().values()) {
+            for (MatsStageBrokerRepresentation stage : endpoint.getStages().values()) {
+                for (MatsBrokerDestination destination : stage.getAllDestinations()) {
+                    if (destination.getDestinationName().equals(destinationName)) {
+                        return Optional.of(stage);
+                    }
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * @return the {@link MatsBrokerDestination}s which are left over after the stacking, i.e. those which are not part
      *         of any Endpoint.
      */
     List<MatsBrokerDestination> getRemainingDestinations();
 
     /**
+     * @return all {@link MatsBrokerDestination}s, including those which are not part of any Endpoint (i.e. including
+     *         non-Mats3 relevant destinations).
+     */
+    List<MatsBrokerDestination> getAllDestinations();
+
+    /**
+     * Representation of a Mats "EndpointGroup", a collection of Endpoint, grouped by the first part of the endpoint
+     * name, i.e. <code>"EndpointGroup.[SubServiceName.]methodName"</code>. This should ideally have a 1:1 relation with
+     * the actual (micro) services in the system.
+     */
+    interface MatsEndpointGroupBrokerRepresentation {
+        String getEndpointGroup();
+
+        Map<String, MatsEndpointBrokerRepresentation> getEndpoints();
+
+        default long getTotalNumberOfQueuedMessages(StageDestinationType StageDestinationType) {
+            long total = 0;
+            for (MatsEndpointBrokerRepresentation endpoint : getEndpoints().values()) {
+                total += endpoint.getTotalNumberOfQueuedMessages(StageDestinationType);
+            }
+            return total;
+        }
+
+        /**
+         * @return the max of {@link MatsEndpointBrokerRepresentation#getMaxStageNumberOfMessages(StageDestinationType)
+         *         endpoint.getMaxStageNumberOfMessages()} {@link #getEndpoints() all endpoints} of the EndpointGroup,
+         *         if no Endpoint has a message, <code>0</code> is returned.
+         */
+        default long getMaxStageNumberOfMessages(StageDestinationType StageDestinationType) {
+            return getEndpoints().values().stream()
+                    .map(e -> e.getMaxStageNumberOfMessages(StageDestinationType))
+                    .max(Comparator.naturalOrder())
+                    .orElse(0L);
+        }
+
+        /**
+         * @return the max of
+         *         {@link MatsEndpointBrokerRepresentation#getOldestStageHeadMessageAgeMillis(StageDestinationType)
+         *         endpoint.getStageOldestHeadMessageAgeMillis()} for {@link #getEndpoints() all endpoints} of the
+         *         EndpointGroup, if no Endpoints has a message, {@link OptionalLong#empty()} is returned.
+         */
+        default OptionalLong getOldestStageHeadMessageAgeMillis(StageDestinationType StageDestinationType) {
+            return getEndpoints().values().stream()
+                    .map(e -> e.getOldestStageHeadMessageAgeMillis(StageDestinationType))
+                    .filter(OptionalLong::isPresent)
+                    .map(OptionalLong::getAsLong)
+                    .max(Comparator.naturalOrder())
+                    .map(OptionalLong::of)
+                    .orElse(OptionalLong.empty());
+        }
+
+        default List<MatsBrokerDestination> getAllDestinations() {
+            return getEndpoints().values().stream().map(MatsEndpointBrokerRepresentation::getAllDestinations)
+                    .flatMap(List::stream)
+                    .collect(Collectors.toList());
+        }
+    }
+
+    /**
      * Representation of a Mats Endpoint (which contains all stages) as seen from the "Mats Fabric", i.e. as seen from
      * the Broker.
      */
-    interface MatsEndpointBrokerRepresentation extends MatsFabricAggregates {
+    interface MatsEndpointBrokerRepresentation {
         String getEndpointId();
 
         Map<Integer, MatsStageBrokerRepresentation> getStages();
@@ -143,51 +236,10 @@ public interface MatsFabricAggregatedRepresentation extends MatsFabricAggregates
                     .orElse(0L);
         }
 
-    }
-
-    /**
-     * Representation of a Mats "EndpointGroup", a collection of Endpoint, grouped by the first part of the endpoint
-     * name, i.e. <code>"EndpointGroup.[SubServiceName.]methodName"</code>. This should ideally have a 1:1 relation with
-     * the actual (micro) services in the system.
-     */
-    interface MatsEndpointGroupBrokerRepresentation extends MatsFabricAggregates {
-        String getEndpointGroup();
-
-        Map<String, MatsEndpointBrokerRepresentation> getEndpoints();
-
-        default long getTotalNumberOfQueuedMessages(StageDestinationType StageDestinationType) {
-            long total = 0;
-            for (MatsEndpointBrokerRepresentation endpoint : getEndpoints().values()) {
-                total += endpoint.getTotalNumberOfQueuedMessages(StageDestinationType);
-            }
-            return total;
-        }
-
-        /**
-         * @return the max of {@link MatsEndpointBrokerRepresentation#getMaxStageNumberOfMessages(StageDestinationType)
-         *         endpoint.getMaxStageNumberOfMessages()} {@link #getEndpoints() all endpoints} of the EndpointGroup,
-         *         if no Endpoint has a message, <code>0</code> is returned.
-         */
-        default long getMaxStageNumberOfMessages(StageDestinationType StageDestinationType) {
-            return getEndpoints().values().stream()
-                    .map(e -> e.getMaxStageNumberOfMessages(StageDestinationType))
-                    .max(Comparator.naturalOrder())
-                    .orElse(0L);
-        }
-
-        /**
-         * @return the max of {@link MatsEndpointBrokerRepresentation#getOldestStageHeadMessageAgeMillis(StageDestinationType)
-         *         endpoint.getStageOldestHeadMessageAgeMillis()} for {@link #getEndpoints() all endpoints} of the
-         *         EndpointGroup, if no Endpoints has a message, {@link OptionalLong#empty()} is returned.
-         */
-        default OptionalLong getOldestStageHeadMessageAgeMillis(StageDestinationType StageDestinationType) {
-            return getEndpoints().values().stream()
-                    .map(e -> e.getOldestStageHeadMessageAgeMillis(StageDestinationType))
-                    .filter(OptionalLong::isPresent)
-                    .map(OptionalLong::getAsLong)
-                    .max(Comparator.naturalOrder())
-                    .map(OptionalLong::of)
-                    .orElse(OptionalLong.empty());
+        default List<MatsBrokerDestination> getAllDestinations() {
+            return getStages().values().stream().map(MatsStageBrokerRepresentation::getAllDestinations)
+                    .flatMap(List::stream)
+                    .collect(Collectors.toList());
         }
     }
 
@@ -208,18 +260,23 @@ public interface MatsFabricAggregatedRepresentation extends MatsFabricAggregates
         String getStageId();
 
         /**
-         * Returns the {@link MatsBrokerDestination} from the specified {@link StageDestinationType} of the Stage. Since it very
-         * well is possible that a stage does not have a destination for a specific {@link StageDestinationType} (even the
-         * {@link StageDestinationType#STANDARD STANDARD} queue, e.g. if there is a DLQ, but now the endpoint is gone), this method
-         * returns an {@link Optional}.
+         * Returns the {@link MatsBrokerDestination} from the specified {@link StageDestinationType} of the Stage. Since
+         * it very well is possible that a stage does not have a destination for a specific {@link StageDestinationType}
+         * (even the {@link StageDestinationType#STANDARD STANDARD} queue, e.g. if there is a DLQ, but now the endpoint
+         * is gone), this method returns an {@link Optional}.
          * 
          * @return the {@link MatsBrokerDestination} from the specified {@link StageDestinationType} of the Stage.
          */
         Optional<MatsBrokerDestination> getDestination(StageDestinationType StageDestinationType);
 
         /**
-         * @return {@link MatsBrokerDestination#getHeadMessageAgeMillis()} if {@link #getDestination(StageDestinationType)} is
-         *         present.
+         * @return all Stage-relevant {@link MatsBrokerDestination}s.
+         */
+        List<MatsBrokerDestination> getAllDestinations();
+
+        /**
+         * @return {@link MatsBrokerDestination#getHeadMessageAgeMillis()} if
+         *         {@link #getDestination(StageDestinationType)} is present.
          */
         default OptionalLong getHeadMessageAgeMillis(StageDestinationType StageDestinationType) {
             return getDestination(StageDestinationType)
@@ -323,7 +380,8 @@ public interface MatsFabricAggregatedRepresentation extends MatsFabricAggregates
                                 throw new IllegalStateException("Collision! [" + ep1 + "], [" + ep2 + "]");
                             }, TreeMap::new)));
 
-            TreeMap<String, MatsEndpointGroupBrokerRepresentation> matsServiceBrokerRepresentations = services.entrySet()
+            TreeMap<String, MatsEndpointGroupBrokerRepresentation> matsServiceBrokerRepresentations = services
+                    .entrySet()
                     .stream()
                     .collect(Collectors.toMap(Entry::getKey,
                             entry -> new MatsEndpointGroupBrokerRepresentationImpl(entry.getKey(), entry.getValue()),
@@ -331,9 +389,12 @@ public interface MatsFabricAggregatedRepresentation extends MatsFabricAggregates
                                 throw new IllegalStateException("Collision! [" + sg1 + "], [" + sg2 + "]");
                             }, TreeMap::new));
 
+            ArrayList<MatsBrokerDestination> sortedDestinations = new ArrayList<>(matsBrokerDestinations);
+            sortedDestinations.sort(Comparator.comparing(MatsBrokerDestination::getFqDestinationName));
+
             return new MatsFabricAggregatedRepresentationImpl(globalDlq,
-                    matsServiceBrokerRepresentations,
-                    endpointBrokerRepresentations, remainingDestinations);
+                    matsServiceBrokerRepresentations, endpointBrokerRepresentations,
+                    sortedDestinations, remainingDestinations);
         }
 
         private static class MatsFabricAggregatedRepresentationImpl implements MatsFabricAggregatedRepresentation {
@@ -341,15 +402,18 @@ public interface MatsFabricAggregatedRepresentation extends MatsFabricAggregates
             private final Map<String, ? extends MatsEndpointGroupBrokerRepresentation> _matsServiceBrokerRepresentations;
             private final Map<String, ? extends MatsEndpointBrokerRepresentation> _matsEndpointBrokerRepresentations;
 
+            private final List<MatsBrokerDestination> _allDestinations;
             private final List<MatsBrokerDestination> _remainingDestinations;
 
             private MatsFabricAggregatedRepresentationImpl(MatsBrokerDestination globalDlq,
                     Map<String, ? extends MatsEndpointGroupBrokerRepresentation> matsServiceBrokerRepresentations,
                     Map<String, ? extends MatsEndpointBrokerRepresentation> matsEndpointBrokerRepresentations,
+                    List<MatsBrokerDestination> allDestinations,
                     List<MatsBrokerDestination> remainingDestinations) {
                 _matsServiceBrokerRepresentations = matsServiceBrokerRepresentations;
                 _matsEndpointBrokerRepresentations = matsEndpointBrokerRepresentations;
                 _globalDlq = globalDlq;
+                _allDestinations = allDestinations;
                 _remainingDestinations = remainingDestinations;
             }
 
@@ -372,29 +436,15 @@ public interface MatsFabricAggregatedRepresentation extends MatsFabricAggregates
             public List<MatsBrokerDestination> getRemainingDestinations() {
                 return Collections.unmodifiableList(_remainingDestinations);
             }
-        }
-
-        private static class MatsEndpointBrokerRepresentationImpl implements MatsEndpointBrokerRepresentation {
-
-            private final String _endpointId;
-            private final SortedMap<Integer, MatsStageBrokerRepresentationImpl> _stages = new TreeMap<>();
-
-            private MatsEndpointBrokerRepresentationImpl(String endpointId) {
-                _endpointId = endpointId;
-            }
 
             @Override
-            public String getEndpointId() {
-                return _endpointId;
-            }
-
-            @Override
-            public SortedMap<Integer, MatsStageBrokerRepresentation> getStages() {
-                return Collections.unmodifiableSortedMap(_stages);
+            public List<MatsBrokerDestination> getAllDestinations() {
+                return Collections.unmodifiableList(_allDestinations);
             }
         }
 
-        private static class MatsEndpointGroupBrokerRepresentationImpl implements MatsEndpointGroupBrokerRepresentation {
+        private static class MatsEndpointGroupBrokerRepresentationImpl implements
+                MatsEndpointGroupBrokerRepresentation {
             private final String _serviceName;
             private final Map<String, MatsEndpointBrokerRepresentation> _matsEndpointBrokerRepresentations;
 
@@ -429,6 +479,26 @@ public interface MatsFabricAggregatedRepresentation extends MatsFabricAggregates
             }
         }
 
+        private static class MatsEndpointBrokerRepresentationImpl implements MatsEndpointBrokerRepresentation {
+
+            private final String _endpointId;
+            private final SortedMap<Integer, MatsStageBrokerRepresentationImpl> _stages = new TreeMap<>();
+
+            private MatsEndpointBrokerRepresentationImpl(String endpointId) {
+                _endpointId = endpointId;
+            }
+
+            @Override
+            public String getEndpointId() {
+                return _endpointId;
+            }
+
+            @Override
+            public SortedMap<Integer, MatsStageBrokerRepresentation> getStages() {
+                return Collections.unmodifiableSortedMap(_stages);
+            }
+        }
+
         private static class MatsStageBrokerRepresentationImpl implements MatsStageBrokerRepresentation {
             private final int _stageIndex;
             private final String _stageId;
@@ -453,6 +523,11 @@ public interface MatsFabricAggregatedRepresentation extends MatsFabricAggregates
             @Override
             public Optional<MatsBrokerDestination> getDestination(StageDestinationType StageDestinationType) {
                 return Optional.ofNullable(_destinations.get(StageDestinationType));
+            }
+
+            @Override
+            public List<MatsBrokerDestination> getAllDestinations() {
+                return new ArrayList<>(_destinations.values());
             }
         }
     }

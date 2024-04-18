@@ -183,16 +183,14 @@
 .matsbm_messages_old {
     background-color: #b00000;
     color: white;
-    padding-left: 0.3em;
-    padding-right: 0.3em;
+    padding: 0.1em 0.3em 0.1em 0.3em
 }
 
 .matsbm_messages_dlq {
     background-color: #FF7E31;
     color: white;
-    padding-left: 0.3em;
     margin-left: -0.3em;
-    padding-right: 0.3em;
+    padding: 0.1em 0.3em 0.1em 0.3em
 }
 
 /* :: Buttons: ViewAll, ViewBad */
@@ -294,8 +292,8 @@
 }
 
 .matsbm_table_endpointgroup td div {
-    max-height: 17pt;
-    overflow: hidden;
+    /*max-height: 17pt;*/
+    /*overflow: hidden;*/
     vertical-align: top;
 }
 
@@ -379,7 +377,7 @@
     border-color: #a0a0a0;
     border-style: solid;
     margin: 0.1em 0.5em 0.2em 0;
-    padding: 0.2em 0.2em 1.5em 0.2em;
+    padding: 0.15em 0.2em 0.15em 0.2em;
 }
 
 .matsbm_stage_initial {
@@ -394,8 +392,8 @@
     box-shadow: rgba(0, 0, 0, 0.1) 0 2px 4px;
     color: #FFFFFF;
     display: inline-block;
-    margin: 0 0 0 0.4em;
-    padding: 0px 10px;
+    margin: 0 0.2em 0 0.2em;
+    padding: 0.05em 0.8em 0.05em 0.8em;
     text-align: center;
     border: 0;
 }
@@ -446,7 +444,7 @@
     font-size: 80%;
     line-height: 1.9em;
     font-style: italic;
-    margin-left: 0.3em;
+    margin-right: 0.5em;
 }
 
 
@@ -455,6 +453,15 @@
 /* ===================== */
 
 /* boxes */
+
+.matsbm_other_queues_for_stage {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: flex;
+    margin-top: 0.4em;
+    margin-right: 0.5em;
+}
 
 /* .. invert all check boxes */
 

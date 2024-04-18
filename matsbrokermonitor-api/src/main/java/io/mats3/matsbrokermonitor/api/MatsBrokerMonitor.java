@@ -30,9 +30,9 @@ import java.util.function.Consumer;
  * MatsFactory's side, no matter if it is e.g. a "terminator" (queue-based) or "subscriptionTerminator" (topic-based).
  * <p/>
  * Note: This is the "monitor the queues" part of the MatsBrokerMonitor. The "browse the queues and actions on messages"
- * part is found in {@link MatsBrokerBrowseAndActions}. The reason for this separation of the API is that the pieces
- * defined in this piece are not part of a standard JMS API and must be implemented specifically for each broker, while
- * the "control" part can be implemented using standard JMS API.
+ * part is found in {@link MatsBrokerBrowseAndActions}. The reason for this separation of the API is that the
+ * functionality defined in this part must be implemented specifically for each broker (the JMS API does not have
+ * functions for it), while the "browse and control" part can be implemented using the standard JMS API.
  *
  * @see UpdateEvent for more information about how the information is presented and updated.
  * @see MatsBrokerBrowseAndActions for the API to browse and act upon the messages on the destinations.
@@ -226,7 +226,7 @@ public interface MatsBrokerMonitor extends Closeable {
              * <b>Note: There is only one "Muted" DLQ, even though there could potentially be two DLQs
              * ({@link #DEAD_LETTER_QUEUE} and {@link #DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE}).
              */
-            MUTED_DEAD_LETTER_QUEUE(true, "matssys.MUTED_DLQ."),
+            DEAD_LETTER_QUEUE_MUTED(true, "matssys.MUTED_DLQ."),
 
             /**
              * <i>Wiretap</i> Mats destination, e.g.
@@ -443,7 +443,7 @@ public interface MatsBrokerMonitor extends Closeable {
         private boolean dlq;
         private boolean gdlq;
         private Optional<String> msid;
-        private Optional<String> mdt; // Use String for serialization, as we might have an older client missing enums.
+        private Optional<String> sdt; // Use String for serialization, as we might have an older client missing enums.
         private long noqm;
         private OptionalLong noifm;
         private OptionalLong age;
@@ -465,7 +465,7 @@ public interface MatsBrokerMonitor extends Closeable {
             dlq = matsBrokerDestination.isDlq();
             gdlq = matsBrokerDestination.isBrokerDefaultGlobalDlq();
             msid = matsBrokerDestination.getMatsStageId();
-            mdt = matsBrokerDestination.getStageDestinationType().map(Enum::name);
+            sdt = matsBrokerDestination.getStageDestinationType().map(Enum::name);
             noqm = matsBrokerDestination.getNumberOfQueuedMessages();
             noifm = matsBrokerDestination.getNumberOfInflightMessages();
             age = matsBrokerDestination.getHeadMessageAgeMillis();
@@ -514,13 +514,13 @@ public interface MatsBrokerMonitor extends Closeable {
         @Override
         public Optional<StageDestinationType> getStageDestinationType() {
             // ?: Is it empty?
-            if (mdt.isEmpty()) {
+            if (sdt.isEmpty()) {
                 // -> Yes, it is empty, return empty.
                 return Optional.empty();
             }
             // Handle unknown types if this is deserialized from a DTO and the client is not updated.
             try {
-                return Optional.of(StageDestinationType.valueOf(mdt.get()));
+                return Optional.of(StageDestinationType.valueOf(sdt.get()));
             }
             catch (IllegalArgumentException e) {
                 // If the enum is unknown, we return the UNKNOWN type.
@@ -552,6 +552,7 @@ public interface MatsBrokerMonitor extends Closeable {
                     ", destinationName='" + dn + '\'' +
                     ", matsStageId='" + msid + '\'' +
                     ", destinationType=" + dt +
+                    ", stageDestinationType=" + sdt +
                     ", isDlq=" + dlq +
                     ", isGlobalDlq=" + gdlq +
                     ", numberOfQueuedMessages=" + noqm +

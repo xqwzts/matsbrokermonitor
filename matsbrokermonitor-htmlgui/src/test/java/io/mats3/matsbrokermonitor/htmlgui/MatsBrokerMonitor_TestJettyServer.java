@@ -422,7 +422,8 @@ public class MatsBrokerMonitor_TestJettyServer {
                 Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
                 MessageProducer producer = session.createProducer(null); // Generic producer
 
-                Consumer<String> sendToDLQ = dlqName -> {
+                Consumer<String> sendToQueue = dlqName -> {
+                    out.println("Sending to [" + dlqName + "]." + "\n");
                     try {
                         Queue dlq = session.createQueue(dlqName);
                         Message message = session.createMessage();
@@ -433,31 +434,59 @@ public class MatsBrokerMonitor_TestJettyServer {
                     }
                 };
 
-                sendToDLQ.accept("ActiveMQ.DLQ");
-                sendToDLQ.accept("DLQ");
-                sendToDLQ.accept("TestQueue.RandomQueue");
-                sendToDLQ.accept("DLQ.TestQueue.RandomQueue");
+                // ::: SEND TEST MESSAGES TO CHECK HANDLING
 
-                // :: Types of queues
-                // Standard
-                sendToDLQ.accept(MATS_DESTINATION_PREFIX
-                        + StageDestinationType.STANDARD.getMidfix() + "FakeMatsEndpoint.someMethod");
-                sendToDLQ.accept("DLQ." + MATS_DESTINATION_PREFIX
-                        + StageDestinationType.DEAD_LETTER_QUEUE.getMidfix() + "FakeMatsEndpoint.someMethod");
-                sendToDLQ.accept("DLQ." + MATS_DESTINATION_PREFIX
-                        + StageDestinationType.MUTED_DEAD_LETTER_QUEUE.getMidfix() + "FakeMatsEndpoint.someMethod");
+                // :: The ActiveMQ Global DLQ (handled specially)
+                sendToQueue.accept("ActiveMQ.DLQ");
 
-                // Non-persistent Interactive
-                sendToDLQ.accept(MATS_DESTINATION_PREFIX
-                        + StageDestinationType.NON_PERSISTENT_INTERACTIVE.getMidfix() + "FakeMatsEndpoint.someMethod");
-                sendToDLQ.accept("DLQ." + MATS_DESTINATION_PREFIX
+                // :: A few non-Mats3 queues, to check handling of such
+                sendToQueue.accept("DLQ");
+                sendToQueue.accept("TestQueue.RandomQueue");
+                sendToQueue.accept("DLQ.TestQueue.RandomQueue");
+
+                // :: Send to a Fake endpoint (so that they are not consumed), on Standard and DLQ
+                sendToQueue.accept(MATS_DESTINATION_PREFIX
+                        + StageDestinationType.STANDARD.getMidfix()
+                        + "FakeMatsEndpoint.someMethodWithoutConsumers");
+                sendToQueue.accept("DLQ." + MATS_DESTINATION_PREFIX
+                        + StageDestinationType.DEAD_LETTER_QUEUE.getMidfix()
+                        + "FakeMatsEndpoint.someMethodWithoutConsumers");
+
+                // :: Send to another Fake endpoint (so that they are not consumed), on DLQ only.
+                sendToQueue.accept("DLQ." + MATS_DESTINATION_PREFIX
+                        + StageDestinationType.DEAD_LETTER_QUEUE.getMidfix()
+                        + "FakeMatsEndpoint.methodWithJustDLQ");
+
+                // :: ALL The different types of StageDestinationTypes for a fake Endpoint (i.e. no consumers there)
+                // .. Standard
+                sendToQueue.accept(MATS_DESTINATION_PREFIX
+                        + StageDestinationType.STANDARD.getMidfix()
+                        + "FakeMatsEndpoint.someMethodWithAllQueues");
+                sendToQueue.accept("DLQ." + MATS_DESTINATION_PREFIX
+                        + StageDestinationType.DEAD_LETTER_QUEUE.getMidfix()
+                        + "FakeMatsEndpoint.someMethodWithAllQueues");
+                sendToQueue.accept("DLQ." + MATS_DESTINATION_PREFIX
+                        + StageDestinationType.DEAD_LETTER_QUEUE_MUTED.getMidfix()
+                        + "FakeMatsEndpoint.someMethodWithAllQueues");
+
+                // .. Non-persistent Interactive
+                sendToQueue.accept(MATS_DESTINATION_PREFIX
+                        + StageDestinationType.NON_PERSISTENT_INTERACTIVE.getMidfix()
+                        + "FakeMatsEndpoint.someMethodWithAllQueues");
+                sendToQueue.accept("DLQ." + MATS_DESTINATION_PREFIX
                         + StageDestinationType.DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE.getMidfix()
-                        + "FakeMatsEndpoint.someMethod");
+                        + "FakeMatsEndpoint.someMethodWithAllQueues");
                 // !NOTE! Using same MUTED as normal.
 
-                // Wiretap
-                sendToDLQ.accept(MATS_DESTINATION_PREFIX
-                        + StageDestinationType.WIRETAP.getMidfix() + "FakeMatsEndpoint.someMethod");
+                // .. Wiretap
+                sendToQueue.accept(MATS_DESTINATION_PREFIX
+                        + StageDestinationType.WIRETAP.getMidfix() + "FakeMatsEndpoint.someMethodWithAllQueues");
+
+                // .. Add one more stage, to check visual appearance when shrunk window
+                sendToQueue.accept(MATS_DESTINATION_PREFIX
+                        + StageDestinationType.STANDARD.getMidfix()
+                        + "FakeMatsEndpoint.someMethodWithAllQueues.stage1");
+
 
                 connection.close();
             }

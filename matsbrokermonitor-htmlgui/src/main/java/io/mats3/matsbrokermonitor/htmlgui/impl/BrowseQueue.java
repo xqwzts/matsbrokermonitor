@@ -1,5 +1,9 @@
 package io.mats3.matsbrokermonitor.htmlgui.impl;
 
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.STANDARD;
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.UNKNOWN;
+import static io.mats3.matsbrokermonitor.htmlgui.impl.BrokerOverview.out_queueCount;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -8,6 +12,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.SortedMap;
 import java.util.stream.Collectors;
 
@@ -21,6 +26,9 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessa
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerSnapshot;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType;
+import io.mats3.matsbrokermonitor.api.MatsFabricAggregatedRepresentation;
+import io.mats3.matsbrokermonitor.api.MatsFabricAggregatedRepresentation.MatsStageBrokerRepresentation;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.BrowseQueueTableAddition;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.MonitorAddition;
@@ -42,17 +50,22 @@ class BrowseQueue {
 
         out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview [Esc]</a><br>\n");
 
-        Collection<MatsBrokerDestination> values = matsBrokerMonitor.getSnapshot()
+        Collection<MatsBrokerDestination> matsBrokerDestinations = matsBrokerMonitor.getSnapshot()
                 .map(BrokerSnapshot::getMatsDestinations)
                 .map(SortedMap::values)
                 .orElseGet(Collections::emptySet);
 
         MatsBrokerDestination matsBrokerDestination = null;
-        for (MatsBrokerDestination dest : values) {
-            if ((dest.getDestinationType() == MatsBrokerDestination.DestinationType.QUEUE) && queueId.equals(dest.getDestinationName())) {
+        for (MatsBrokerDestination dest : matsBrokerDestinations) {
+            if ((dest.getDestinationType() == MatsBrokerDestination.DestinationType.QUEUE) && queueId.equals(dest
+                    .getDestinationName())) {
                 matsBrokerDestination = dest;
             }
         }
+
+        // "Stack up" into a Mats Fabric representation
+        MatsFabricAggregatedRepresentation stack = MatsFabricAggregatedRepresentation
+                .stack(matsBrokerDestinations);
 
         // :: HANDLING MISSING DESTINATION
 
@@ -85,15 +98,41 @@ class BrowseQueue {
             // ?: Is this a MatsStage Queue or DLQ?
             if (matsBrokerDestination.getMatsStageId().isPresent()) {
                 // -> Mats stage queue.
-                out.html("<h1>Browsing ");
-                out.DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Incoming Queue");
-                out.html(" for <div class='matsbm_stageid'>")
+                String typeName;
+                switch (matsBrokerDestination.getStageDestinationType().orElse(UNKNOWN)) {
+                    case STANDARD:
+                        typeName = "Standard Incoming Queue";
+                        break;
+                    case NON_PERSISTENT_INTERACTIVE:
+                        typeName = "Non-Persistent Interactive Queue";
+                        break;
+                    case DEAD_LETTER_QUEUE:
+                        typeName = "DLQ";
+                        break;
+                    case DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE:
+                        typeName = "Non-Persistent Interactive DLQ";
+                        break;
+                    case DEAD_LETTER_QUEUE_MUTED:
+                        typeName = "Muted DLQ";
+                        break;
+                    case WIRETAP:
+                        typeName = "Wiretap Queue";
+                        break;
+                    default:
+                        typeName = "Unknown Type Queue";
+                        break;
+                }
+
+                out.html("<h1>Browsing <i>");
+                out.DATA(typeName);
+                out.html("</i> for <div class='matsbm_stageid'>")
                         .DATA(matsBrokerDestination.getMatsStageId().get()).html("</div></h1>");
             }
             else {
                 // -> Non-Mats Queue. Not really supported, but just to handle it.
-                out.html("<h1>Browsing ").DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Queue");
-                out.html(" named ").DATA(matsBrokerDestination.getDestinationName()).html("</h1>");
+                out.html("<h1>Browsing <i>non-" + Statics.MATS3_HTML + " ")
+                        .DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Queue ");
+                out.html("</i> named ").DATA(matsBrokerDestination.getDestinationName()).html("</h1>");
             }
         }
         out.html("<br/>Fully Qualified Queue Name: <code><b>").DATA(matsBrokerDestination.getFqDestinationName())
@@ -113,6 +152,49 @@ class BrowseQueue {
                     .html(")");
         }
         out.html("<br>\n");
+
+        Optional<MatsStageBrokerRepresentation> stageO = stack.findStageForDestinationName(matsBrokerDestination
+                .getDestinationName());
+
+        if (stageO.isPresent()) {
+            out.html("<div class='matsbm_other_queues_for_stage'>");
+            MatsStageBrokerRepresentation stage = stageO.get();
+            Optional<MatsBrokerDestination> incomingDest = stage.getDestination(STANDARD);
+            if (incomingDest.isPresent()) {
+                out_queueCount(out, incomingDest.get(), true);
+            }
+
+            Optional<MatsBrokerDestination> npiaDest = stage.getDestination(
+                    StageDestinationType.NON_PERSISTENT_INTERACTIVE);
+            if (npiaDest.isPresent()) {
+                out_queueCount(out, npiaDest.get(), true);
+            }
+
+            Optional<MatsBrokerDestination> dlqDest = stage.getDestination(
+                    StageDestinationType.DEAD_LETTER_QUEUE);
+            if (dlqDest.isPresent()) {
+                out_queueCount(out, dlqDest.get(), true);
+            }
+
+            Optional<MatsBrokerDestination> npiaDlqDest = stage.getDestination(
+                    StageDestinationType.DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE);
+            if (npiaDlqDest.isPresent()) {
+                out_queueCount(out, npiaDlqDest.get(), true);
+            }
+
+            Optional<MatsBrokerDestination> mutedDlqDest = stage.getDestination(
+                    StageDestinationType.DEAD_LETTER_QUEUE_MUTED);
+            if (mutedDlqDest.isPresent()) {
+                out_queueCount(out, mutedDlqDest.get(), true);
+            }
+
+            Optional<MatsBrokerDestination> wiretapDest = stage.getDestination(
+                    StageDestinationType.WIRETAP);
+            if (wiretapDest.isPresent()) {
+                out_queueCount(out, wiretapDest.get(), true);
+            }
+            out.html("</div>");
+        }
 
         // :: BUTTONS: REISSUE, DELETE, FORCE UPDATE
 
