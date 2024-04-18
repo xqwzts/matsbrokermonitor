@@ -14,7 +14,7 @@ allprojects {
 
 // Versions for all libraries used throughout the subprojects
 ext {
-    matsVersion = '0.19.15-2024-04-05'
+    matsVersion = '0.19.17-2024-04-16'
 
     slf4jVersion = '2.0.12' // Only CompileOnly
     jmsApiDependency = 'jakarta.jms:jakarta.jms-api:2.0.3' // Following Mats3's lead. Only CompileOnly.
