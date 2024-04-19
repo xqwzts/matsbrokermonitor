@@ -21,11 +21,11 @@ ext {
     jacksonVersion = '2.17.0'
 
     // === For testing
-    activeMqVersion = '5.18.3'
+    activeMqVersion = '5.18.4'
     artemisMqVersion = '2.33.0'
-    springVersion = '5.3.33' // Spring 6 depends on Java 17 and Jakarta EE 9+
+    springVersion = '5.3.34' // Spring 6 depends on Java 17 and Jakarta EE 9+
     junitVersion = '4.13.2'
-    logbackVersion = '1.5.3'
+    logbackVersion = '1.5.5'
     jettyVersion = '9.4.54.v20240208'
 }
 
