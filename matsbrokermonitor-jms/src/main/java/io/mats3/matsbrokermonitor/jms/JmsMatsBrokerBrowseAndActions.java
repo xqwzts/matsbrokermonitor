@@ -781,7 +781,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         private final String _initiatingApp;
         private final String _initiatorId;
         private final String _toStageId;
-        private final Optional<Boolean> _isAudit;
+        private final Boolean _isAudit; // Nullable
 
         private final boolean _persistent;
         private final boolean _interactive;
@@ -826,17 +826,15 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             _initiatorId = message.getStringProperty(JMS_MSG_PROP_INITIATOR_ID);
             _toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
             _isAudit = message.propertyExists(JMS_MSG_PROP_AUDIT)
-                    ? Optional.of(message.getBooleanProperty(JMS_MSG_PROP_AUDIT))
-                    : Optional.empty();
+                    ? message.getBooleanProperty(JMS_MSG_PROP_AUDIT)
+                    : null;
 
             _persistent = message.getJMSDeliveryMode() == DeliveryMode.PERSISTENT;
             _interactive = message.getJMSPriority() > 4; // Mats-JMS uses 9 for "interactive"
             _expirationTimestamp = message.getJMSExpiration();
 
             // :: If DLQed message
-            _dlq_ExceptionStacktrace = message.propertyExists(JMS_MSG_PROP_DLQ_EXCEPTION)
-                    ? message.getStringProperty(JMS_MSG_PROP_DLQ_EXCEPTION)
-                    : null;
+            _dlq_ExceptionStacktrace = message.getStringProperty(JMS_MSG_PROP_DLQ_EXCEPTION);
             _dlq_MessageRefused = message.propertyExists(JMS_MSG_PROP_DLQ_REFUSED)
                     ? message.getBooleanProperty(JMS_MSG_PROP_DLQ_REFUSED)
                     : null;
@@ -846,15 +844,9 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             _dlq_DlqCount = message.propertyExists(JMS_MSG_PROP_DLQ_DLQ_COUNT)
                     ? message.getIntProperty(JMS_MSG_PROP_DLQ_DLQ_COUNT)
                     : null;
-            _dlq_StageOrigin = message.propertyExists(JMS_MSG_PROP_DLQ_STAGE_ORIGIN)
-                    ? message.getStringProperty(JMS_MSG_PROP_DLQ_STAGE_ORIGIN)
-                    : null;
-            _dlq_AppVersionAndNode = message.propertyExists(JMS_MSG_PROP_DLQ_APP_VERSION_AND_HOST)
-                    ? message.getStringProperty(JMS_MSG_PROP_DLQ_APP_VERSION_AND_HOST)
-                    : null;
-            _dlq_LastReissuedUsername = message.propertyExists(JMS_MSG_PROP_REISSUE_USERNAME)
-                    ? message.getStringProperty(JMS_MSG_PROP_REISSUE_USERNAME)
-                    : null;
+            _dlq_StageOrigin = message.getStringProperty(JMS_MSG_PROP_DLQ_STAGE_ORIGIN);
+            _dlq_AppVersionAndNode = message.getStringProperty(JMS_MSG_PROP_DLQ_APP_VERSION_AND_HOST);
+            _dlq_LastReissuedUsername = message.getStringProperty(JMS_MSG_PROP_REISSUE_USERNAME);
 
             // Handle MatsTrace
             byte[] matsTraceBytes = null;
@@ -922,7 +914,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
 
         @Override
         public Optional<Boolean> isAudit() {
-            return _isAudit;
+            return Optional.ofNullable(_isAudit);
         }
 
         @Override
