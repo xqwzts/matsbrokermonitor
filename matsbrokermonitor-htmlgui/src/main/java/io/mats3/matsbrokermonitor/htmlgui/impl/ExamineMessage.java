@@ -376,7 +376,7 @@ public class ExamineMessage {
 
         out.html("<tr>");
         out.html("<td>Type</td>");
-        out.html("<td>").DATA(brokerMsg.getMessageType()).html("</td>");
+        out.html("<td>").DATA(brokerMsg.getDispatchType()).html(" / ").DATA(brokerMsg.getMessageType()).html("</td>");
         out.html("</tr>\n");
 
         if (matsTrace != null) {
@@ -472,8 +472,8 @@ public class ExamineMessage {
         out.html("<tr>");
         out.html("<td>MsgSys Expires</td>");
         out.html("<td>").DATA(brokerMsg.getExpirationTimestamp() == 0
-                ? "Never expires"
-                : Statics.formatTimestampSpan(brokerMsg.getExpirationTimestamp()))
+                        ? "Never expires"
+                        : Statics.formatTimestampSpan(brokerMsg.getExpirationTimestamp()))
                 .html("</td>");
         out.html("</tr>");
 

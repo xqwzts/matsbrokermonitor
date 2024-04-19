@@ -1,5 +1,7 @@
 package io.mats3.matsbrokermonitor.htmlgui;
 
+import static io.mats3.matsbrokermonitor.htmlgui.SetupTestMatsEndpoints.SUBSCRIPTION_TERMINATOR;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URL;
@@ -385,7 +387,7 @@ public class MatsBrokerMonitor_TestJettyServer {
                                 .request(dto, new StateTO(1, 2));
                     });
 
-            // :: Send a message to a non-existent endpoint, to have an endpoint with a non-consumed message
+            // :: Send a message to a non-existent endpoint, to have an endpoint with a non-consumed message.
             matsFactory.getDefaultInitiator().initiateUnchecked(
                     (msg) -> {
                         msg.traceId(MatsTestHelp.traceId() + "_nonExistentEndpoint")
@@ -398,6 +400,7 @@ public class MatsBrokerMonitor_TestJettyServer {
                                 .send(dto, new StateTO(1, 2));
                     });
 
+            // :: Send a message to non-existend endpoint, but with a long state text.
             matsFactory.getDefaultInitiator().initiateUnchecked(
                     (msg) -> {
                         StateTO initialTargetSto = new StateTO(1, 2);
@@ -412,6 +415,35 @@ public class MatsBrokerMonitor_TestJettyServer {
                                 .to(SERVICE + ".NonExistentService.nonExistentMethod")
                                 .send(dto, initialTargetSto);
                     });
+
+            // :: Send a message to a SubscriptionTerminator that will throw.
+            matsFactory.getDefaultInitiator().initiateUnchecked(
+                    (msg) -> {
+                        StateTO initialTargetSto = new StateTO(1, 2);
+                        initialTargetSto.text = "Just some text";
+                        msg.traceId(MatsTestHelp.traceId() + "_SubscriptionThatShouldThrow")
+                                .keepTrace(KeepTrace.FULL)
+                                .from("/sendRequestInitiated")
+                                .setTraceProperty(SetupTestMatsEndpoints.THROW, true)
+                                .to(SERVICE_1 + SUBSCRIPTION_TERMINATOR)
+                                .publish(dto, initialTargetSto);
+                    });
+
+            // :: Send a message to a Leaf with replyToSubscription, which will throw.
+            matsFactory.getDefaultInitiator().initiateUnchecked(
+                    (msg) -> {
+                        StateTO initialTargetSto = new StateTO(1, 2);
+                        initialTargetSto.text = "Just some text";
+                        msg.traceId(MatsTestHelp.traceId() + "_ReplyToSubscriptionThatShouldThrow")
+                                .keepTrace(KeepTrace.FULL)
+                                .from("/sendRequestInitiated")
+                                .setTraceProperty(SetupTestMatsEndpoints.THROW, true)
+                                .to(SERVICE_1 + SetupTestMatsEndpoints.SERVICE_LEAF)
+                                .replyToSubscription(SERVICE_1 + SUBSCRIPTION_TERMINATOR, new StateTO(1, 2))
+                                .request(dto, initialTargetSto);
+                    });
+
+
 
             // :: Send a message to the ActiveMQ and Artemis Global DLQs
             // Get JMS ConnectionFactory from ServletContext

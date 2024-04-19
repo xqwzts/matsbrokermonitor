@@ -76,7 +76,21 @@ public class SetupTestMatsEndpoints {
 
             // Check if we are directed to throw!
             if (context.getTraceProperty(THROW, Boolean.class) == Boolean.TRUE) {
-                throw new RuntimeException("Throwing as directed by TraceProperty!");
+                throw new RuntimeException("Throwing as directed by TraceProperty! THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: ");
             }
 
             // Use the 'multiplier' in the request to formulate the reply.. I.e. multiply the number..!
@@ -162,6 +176,10 @@ public class SetupTestMatsEndpoints {
     public static void setupSubscriptionTerminator(String servicePrefix, MatsFactory matsFactory) {
         matsFactory.subscriptionTerminator(servicePrefix + SUBSCRIPTION_TERMINATOR, StateTO.class, DataTO.class,
                 (context, sto, dto) -> {
+                    // Check if we are directed to throw!
+                    if (context.getTraceProperty(THROW, Boolean.class) == Boolean.TRUE) {
+                        throw new RuntimeException("Throwing as directed by TraceProperty!");
+                    }
                 });
     }
 

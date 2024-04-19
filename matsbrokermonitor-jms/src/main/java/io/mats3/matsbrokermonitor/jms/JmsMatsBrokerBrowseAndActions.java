@@ -12,6 +12,7 @@ import java.util.Optional;
 import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
 import javax.jms.DeliveryMode;
+import javax.jms.Destination;
 import javax.jms.JMSException;
 import javax.jms.MapMessage;
 import javax.jms.Message;
@@ -395,14 +396,14 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             MessageProducer genericProducer, Queue dlq, long nanosTaken_Receive,
             Map<String, MatsBrokerMessageMetadata> reissuedMessagesMap) throws JMSException {
         try {
-            String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
-            String matsMessageId = message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID);
-            String toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
             String messageSystemId = message.getJMSMessageID();
+            String matsMessageId = message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID);
+            String traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
+            String toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
             MDC.put(MDC_MATS_MESSAGE_SYSTEM_ID, messageSystemId);
-            MDC.put(MDC_MATS_STAGE_ID, toStageId);
-            MDC.put(MDC_TRACE_ID, traceId);
             MDC.put(MDC_MATS_MESSAGE_ID, matsMessageId);
+            MDC.put(MDC_TRACE_ID, traceId);
+            MDC.put(MDC_MATS_STAGE_ID, toStageId);
 
             // :: Modify the message to be reissued
             // JMS have this strange thing where a received message is has read-only properties.
@@ -435,20 +436,35 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             // ?: Do we know which endpoint/queue it originally should go to?
             if (toStageId != null) {
                 // -> Yes, we know which queue it originally came from!
-                String toQueueName = _matsDestinationPrefix + toStageId;
-                Queue toQueue = session.createQueue(toQueueName);
+
+                // Originally on Queue or Topic?
+                String messageType = message.getStringProperty(JMS_MSG_PROP_MESSAGE_TYPE);
+                // TODO: Delete this in 2025 ASAP.
+                if (messageType == null) {
+                    log.error("Message lacks JmsMats JMS StringProperty [" + JMS_MSG_PROP_MESSAGE_TYPE + "], so don't"
+                            + " know if it was originally destined for a Queue or a Topic. Message System ID: ["
+                            + messageSystemId + "]");
+                }
+
+                boolean isTopic = "PUBLISH".equals(messageType) || "REPLY_SUBSCRIPTION".equals(messageType);
+                MDC.put(MDC_MATS_DESTINATION_TYPE, isTopic ? "Topic" : "Queue");
+
+                String toDestinationName = _matsDestinationPrefix + toStageId;
+                Destination toDestination = isTopic
+                        ? session.createTopic(toDestinationName)
+                        : session.createQueue(toDestinationName);
 
                 // Send it ..
                 long nanosAtStart_Send = System.nanoTime();
-                genericProducer.send(toQueue, message);
+                genericProducer.send(toDestination, message);
                 long nanosTaken_Send = System.nanoTime() - nanosAtStart_Send;
 
                 // .. afterwards it has the new JMS Message ID.
                 String reissuedMsgSysId = message.getJMSMessageID();
                 MDC.put(MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID, reissuedMsgSysId);
 
-                log.info("REISSUE MESSAGE: Received and reissued message from dlq [" + dlq
-                        + "] to [" + toQueue + "]! Original MsgSysId: [" + messageSystemId
+                log.info("REISSUE MESSAGE: Reissued message to:[" + toDestination + "]"
+                        + " from dlq:[" + dlq + "]! Original MsgSysId: [" + messageSystemId
                         + "], New MsgSysId: [" + reissuedMsgSysId + "], Message TraceId: [" + traceId + "]"
                         + " - message receive: " + ms(nanosTaken_Receive)
                         + " - producer.send(): " + ms(nanosTaken_Send));
@@ -489,6 +505,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             MDC.remove(MDC_MATS_STAGE_ID);
             MDC.remove(MDC_TRACE_ID);
             MDC.remove(MDC_MATS_MESSAGE_ID);
+            MDC.remove(MDC_MATS_DESTINATION_TYPE);
             MDC.remove(MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID);
         }
     }
@@ -754,14 +771,18 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
     private static class JmsMatsBrokerMessageRepresentationImpl implements MatsBrokerMessageRepresentation {
         private final Message _jmsMessage;
         private final String _messageSystemId;
-        private final String _matsMessageId;
         private final long _timestamp;
+
         private final String _traceId;
+        private final String _matsMessageId;
         private final String _messageType;
+        private final String _dispatchType;
         private final String _fromStageId;
         private final String _initiatingApp;
         private final String _initiatorId;
         private final String _toStageId;
+        private final Optional<Boolean> _isAudit;
+
         private final boolean _persistent;
         private final boolean _interactive;
         private final long _expirationTimestamp;
@@ -794,15 +815,20 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             _jmsMessage = message;
 
             _messageSystemId = message.getJMSMessageID();
-            _matsMessageId = message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID);
             _timestamp = message.getJMSTimestamp();
+
             _traceId = message.getStringProperty(JMS_MSG_PROP_TRACE_ID);
+            _matsMessageId = message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID);
+            _dispatchType = message.getStringProperty(JMS_MSG_PROP_DISPATCH_TYPE);
             _messageType = message.getStringProperty(JMS_MSG_PROP_MESSAGE_TYPE);
             _fromStageId = message.getStringProperty(JMS_MSG_PROP_FROM);
             _initiatingApp = message.getStringProperty(JMS_MSG_PROP_INITIATING_APP);
             _initiatorId = message.getStringProperty(JMS_MSG_PROP_INITIATOR_ID);
-            // Relevant for Global DLQ, where the original id is now effectively lost
             _toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
+            _isAudit = message.propertyExists(JMS_MSG_PROP_AUDIT)
+                    ? Optional.of(message.getBooleanProperty(JMS_MSG_PROP_AUDIT))
+                    : Optional.empty();
+
             _persistent = message.getJMSDeliveryMode() == DeliveryMode.PERSISTENT;
             _interactive = message.getJMSPriority() > 4; // Mats-JMS uses 9 for "interactive"
             _expirationTimestamp = message.getJMSExpiration();
@@ -870,6 +896,11 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         }
 
         @Override
+        public String getDispatchType() {
+            return _dispatchType;
+        }
+
+        @Override
         public String getFromStageId() {
             return _fromStageId;
         }
@@ -887,6 +918,11 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         @Override
         public String getToStageId() {
             return _toStageId;
+        }
+
+        @Override
+        public Optional<Boolean> isAudit() {
+            return _isAudit;
         }
 
         @Override

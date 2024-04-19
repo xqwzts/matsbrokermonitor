@@ -17,6 +17,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType;
 
@@ -297,6 +300,7 @@ public interface MatsFabricAggregatedRepresentation {
      * @author Endre Stølsvik 2022-01-09 00:23 - http://stolsvik.com/, endre@stolsvik.com
      */
     final class MatsFabricAggregatorImpl {
+        private static final Logger log = LoggerFactory.getLogger(MatsFabricAggregatorImpl.class);
 
         private MatsFabricAggregatorImpl() {
             /* hide constructor */
@@ -360,9 +364,30 @@ public interface MatsFabricAggregatedRepresentation {
                             + "] did not have a StageDestinationType while it had a StageId [" + stageId + "]");
                 }
 
+                StageDestinationType stageDestinationType = matsBrokerDestination.getStageDestinationType().get();
+
+                // :: Add a hack here to handle the case where both a queue and a topic have the same name!
+                // (This is not allowed in Mats, but brokers allows it, so it can happen due to a bug: This was caught
+                // when the code for reissue from a DLQ for a SubscriptionTerminator (Topic) didn't take into account
+                // that the original destination was a Topic, and thus sent it to a same-named Queue instead.)
+                // ?: Is there already a destination for this StageDestinationType/StageId?
+                if (matsStageBrokerRepresentation._destinations.containsKey(stageDestinationType)) {
+                    // -> Yes, there is already a destination for this StageDestinationType.
+                    // Add it to the "remaining destinations" list, and continue.
+                    remainingDestinations.add(matsBrokerDestination);
+                    log.error("Found two destinations for same StageDestinationType/StageId [" + stageDestinationType
+                            + "/" + stageId + "] (probably both queue and topic) - added this one to the 'remaining'"
+                            + " section. THIS IS NOT ALLOWED IN MATS3, SO IT SHOULD NEVER HAPPEN!"
+                            + " This: [" + matsBrokerDestination.getFqDestinationName()
+                            + "], Existing: [" + matsStageBrokerRepresentation._destinations.get(stageDestinationType)
+                                    .getFqDestinationName() + "]");
+                    // Continue with the next MatsBrokerDestination.
+                    continue;
+                }
+
                 // Add the MatsBrokerDestination to the Stage, keyed by the StageDestinationType.
                 matsStageBrokerRepresentation._destinations
-                        .put(matsBrokerDestination.getStageDestinationType().get(), matsBrokerDestination);
+                        .put(stageDestinationType, matsBrokerDestination);
             }
 
             // :: Stack endpoints up into "EndpointGroups"

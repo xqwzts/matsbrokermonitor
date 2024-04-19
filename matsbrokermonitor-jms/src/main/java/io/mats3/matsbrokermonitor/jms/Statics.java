@@ -19,6 +19,7 @@ public interface Statics {
     String MDC_MATS_MESSAGE_SYSTEM_ID = "mats.MsgSysId";
     String MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID = "mats.ReissuedMsgSysId";
     String MDC_MATS_MESSAGE_ID = "mats.MatsMsgId";
+    String MDC_MATS_DESTINATION_TYPE = "mats.DestinationType";
 
     // .. the following are copied from JmsMatsFactory
 

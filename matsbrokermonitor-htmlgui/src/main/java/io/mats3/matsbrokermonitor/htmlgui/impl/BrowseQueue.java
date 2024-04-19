@@ -370,8 +370,10 @@ class BrowseQueue {
                 out.DATA(msgRepr.getInitiatorId() != null ? msgRepr.getInitiatorId() : "{missing init id}");
                 out.html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(msgRepr.getMessageType())
-                        .html(" from</div></td>");
+                String dispatchType = msgRepr.getDispatchType() != null ? msgRepr.getDispatchType() : "{missing type}";
+                String messageType = msgRepr.getMessageType() != null ? msgRepr.getMessageType() : "{missing}";
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(dispatchType).html(" / ")
+                        .DATA(messageType.replace("SUBSCRIPTION", "SUB")).html(" from</div></td>");
 
                 out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(msgRepr.getFromStageId())
                         .html("</div></td>");

@@ -230,6 +230,8 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
 
         String getMessageType();
 
+        String getDispatchType();
+
         String getFromStageId();
 
         String getInitiatingApp();
@@ -241,6 +243,8 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
          *         otherwise the original queue name is lost.
          */
         String getToStageId();
+
+        Optional<Boolean> isAudit();
 
         boolean isPersistent();
 
