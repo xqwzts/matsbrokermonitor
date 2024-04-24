@@ -204,7 +204,7 @@ public interface MatsBrokerMonitor extends Closeable {
              * fast as possible. The guaranteed delivery aspect is thus out the window, but since the messages are
              * marked as non-persistent anyway, this is not a problem.
              */
-            NON_PERSISTENT_INTERACTIVE(false, "matssys.NPIA."),
+            NON_PERSISTENT_INTERACTIVE(false, "matssys.NPIA.", "Non-Persistent Interactive Queue"),
 
             /**
              * <i>Dead Letter Queue for a Non-Persistent Interactive</i> Mats destination, e.g.
@@ -215,7 +215,7 @@ public interface MatsBrokerMonitor extends Closeable {
              * DLQ handling, which typically is to prefix the existing queue name by "DLQ.". Thus, we will have to
              * handle this DLQ too.
              */
-            DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE(true, "matssys.NPIA."),
+            DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE(true, "matssys.NPIA.", "Non-Persistent Interactive DLQ"),
 
             /**
              * <i>"Muted" Dead Letter Queue</i> for a standard Mats destination, e.g.
@@ -226,7 +226,7 @@ public interface MatsBrokerMonitor extends Closeable {
              * <b>Note: There is only one "Muted" DLQ, even though there could potentially be two DLQs
              * ({@link #DEAD_LETTER_QUEUE} and {@link #DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE}).
              */
-            DEAD_LETTER_QUEUE_MUTED(true, "matssys.MUTED_DLQ."),
+            DEAD_LETTER_QUEUE_MUTED(true, "matssys.MUTED_DLQ.", "Muted DLQ"),
 
             /**
              * <i>Wiretap</i> Mats destination, e.g.
@@ -234,33 +234,35 @@ public interface MatsBrokerMonitor extends Closeable {
              * configure a MatsFactory to produce a copy of all messages sent to a specific Mats Stage and put this copy
              * on the corresponding Wiretap destination. This is useful for debugging.
              */
-            WIRETAP(false, "matssys.WIRETAP."),
+            WIRETAP(false, "matssys.WIRETAP.", "Wiretap Queue"),
 
             /**
              * <i>Standard</i> Mats destination, e.g. "[matsQueuePrefix]ExampleService.someMethod.stage2" - this is
              * where the ordinary Mats Stage processors are consuming from.
              */
-            STANDARD(false, ""),
+            STANDARD(false, "", "Standard Incoming Queue"),
 
             /**
              * <i>Dead Letter Queue</i> for a {@link #STANDARD standard Mats destination}, e.g.
              * "DLQ.[matsQueuePrefix]ExampleService.someMethod.stage2".
              */
-            DEAD_LETTER_QUEUE(true, ""),
+            DEAD_LETTER_QUEUE(true, "", "DLQ"),
 
             /**
              * Of unknown type - this will never be utilized from the MatsBrokerMonitor. This is to protect against
              * serialization errors on the receiving side if the enum is later extended and the client isn't updated
              * when receiving an update event - we use String as the serialization format.
              */
-            UNKNOWN(false, "");
+            UNKNOWN(false, "", "Unknown Type Queue");
 
             private final boolean _dlq;
             private final String _midfix;
+            private final String _typeName;
 
-            StageDestinationType(boolean dlq, String midfix) {
+            StageDestinationType(boolean dlq, String midfix, String typeName) {
                 _dlq = dlq;
                 _midfix = midfix;
+                _typeName = typeName;
             }
 
             public boolean isDlq() {
@@ -269,6 +271,10 @@ public interface MatsBrokerMonitor extends Closeable {
 
             public String getMidfix() {
                 return _midfix;
+            }
+
+            public String getTypeName() {
+                return _typeName;
             }
         }
 

@@ -106,6 +106,12 @@
     transition: background-color 0.7s, color 0.7s, transform 0.7s, padding 0.7s, margin 0.7s, max-width 0.7s
 }
 
+.matsbm_button_mute {
+    background-color: #f4b136;
+    transform: scale(1);
+    transition: background-color 0.7s, color 0.7s, transform 0.7s, padding 0.7s, margin 0.7s, max-width 0.7s
+}
+
 .matsbm_button_delete {
     background-color: #f44336;
     transform: scale(1);
@@ -118,7 +124,7 @@
     transition: background-color 0.7s, color 0.7s, transform 0.7s, padding 0.7s, margin 0.7s, max-width 0.7s
 }
 
-.matsbm_button_delete_cancel, .matsbm_button_reissue_cancel {
+.matsbm_button_delete_cancel, .matsbm_button_reissue_cancel, .matsbm_button_mute_cancel {
     transform: scale(1);
     background-color: #008CBA;
     transition: background-color 0.7s, color 0.7s, transform 0.7s, padding 0.7s, margin 0.7s, max-width 0.7s
@@ -154,6 +160,12 @@
 
 .matsbm_action_reissued {
     background-color: #4CAF50;
+    color: white;
+    transition: background-color 0.7s, color 0.7s;
+}
+
+.matsbm_action_muted {
+    background-color: #f4b136;
     color: white;
     transition: background-color 0.7s, color 0.7s;
 }
@@ -555,21 +567,26 @@
     max-height: 5em;
 }
 
-#matsbm_table_browse_queue .matsbm_deleted {
-    background-color: #f44336 !important;
-    transition: background-color 1s;
-}
-
 #matsbm_table_browse_queue .matsbm_reissued {
     background-color: #4CAF50 !important;
     transition: background-color 1s;
 }
 
-#matsbm_table_browse_queue tbody .matsbs_delete_or_reissue {
-    border-bottom: 0;
+#matsbm_table_browse_queue .matsbm_muted {
+    background-color: #f4b136 !important;
+    transition: background-color 1s;
 }
 
-#matsbm_table_browse_queue .matsbs_delete_or_reissue td {
+#matsbm_table_browse_queue .matsbm_deleted {
+    background-color: #f44336 !important;
+    transition: background-color 1s;
+}
+
+#matsbm_table_browse_queue .matsbs_delete_mute_or_reissue {
+    border-bottom: 0 !important;
+}
+
+#matsbm_table_browse_queue .matsbs_delete_mute_or_reissue td {
     padding-top: 0;
     padding-bottom: 0;
     opacity: 0;
@@ -577,7 +594,7 @@
     transition: padding 0.5s, opacity 0.5s, transform 0.5s;
 }
 
-#matsbm_table_browse_queue .matsbs_delete_or_reissue div {
+#matsbm_table_browse_queue .matsbs_delete_mute_or_reissue div {
     max-height: 0;
     transition: max-height 0.5s;
 }

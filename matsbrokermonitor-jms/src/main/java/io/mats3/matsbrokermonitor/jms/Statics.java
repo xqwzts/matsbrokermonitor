@@ -17,7 +17,7 @@ public interface Statics {
     // :: MDC Keys
 
     String MDC_MATS_MESSAGE_SYSTEM_ID = "mats.MsgSysId";
-    String MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID = "mats.ReissuedMsgSysId";
+    String MDC_MATS_RESULTING_MESSAGE_SYSTEM_ID = "mats.ResultingMsgSysId";
     String MDC_MATS_MESSAGE_ID = "mats.MatsMsgId";
     String MDC_MATS_DESTINATION_TYPE = "mats.DestinationType";
 
@@ -29,9 +29,10 @@ public interface Statics {
     // ===== JMS Properties put on the JMSMessage via set[String|Long|Boolean]Property(..)
     // NOTICE: "." is not allowed by JMS (and Apache Artemis complains!), so we use "_".
 
-    String JMS_MSG_PROP_REISSUE_COOKIE = "mats_ReissueCookie";
-    String JMS_MSG_PROP_REISSUE_USERNAME = "mats_ReissueUsername";
-    String JMS_MSG_PROP_REISSUE_FAILED_REASON = "mats_FailedReissueReason"; // If reissue fails.
+    String JMS_MSG_PROP_LAST_OPERATION_COOKIE = "mats_LastOperationCookie";
+    String JMS_MSG_PROP_LAST_OPERATION_USERNAME = "mats_LastOperationUsername";
+    String JMS_MSG_PROP_LAST_OPERATION_COMMENT = "mats_LastOperationComment";
+    String JMS_MSG_PROP_OPERATION_FAILED_REASON = "mats_OperationFailedReason"; // If action fails.
 
     // .. the following are copied from JmsMatsFactory
 

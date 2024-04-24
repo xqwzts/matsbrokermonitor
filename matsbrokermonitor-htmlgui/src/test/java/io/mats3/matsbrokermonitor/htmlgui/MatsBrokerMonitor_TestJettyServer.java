@@ -527,6 +527,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             }
 
             // :: Chill till this has really gotten going.
+            out.println("Chilling 200 ms to let the ["+countF+"] request messages really get into the system.\n");
             takeNap(200);
 
             Future<Reply<DataTO>> futureNonInteractive = sendAFuturize(out, matsFuturizer, false);
@@ -566,7 +567,13 @@ public class MatsBrokerMonitor_TestJettyServer {
                         msg.setTraceProperty(SetupTestMatsEndpoints.DONT_THROW, Boolean.TRUE);
                         msg.keepTrace(KeepTrace.MINIMAL);
                         if (interactive) {
-                            msg.nonPersistent(); // This works really strange in ActiveMQ Classic. Worrying.
+                            // The setting of non-persistent used to work really strange with ActiveMQ:
+                            // The reason is that they have "two buckets" to pick messages from, and if it is currently
+                            // draining from the persistent bucket, it will not pick up the non-persistent messages
+                            // until the persistent bucket is empty. The result is that the non-persistent messages
+                            // are starved - even if they have way higher priority. I've made a hack for ActiveMQ
+                            // to forcibly alternate between the buckets if there are messages in both.
+                            msg.nonPersistent();
                             msg.interactive();
                         }
                     });

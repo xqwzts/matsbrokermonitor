@@ -1,7 +1,6 @@
 package io.mats3.matsbrokermonitor.jms;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -27,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType;
 
 /**
  * @author Endre Stølsvik 2022-01-15 23:04 - http://stolsvik.com/, endre@stolsvik.com
@@ -148,11 +148,8 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         if (queueId == null) {
             throw new NullPointerException("queueId");
         }
-        if (limitMessages < 0) {
+        if (limitMessages <= 0) {
             throw new IllegalArgumentException("maxNumberOfMessages must be positive! [" + limitMessages + "]");
-        }
-        if (limitMessages == 0) {
-            return Collections.emptyMap();
         }
 
         Session session = null;
@@ -223,7 +220,73 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
 
     @Override
     public Map<String, MatsBrokerMessageMetadata> reissueMessages(String deadLetterQueueId,
-            Collection<String> messageSystemIds, String username) {
+            Collection<String> messageSystemIds, String reissuingUsername) {
+        return retainingOperationOnMessages(RetainingMessageOperation.REISSUE, deadLetterQueueId, messageSystemIds,
+                reissuingUsername, null, true);
+    }
+
+    @Override
+    public Map<String, MatsBrokerMessageMetadata> reissueAllMessages(String deadLetterQueueId, int limitMessages,
+            String username) throws BrokerIOException {
+        return retainingOperationOnAllMessages(RetainingMessageOperation.REISSUE, deadLetterQueueId, limitMessages,
+                username, null, true);
+    }
+
+    @Override
+    public Map<String, MatsBrokerMessageMetadata> muteMessages(String deadLetterQueueId,
+            Collection<String> messageSystemIds, String mutingUsername, String muteComment) throws BrokerIOException {
+        return retainingOperationOnMessages(RetainingMessageOperation.MUTE, deadLetterQueueId, messageSystemIds,
+                mutingUsername, muteComment, false);
+    }
+
+    @Override
+    public Map<String, MatsBrokerMessageMetadata> muteAllMessages(String deadLetterQueueId, int limitMessages,
+            String username, String muteComment) throws BrokerIOException {
+        return retainingOperationOnAllMessages(RetainingMessageOperation.MUTE, deadLetterQueueId, limitMessages,
+                username, muteComment, false);
+    }
+
+    @Override
+    public MatsBrokerMessageIterable browseQueue(String queueId)
+            throws BrokerIOException {
+        return browse_internal(queueId, null);
+    }
+
+    @Override
+    public Optional<MatsBrokerMessageRepresentation> examineMessage(String queueId, String messageSystemId)
+            throws BrokerIOException {
+        if (messageSystemId == null) {
+            throw new NullPointerException("messageSystemId");
+        }
+        try (MatsBrokerMessageIterableImpl iterable = browse_internal(queueId,
+                "JMSMessageID = '" + messageSystemId + "'")) {
+            Iterator<MatsBrokerMessageRepresentation> iter = iterable.iterator();
+            if (!iter.hasNext()) {
+                return Optional.empty();
+            }
+            return Optional.of(iter.next());
+        }
+    }
+
+    // ----- Private implementations
+
+    private enum RetainingMessageOperation {
+        REISSUE("reissue", "reissuing", "reissued"), MUTE("mute", "muting", "muted");
+
+        private final String _infinitive;
+        private final String _present;
+        private final String _past;
+
+        RetainingMessageOperation(String infinitive, String present, String past) {
+            _infinitive = infinitive;
+            _present = present;
+            _past = past;
+        }
+    }
+
+    private Map<String, MatsBrokerMessageMetadata> retainingOperationOnMessages(RetainingMessageOperation operation,
+            String deadLetterQueueId, Collection<String> messageSystemIds, String username, String comment,
+            boolean deleteDlqProps) {
         if (deadLetterQueueId == null) {
             throw new NullPointerException("deadLetterQueueId");
         }
@@ -246,12 +309,12 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             MessageProducer genericProducer = session.createProducer(null);
             long nanosTaken_CreateConsumer = System.nanoTime() - nanosAtStart_CreateConsumer;
 
-            log.info("REISSUING selected [" + messageSystemIds.size() + "] messages from [" + dlq + "]"
-                    + " - con.getSession(): " + ms(nanosTaken_CreateSession) + " ms"
+            log.info(operation._present.toUpperCase() + " selected [" + messageSystemIds.size() + "] messages from ["
+                    + dlq + "] - con.getSession(): " + ms(nanosTaken_CreateSession) + " ms"
                     + " - session.createConsumer(): " + ms(nanosTaken_CreateConsumer) + " ms");
 
-            Map<String, MatsBrokerMessageMetadata> reissuedMessageIds = new LinkedHashMap<>(messageSystemIds.size());
-            int reissuedMessageCount = 0;
+            Map<String, MatsBrokerMessageMetadata> operationMessageIds = new LinkedHashMap<>(messageSystemIds.size());
+            int operationMessageCount = 0;
             for (String messageSystemId : messageSystemIds) {
                 long nanosAtStart_CreateConsumerAndReceive = System.nanoTime();
                 MessageConsumer consumer = session.createConsumer(dlq, "JMSMessageID = '" + messageSystemId + "'");
@@ -259,20 +322,22 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                 long nanosTaken_CreateConsumerAndReceive = System.nanoTime() - nanosAtStart_CreateConsumerAndReceive;
 
                 if (message != null) {
-                    reissueMessage(message, randomCookie, username, session, genericProducer, dlq,
-                            nanosTaken_CreateConsumerAndReceive, reissuedMessageIds);
+                    retainingOperationOnSingleMessage(operation, message, randomCookie, username, comment, session,
+                            genericProducer, dlq, nanosTaken_CreateConsumerAndReceive, operationMessageIds,
+                            deleteDlqProps);
                 }
                 else {
-                    log.info("REISSUE NOT DONE: Did NOT receive a message for id [" + messageSystemId
-                            + "], not reissued! - message receive: " + ms(nanosTaken_CreateConsumerAndReceive) + " ms");
+                    log.info(operation._infinitive.toUpperCase() + " NOT DONE: Did NOT receive a message for id ["
+                            + messageSystemId + "], not " + operation._past + "! - message receive: " + ms(
+                                    nanosTaken_CreateConsumerAndReceive) + " ms");
                 }
                 // Close the JMSMessageID-specific consumer.
                 consumer.close();
 
-                reissuedMessageCount++;
+                operationMessageCount++;
 
-                // Commit for each 50th reissued message
-                if ((reissuedMessageCount % 50) == 0) {
+                // Commit for each 50th action'ed message
+                if ((operationMessageCount % 50) == 0) {
                     session.commit();
                 }
             }
@@ -281,10 +346,11 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             genericProducer.close();
 
             long nanosTaken_Total = System.nanoTime() - nanosAtStart_Total;
-            log.info("REISSUE FINISHED after requested [" + messageSystemIds.size() + "] messages, of which ["
-                    + reissuedMessageIds.size() + "] were reissued. Total time: " + ms(nanosTaken_Total) + " ms.");
+            log.info(operation._present.toUpperCase() + " FINISHED after requested [" + messageSystemIds.size()
+                    + "] messages, of which [" + operationMessageIds.size() + "] were handled. Total time: "
+                    + ms(nanosTaken_Total) + " ms.");
 
-            return reissuedMessageIds;
+            return operationMessageIds;
         }
         catch (JMSException e) {
             // Bad, so ditch connection.
@@ -297,9 +363,9 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         }
     }
 
-    @Override
-    public Map<String, MatsBrokerMessageMetadata> reissueAllMessages(String deadLetterQueueId, int limitMessages,
-            String username) throws BrokerIOException {
+    public Map<String, MatsBrokerMessageMetadata> retainingOperationOnAllMessages(RetainingMessageOperation operation,
+            String deadLetterQueueId, int limitMessages, String username, String comment, boolean deleteDlqProps)
+            throws BrokerIOException {
         if (deadLetterQueueId == null) {
             throw new NullPointerException("deadLetterQueueId");
         }
@@ -324,7 +390,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             MessageConsumer consumer = session.createConsumer(dlq);
             long nanosTaken_CreateConsumer = System.nanoTime() - nanosAtStart_CreateConsumer;
 
-            log.info("REISSUING up to [" + limitMessages + "] messages from [" + dlq + "]"
+            log.info(operation._present.toUpperCase() + " up to [" + limitMessages + "] messages from [" + dlq + "]"
                     + " - con.getSession(): " + ms(nanosTaken_CreateSession) + " ms"
                     + " - session.createConsumer(): " + ms(nanosTaken_CreateConsumer) + " ms");
 
@@ -339,39 +405,38 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                 if (message == null) {
                     // -> No, no message - queue became empty before we got the requested number of messages.
                     long nanosTaken_Total = System.nanoTime() - nanosAtStart_Total;
-                    log.info("REISSUE STOPPED - no more messages after [" + reissuedMessageCount + "] messages, "
-                            + " requested [" + limitMessages + "] messages. Total time: " + ms(nanosTaken_Total)
-                            + " ms.");
-                    break;
-                }
-
-                // ?: Have we reissued the message already in this reissue operation?
-                if (message.propertyExists(JMS_MSG_PROP_REISSUE_COOKIE) && randomCookie.equals(
-                        message.getStringProperty(JMS_MSG_PROP_REISSUE_COOKIE))) {
-                    // -> Yes, we've already been through this message - must be "looping" where reissued messages
-                    // again end up on the DLQ.
-                    long nanosTaken_Total = System.nanoTime() - nanosAtStart_Total;
-                    log.info("REISSUE STOPPED: Message [" + message.getJMSMessageID() + "] has already been reissued"
-                            + " by this reissue operation, seems like we are \"looping\". This happened"
-                            + " after [" + reissuedMessageCount + "] messages, requested [" + limitMessages
+                    log.info(operation._present.toUpperCase() + " STOPPED - no more messages after ["
+                            + reissuedMessageCount + "] messages,  requested [" + limitMessages
                             + "] messages. Total time: " + ms(nanosTaken_Total) + " ms.");
                     break;
                 }
 
-                // ----- We got a message, and it is not already reissued in this reissue operation.
+                // ?: Have we reissued the message already in this reissue operation?
+                if (randomCookie.equals(message.getStringProperty(JMS_MSG_PROP_LAST_OPERATION_COOKIE))) {
+                    // -> Yes, we've already been through this message - must be "looping" where reissued messages
+                    // again end up on the DLQ.
+                    long nanosTaken_Total = System.nanoTime() - nanosAtStart_Total;
+                    log.info(operation._present.toUpperCase() + " STOPPED: Message [" + message.getJMSMessageID()
+                            + "] has already been reissued by this reissue operation, seems like we are"
+                            + " \"looping\". This happened after [" + reissuedMessageCount + "] messages, requested ["
+                            + limitMessages + "] messages. Total time: " + ms(nanosTaken_Total) + " ms.");
+                    break;
+                }
+
+                // ----- We got a message, and it is not already handled in this round of operations.
 
                 // :: Reissue!
-                reissueMessage(message, randomCookie, username, session, genericProducer, dlq, nanosTaken_Receive,
-                        reissuedMessageIds);
+                retainingOperationOnSingleMessage(operation, message, randomCookie, username, comment, session,
+                        genericProducer, dlq, nanosTaken_Receive, reissuedMessageIds, deleteDlqProps);
 
                 reissuedMessageCount++;
                 if (reissuedMessageCount >= limitMessages) {
                     long nanosTaken_Total = System.nanoTime() - nanosAtStart_Total;
-                    log.info("REISSUE FINISHED after requested [" + limitMessages + "] messages."
-                            + " Total time: " + ms(nanosTaken_Total) + " ms.");
+                    log.info(operation._present.toUpperCase() + " FINISHED after requested [" + limitMessages
+                            + "] messages. Total time: " + ms(nanosTaken_Total) + " ms.");
                     break;
                 }
-                // Commit for each 50th reissued message
+                // Commit for each 50th handled message
                 if ((reissuedMessageCount % 50) == 0) {
                     session.commit();
                 }
@@ -392,9 +457,11 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         }
     }
 
-    private void reissueMessage(Message message, String randomCookie, String username, Session session,
-            MessageProducer genericProducer, Queue dlq, long nanosTaken_Receive,
-            Map<String, MatsBrokerMessageMetadata> reissuedMessagesMap) throws JMSException {
+    private void retainingOperationOnSingleMessage(RetainingMessageOperation operation, Message message,
+            String randomCookie, String username, String comment, Session session, MessageProducer genericProducer,
+            Queue fromQueue, long nanosTaken_Receive, Map<String, MatsBrokerMessageMetadata> handledMessagesMap,
+            boolean deleteDlqProps)
+            throws JMSException {
         try {
             String messageSystemId = message.getJMSMessageID();
             String matsMessageId = message.getStringProperty(JMS_MSG_PROP_MATS_MESSAGE_ID);
@@ -405,11 +472,13 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             MDC.put(MDC_TRACE_ID, traceId);
             MDC.put(MDC_MATS_STAGE_ID, toStageId);
 
-            // :: Modify the message to be reissued
+            // :: Modify the message to be handled
             // JMS have this strange thing where a received message is has read-only properties.
             // This can be "fixed" by message.clearProperties() - but with the obvious drawback that
             // all properties are cleared. So we need to copy off the existing properties, and put them
             // back on the message after 'clearProperties'.
+
+            // Copy off the existing properties ..
             Map<String, Object> existingProperties = new HashMap<>();
             @SuppressWarnings("unchecked")
             Enumeration<String> propertyNames = message.getPropertyNames();
@@ -421,38 +490,61 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             message.clearProperties();
             // .. and then put them back on (now editable!)
             for (Map.Entry<String, Object> entry : existingProperties.entrySet()) {
-                // .. but remove the DLQ-specific properties *except* the DLQ_COUNT, which we want to keep so as
-                // to be able to see how many times it has been DLQed.
-                if (entry.getKey().startsWith("mats_dlq_") && !(entry.getKey().equals(JMS_MSG_PROP_DLQ_DLQ_COUNT))) {
+                // .. but - if requested - remove the DLQ-specific properties *except* the DLQ_COUNT, which we want to
+                // keep so as to be able to see how many times it has been DLQed.
+                if (deleteDlqProps && entry.getKey().startsWith("mats_dlq_")
+                        && !entry.getKey().equals(JMS_MSG_PROP_DLQ_DLQ_COUNT)) {
                     continue;
                 }
                 message.setObjectProperty(entry.getKey(), entry.getValue());
             }
 
-            // Before sending it: Tag the message with the reissue cookie and username.
-            message.setStringProperty(JMS_MSG_PROP_REISSUE_COOKIE, randomCookie);
-            message.setStringProperty(JMS_MSG_PROP_REISSUE_USERNAME, username);
+            // Before sending it: Tag the message with the operation cookie and username.
+            message.setStringProperty(JMS_MSG_PROP_LAST_OPERATION_COOKIE, randomCookie);
+            message.setStringProperty(JMS_MSG_PROP_LAST_OPERATION_USERNAME, username);
+            message.setStringProperty(JMS_MSG_PROP_LAST_OPERATION_COMMENT, comment);
 
             // ?: Do we know which endpoint/queue it originally should go to?
             if (toStageId != null) {
                 // -> Yes, we know which queue it originally came from!
+                Destination toDestination;
 
-                // Originally on Queue or Topic?
-                String messageType = message.getStringProperty(JMS_MSG_PROP_MESSAGE_TYPE);
-                // TODO: Delete this in 2025 ASAP.
-                if (messageType == null) {
-                    log.error("Message lacks JmsMats JMS StringProperty [" + JMS_MSG_PROP_MESSAGE_TYPE + "], so don't"
-                            + " know if it was originally destined for a Queue or a Topic. Message System ID: ["
-                            + messageSystemId + "]");
+                // :: Handle the different operation
+                // s
+                // ?: Is it a REISSUE operation?
+                if (operation == RetainingMessageOperation.REISSUE) {
+                    // Originally on Queue or Topic?
+                    String messageType = message.getStringProperty(JMS_MSG_PROP_MESSAGE_TYPE);
+                    // TODO: Delete this in 2025 ASAP.
+                    if (messageType == null) {
+                        log.error("Message lacks JmsMats JMS StringProperty [" + JMS_MSG_PROP_MESSAGE_TYPE
+                                + "], so don't know if it was originally destined for a Queue or a Topic."
+                                + " Message System ID: [" + messageSystemId + "]");
+                        // Default to "" to ensure Queue.
+                        messageType = "";
+                    }
+
+                    boolean isTopic = "PUBLISH".equals(messageType) || "REPLY_SUBSCRIPTION".equals(messageType);
+                    MDC.put(MDC_MATS_DESTINATION_TYPE, isTopic ? "Topic" : "Queue");
+
+                    String toDestinationName = _matsDestinationPrefix + toStageId;
+                    toDestination = isTopic
+                            ? session.createTopic(toDestinationName)
+                            : session.createQueue(toDestinationName);
+
                 }
-
-                boolean isTopic = "PUBLISH".equals(messageType) || "REPLY_SUBSCRIPTION".equals(messageType);
-                MDC.put(MDC_MATS_DESTINATION_TYPE, isTopic ? "Topic" : "Queue");
-
-                String toDestinationName = _matsDestinationPrefix + toStageId;
-                Destination toDestination = isTopic
-                        ? session.createTopic(toDestinationName)
-                        : session.createQueue(toDestinationName);
+                // ?: Is it a MUTE operation?
+                else if (operation == RetainingMessageOperation.MUTE) {
+                    // Mute: Send to the Mats "DLQ" endpoint for Muted messages
+                    String toDestinationName = "DLQ."
+                            + _matsDestinationPrefix
+                            + StageDestinationType.DEAD_LETTER_QUEUE_MUTED.getMidfix()
+                            + toStageId;
+                    toDestination = session.createQueue(toDestinationName);
+                }
+                else {
+                    throw new AssertionError("Unknown RetainAction: " + operation);
+                }
 
                 // Send it ..
                 long nanosAtStart_Send = System.nanoTime();
@@ -460,29 +552,31 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                 long nanosTaken_Send = System.nanoTime() - nanosAtStart_Send;
 
                 // .. afterwards it has the new JMS Message ID.
-                String reissuedMsgSysId = message.getJMSMessageID();
-                MDC.put(MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID, reissuedMsgSysId);
+                String resultingMsgSysId = message.getJMSMessageID();
+                MDC.put(MDC_MATS_RESULTING_MESSAGE_SYSTEM_ID, resultingMsgSysId);
 
-                log.info("REISSUE MESSAGE: Reissued message to:[" + toDestination + "]"
-                        + " from dlq:[" + dlq + "]! Original MsgSysId: [" + messageSystemId
-                        + "], New MsgSysId: [" + reissuedMsgSysId + "], Message TraceId: [" + traceId + "]"
-                        + " - message receive: " + ms(nanosTaken_Receive)
-                        + " - producer.send(): " + ms(nanosTaken_Send));
+                String actionPastTitlecase = operation._past.substring(0, 1).toUpperCase() + operation._past.substring(
+                        1);
+                log.info(operation._infinitive.toUpperCase() + " MESSAGE: " + actionPastTitlecase + " message to:["
+                        + toDestination + "] from dlq:[" + fromQueue + "]! Original MsgSysId: [" + messageSystemId
+                        + "], Resulting MsgSysId: [" + resultingMsgSysId + "], Message TraceId: [" + traceId + "]"
+                        + " - message receive: " + ms(nanosTaken_Receive) + " - producer.send(): " + ms(
+                                nanosTaken_Send));
 
-                reissuedMessagesMap.put(messageSystemId, new MatsBrokerMessageMetadata(messageSystemId,
-                        reissuedMsgSysId, matsMessageId, traceId, toStageId));
+                handledMessagesMap.put(messageSystemId, new MatsBrokerMessageMetadata(messageSystemId,
+                        resultingMsgSysId, matsMessageId, traceId, toStageId));
             }
             else {
                 // -> No, we don't know which queue it originally came from!
-                // Send it to a synthetic Mats "DLQ" endpoint for failed reissue - where it just has to be deleted
+                // Send it to a synthetic Mats "DLQ" endpoint for failed operations - where it just has to be deleted
                 // after inspection.
                 Queue matsFailedReissueQueue = session.createQueue(
-                        MatsBrokerBrowseAndActions.QUEUE_ID_FOR_FAILED_REISSUE);
+                        MatsBrokerBrowseAndActions.QUEUE_ID_FOR_FAILED_OPERATIONS);
 
                 // Add a reason to it.
-                message.setStringProperty(JMS_MSG_PROP_REISSUE_FAILED_REASON, "Message lacks '"
+                message.setStringProperty(JMS_MSG_PROP_OPERATION_FAILED_REASON, "Message lacks '"
                         + JMS_MSG_PROP_TO + "' property on the message,  so don't know where it was originally destined"
-                        + " - sending it to '" + QUEUE_ID_FOR_FAILED_REISSUE + "' for inspection and deletion!");
+                        + " - sending it to '" + QUEUE_ID_FOR_FAILED_OPERATIONS + "' for inspection and deletion!");
 
                 // Send it ..
                 long nanosAtStart_Send = System.nanoTime();
@@ -491,9 +585,9 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
 
                 // .. afterwards it has the new JMS Message ID.
                 String newMsgSysId = message.getJMSMessageID();
-                log.error("REISSUE FAILED: Found message without JmsMats JMS StringProperty ["
-                        + JMS_MSG_PROP_TO + "], so don't know where it was originally destined. Sending it"
-                        + " to a synthetic Mats \"DLQ\" endpoint [" + matsFailedReissueQueue
+                log.error(operation._infinitive.toUpperCase() + " FAILED: Found message without JmsMats JMS"
+                        + " StringProperty [" + JMS_MSG_PROP_TO + "], so don't know where it was originally destined."
+                        + " Sending it to a synthetic Mats \"DLQ\" endpoint [" + matsFailedReissueQueue
                         + "] to handle it, and get it away from the DLQ. You may inspect it there."
                         + " Original MsgSysId: [" + messageSystemId + "], New MsgSysId: ["
                         + newMsgSysId + "] - message receive: " + ms(nanosTaken_Receive)
@@ -506,29 +600,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             MDC.remove(MDC_TRACE_ID);
             MDC.remove(MDC_MATS_MESSAGE_ID);
             MDC.remove(MDC_MATS_DESTINATION_TYPE);
-            MDC.remove(MDC_MATS_REISSUED_MESSAGE_SYSTEM_ID);
-        }
-    }
-
-    @Override
-    public MatsBrokerMessageIterable browseQueue(String queueId)
-            throws BrokerIOException {
-        return browse_internal(queueId, null);
-    }
-
-    @Override
-    public Optional<MatsBrokerMessageRepresentation> examineMessage(String queueId, String messageSystemId)
-            throws BrokerIOException {
-        if (messageSystemId == null) {
-            throw new NullPointerException("messageSystemId");
-        }
-        try (MatsBrokerMessageIterableImpl iterable = browse_internal(queueId,
-                "JMSMessageID = '" + messageSystemId + "'")) {
-            Iterator<MatsBrokerMessageRepresentation> iter = iterable.iterator();
-            if (!iter.hasNext()) {
-                return Optional.empty();
-            }
-            return Optional.of(iter.next());
+            MDC.remove(MDC_MATS_RESULTING_MESSAGE_SYSTEM_ID);
         }
     }
 
@@ -794,7 +866,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         private final Integer _dlq_DlqCount; // nullable
         private final String _dlq_StageOrigin; // nullable
         private final String _dlq_AppVersionAndNode; // nullable
-        private final String _dlq_LastReissuedUsername; // nullable
+        private final String _dlq_LastOperationUsername; // nullable
 
         // :: MatsTrace
         private final byte[] _matsTraceBytes; // nullable
@@ -846,7 +918,7 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
                     : null;
             _dlq_StageOrigin = message.getStringProperty(JMS_MSG_PROP_DLQ_STAGE_ORIGIN);
             _dlq_AppVersionAndNode = message.getStringProperty(JMS_MSG_PROP_DLQ_APP_VERSION_AND_HOST);
-            _dlq_LastReissuedUsername = message.getStringProperty(JMS_MSG_PROP_REISSUE_USERNAME);
+            _dlq_LastOperationUsername = message.getStringProperty(JMS_MSG_PROP_LAST_OPERATION_USERNAME);
 
             // Handle MatsTrace
             byte[] matsTraceBytes = null;
@@ -958,8 +1030,8 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         }
 
         @Override
-        public Optional<String> getDlqLastReissuedUsername() {
-            return Optional.ofNullable(_dlq_LastReissuedUsername);
+        public Optional<String> getDlqLastOperationUsername() {
+            return Optional.ofNullable(_dlq_LastOperationUsername);
         }
 
         @Override

@@ -1,5 +1,7 @@
 package io.mats3.matsbrokermonitor.htmlgui.impl;
 
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.UNKNOWN;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -27,6 +29,8 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerSnapshot;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.DestinationType;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType;
+import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.ExamineMessageAddition;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.MonitorAddition;
 import io.mats3.serial.MatsSerializer;
@@ -47,7 +51,7 @@ public class ExamineMessage {
     static void gui_ExamineMessage(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, MatsSerializer<?> matsSerializer,
             List<? super MonitorAddition> monitorAdditions,
-            Outputter out, String queueId, String messageSystemId) throws IOException {
+            Outputter out, String queueId, String messageSystemId, AccessControl ac) throws IOException {
         out.html("<div id='matsbm_page_examine_message' class='matsbm_report'>\n");
         out.html("<div class='matsbm_actionbuttons'>\n");
         out.html("<a id='matsbm_back_broker_overview' href='?'>Back to Broker Overview</a><br>\n");
@@ -112,9 +116,9 @@ public class ExamineMessage {
             // ?: Is this a MatsStage Queue or DLQ?
             if (matsBrokerDestination.getMatsStageId().isPresent()) {
                 // -> Mats stage queue.
-                out.html("<h1>Examine Message from ");
-                out.DATA(matsBrokerDestination.isDlq() ? "DLQ" : "Incoming Queue");
-                out.html(" for <div class='matsbm_stageid'>")
+                String typeName = matsBrokerDestination.getStageDestinationType().orElse(UNKNOWN).getTypeName();
+                out.html("<h1>Examine Message from <i><b>").DATA(typeName)
+                        .html("</b></i> for <div class='matsbm_stageid'>")
                         .DATA(matsBrokerDestination.getMatsStageId().get()).html("</div></h1>");
             }
             else {
@@ -141,30 +145,50 @@ public class ExamineMessage {
             matsTrace = deserializedMatsTrace.getMatsTrace();
         }
 
-        // :: ACTION BUTTONS
+        // :: ACTION BUTTONS: REISSUE, MUTE, DELETE
 
+        // ?: Is this a DLQ? (Both Normal and Muted DLQ)
         if (matsBrokerDestination.isDlq()) {
-            out.html("<button id='matsbm_reissue_single'"
-                    + " class='matsbm_button matsbm_button_wider matsbm_button_reissue'"
-                    + " onclick='matsbm_reissue_single(event,\"")
-                    .DATA(queueId).html("\",\"").DATA(messageSystemId).html("\")'>"
-                            + "Reissue <b>this message</b> [r]</button>");
+            // -> Yes, DLQ, so output Reissue button
+            if (ac.reissueMessage(queueId)) {
+                out.html("<button id='matsbm_reissue_single'"
+                        + " class='matsbm_button matsbm_button_wider matsbm_button_reissue'"
+                        + " onclick='matsbm_reissue_single(event,\"")
+                        .DATA(queueId).html("\",\"").DATA(messageSystemId).html("\")'>"
+                                + "Reissue <b>this message</b> [r]</button>");
+            }
+
+            // ?: Is this a NOT a Muted DLQ?
+            if (ac.muteMessage(queueId) && matsBrokerDestination.getStageDestinationType().isPresent() &&
+                    (matsBrokerDestination.getStageDestinationType()
+                            .get() != StageDestinationType.DEAD_LETTER_QUEUE_MUTED)) {
+                // -> No, normal DLQ, so output Mute button
+                out.html("<button id='matsbm_mute_single'"
+                        + " class='matsbm_button matsbm_button_wider matsbm_button_mute'"
+                        + " onclick='matsbm_mute_single(event,\"")
+                        .DATA(queueId).html("\",\"").DATA(messageSystemId).html("\")'>"
+                                + "Mute <b>this message</b> [m]</button>");
+            }
         }
-        out.html("<button id='matsbm_delete_single'"
-                + " class='matsbm_button matsbm_button_wider matsbm_button_delete'"
-                + " onclick='matsbm_delete_single_propose(event)'>"
-                + "Delete <b>this message</b>... [d]</button>");
 
-        out.html("<button id='matsbm_delete_single_cancel'"
-                + " class='matsbm_button matsbm_button_wider matsbm_button_delete_cancel matsbm_button_hidden'"
-                + " onclick='matsbm_delete_single_cancel(event)'>"
-                + "Cancel <b>Delete This</b> [Esc]</button>");
+        // Delete
+        if (ac.deleteMessage(queueId)) {
+            out.html("<button id='matsbm_delete_single'"
+                    + " class='matsbm_button matsbm_button_wider matsbm_button_delete'"
+                    + " onclick='matsbm_delete_single_propose(event)'>"
+                    + "Delete <b>this message</b>... [d]</button>");
 
-        out.html("<button id='matsbm_delete_single_confirm'"
-                + " class='matsbm_button matsbm_button_wider matsbm_button_delete matsbm_button_hidden'"
-                + " onclick='matsbm_delete_single_confirm(event,\"")
-                .DATA(queueId).html("\",\"").DATA(messageSystemId).html("\")'>"
-                        + "Confirm <b>Delete This</b> [x]</button>");
+            out.html("<button id='matsbm_delete_single_cancel'"
+                    + " class='matsbm_button matsbm_button_wider matsbm_button_delete_cancel matsbm_button_hidden'"
+                    + " onclick='matsbm_delete_single_cancel(event)'>"
+                    + "Cancel <b>Delete This</b> [Esc]</button>");
+
+            out.html("<button id='matsbm_delete_single_confirm'"
+                    + " class='matsbm_button matsbm_button_wider matsbm_button_delete matsbm_button_hidden'"
+                    + " onclick='matsbm_delete_single_confirm(event,\"")
+                    .DATA(queueId).html("\",\"").DATA(messageSystemId).html("\")'>"
+                            + "Confirm <b>Delete This</b> [x]</button>");
+        }
 
         List<ExamineMessageAddition> examineAdditions = monitorAdditions.stream()
                 .filter(o -> o instanceof ExamineMessageAddition)
@@ -183,7 +207,7 @@ public class ExamineMessage {
 
         // :: DLQ Exception, if any
 
-        part_DlqInformation(out, matsBrokerDestination.isDlq(), msgRepr, matsTrace);
+        part_DlqInformation(out, matsBrokerDestination.getStageDestinationType().orElse(UNKNOWN), msgRepr, matsTrace);
 
         // :: MATS TRACE! - do we have any?!
 
@@ -240,6 +264,9 @@ public class ExamineMessage {
                 + "<br><br>\n");
         out.html("<code>").DATA(msgRepr.toString()).html("</code>");
         out.html("</div>\n");
+
+        // Call into JavaScript to set state for buttons etc.
+        out.html("<script>matsbm_examine_message_view_loaded();</script>\n");
 
         // Don't output last </div>, as caller does it.
     }
@@ -472,8 +499,8 @@ public class ExamineMessage {
         out.html("<tr>");
         out.html("<td>MsgSys Expires</td>");
         out.html("<td>").DATA(brokerMsg.getExpirationTimestamp() == 0
-                        ? "Never expires"
-                        : Statics.formatTimestampSpan(brokerMsg.getExpirationTimestamp()))
+                ? "Never expires"
+                : Statics.formatTimestampSpan(brokerMsg.getExpirationTimestamp()))
                 .html("</td>");
         out.html("</tr>");
 
@@ -509,7 +536,7 @@ public class ExamineMessage {
         out.html("</div></div>\n");
     }
 
-    private static void part_DlqInformation(Outputter out, boolean isDestinationDlq,
+    private static void part_DlqInformation(Outputter out, StageDestinationType stageDestinationType,
             MatsBrokerMessageRepresentation brokerMsg, MatsTrace<?> matsTrace)
             throws IOException {
         // These three properties are added by Mats3 when performing 'Mats Managed DLQ Divert', and they are cleared
@@ -522,7 +549,7 @@ public class ExamineMessage {
         // ?: Do we have any DLQ information on the message?
         if (!hasDlqInformation) {
             // -> No DLQ information on message, but is this still a DLQ queue?
-            if (isDestinationDlq) {
+            if (stageDestinationType.isDlq()) {
                 // -> Yes, this is a DLQ queue - so point out that there's no DLQ information.
                 out.html("<div id='matsbm_part_dlq_information'>\n");
                 out.html("<h2>DLQ Information</h2><br>\n");
@@ -607,10 +634,13 @@ public class ExamineMessage {
 
         // ?: Do we have a Last Reissued Username? (Added by MatsBrokerMonitor on reissue, thus only present if
         // already reissued)
-        if (brokerMsg.getDlqLastReissuedUsername().isPresent()) {
-            out.html("&nbsp;&nbsp;Last reissued by: <b>").DATA(brokerMsg.getDlqLastReissuedUsername().get())
-                    .html("</b> &nbsp;&nbsp;&nbsp;<i>(The user which used MatsBrokerMonitor to reissue this message"
-                            + " from the DLQ last time.)</i><br>\n");
+        if (brokerMsg.getDlqLastOperationUsername().isPresent()) {
+            boolean muted = stageDestinationType == StageDestinationType.DEAD_LETTER_QUEUE_MUTED;
+            out.html("&nbsp;&nbsp;" + (muted ? "Muted" : "Last reissued") + " by: <b>")
+                    .DATA(brokerMsg.getDlqLastOperationUsername().get())
+                    .html("</b> &nbsp;&nbsp;&nbsp;<i>(The user which used MatsBrokerMonitor to " + (muted
+                            ? "move this message from the DLQ to the Muted DLQ"
+                            : "reissue this message from the DLQ last time.") + ")</i><br>\n");
         }
 
         // ?: Do we have a Stage Origin? (This SHALL be present if we have any DLQ information, but hey ho)

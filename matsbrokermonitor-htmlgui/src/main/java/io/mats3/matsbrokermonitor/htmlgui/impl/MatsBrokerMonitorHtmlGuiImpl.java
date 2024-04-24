@@ -160,7 +160,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
             String messageSystemId = messageSystemIds[0];
 
             ExamineMessage.gui_ExamineMessage(_matsBrokerMonitor, _matsBrokerBrowseAndActions, _matsSerializer,
-                    _monitorAdditions, outputter, queueId, messageSystemId);
+                    _monitorAdditions, outputter, queueId, messageSystemId, ac);
         }
         else {
             // E-> No view argument: Broker Overview
@@ -220,8 +220,9 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
 
         switch (command.action) {
             // ?: DELETE SELECTED or REISSUE SELECTED
-            case "delete_selected":
-            case "reissue_selected": {
+            case "reissue_selected":
+            case "mute_selected":
+            case "delete_selected": {
                 if (command.queueId == null) {
                     throw new IllegalArgumentException("command.queueId is null.");
                 }
@@ -235,17 +236,7 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
                         + "], #msgSysMsgIds:[" + command.msgSysMsgIds.size() + "]");
 
                 Map<String, MatsBrokerMessageMetadata> affectedMessages;
-                if ("delete_selected".equals(command.action)) {
-                    // ACCESS CONTROL: delete message
-                    if (!ac.deleteMessage(command.queueId)) {
-                        throw new AccessDeniedException("Not allowed to delete messages from queue.");
-                    }
-                    // ----- Passed Access Control for deleteMessage; Perform operation
-
-                    affectedMessages = _matsBrokerBrowseAndActions.deleteMessages(command.queueId,
-                            command.msgSysMsgIds);
-                }
-                else if ("reissue_selected".equals(command.action)) {
+                if ("reissue_selected".equals(command.action)) {
                     // ACCESS CONTROL: reissue message
                     if (!ac.reissueMessage(command.queueId)) {
                         throw new AccessDeniedException("Not allowed to reissue messages from DLQ.");
@@ -254,6 +245,36 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
 
                     affectedMessages = _matsBrokerBrowseAndActions.reissueMessages(command.queueId,
                             command.msgSysMsgIds, ac.username());
+                }
+                else if ("mute_selected".equals(command.action)) {
+                    // ACCESS CONTROL: mute message
+                    if (!ac.muteMessage(command.queueId)) {
+                        throw new AccessDeniedException("Not allowed to mute messages from DLQ.");
+                    }
+
+                    String[] muteReasonsA = requestParameters.get("muteReason");
+                    String muteReason;
+                    if (muteReasonsA == null || muteReasonsA.length == 0) {
+                        muteReason = null;
+                    }
+                    else {
+                        muteReason = muteReasonsA[0];
+                    }
+
+                    // ----- Passed Access Control for muteMessage; Perform operation
+
+                    affectedMessages = _matsBrokerBrowseAndActions.muteMessages(command.queueId,
+                            command.msgSysMsgIds, ac.username(), muteReason);
+                }
+                else if ("delete_selected".equals(command.action)) {
+                    // ACCESS CONTROL: delete message
+                    if (!ac.deleteMessage(command.queueId)) {
+                        throw new AccessDeniedException("Not allowed to delete messages from queue.");
+                    }
+                    // ----- Passed Access Control for deleteMessage; Perform operation
+
+                    affectedMessages = _matsBrokerBrowseAndActions.deleteMessages(command.queueId,
+                            command.msgSysMsgIds);
                 }
                 else {
                     throw new AssertionError("Should not be able to get here.");
@@ -272,9 +293,10 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
                         + Long.toString(ThreadLocalRandom.current().nextLong(), 36), false);
                 break;
             }
-            // ?: DELETE ALL or REISSUE ALL
-            case "delete_all":
-            case "reissue_all": {
+            // ?: REISSUE ALL, MUTE ALL or DELETE ALL
+            case "reissue_all":
+            case "mute_all":
+            case "delete_all": {
                 if (command.queueId == null) {
                     throw new IllegalArgumentException("command.queueId is null.");
                 }
@@ -288,7 +310,27 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
                         + "], limitMessages:[" + command.limitMessages + "]");
 
                 Map<String, MatsBrokerMessageMetadata> affectedMessages;
-                if ("delete_all".equals(command.action)) {
+                if ("reissue_all".equals(command.action)) {
+                    // ACCESS CONTROL: reissue message
+                    if (!ac.reissueMessage(command.queueId)) {
+                        throw new AccessDeniedException("Not allowed to reissue messages from DLQ.");
+                    }
+                    // ----- Passed Access Control for reissueMessage; Perform operation
+
+                    affectedMessages = _matsBrokerBrowseAndActions.reissueAllMessages(command.queueId,
+                            command.limitMessages, ac.username());
+                }
+                else if ("mute_all".equals(command.action)) {
+                    // ACCESS CONTROL: mute message
+                    if (!ac.muteMessage(command.queueId)) {
+                        throw new AccessDeniedException("Not allowed to mute messages from DLQ.");
+                    }
+                    // ----- Passed Access Control for reissueMessage; Perform operation
+
+                    affectedMessages = _matsBrokerBrowseAndActions.muteAllMessages(command.queueId,
+                            command.limitMessages, ac.username(), null);
+                }
+                else if ("delete_all".equals(command.action)) {
                     // ACCESS CONTROL: delete message
                     if (!ac.deleteMessage(command.queueId)) {
                         throw new AccessDeniedException("Not allowed to delete messages from queue.");
@@ -297,16 +339,6 @@ public class MatsBrokerMonitorHtmlGuiImpl implements MatsBrokerMonitorHtmlGui, S
 
                     affectedMessages = _matsBrokerBrowseAndActions.deleteAllMessages(command.queueId,
                             command.limitMessages);
-                }
-                else if ("reissue_all".equals(command.action)) {
-                    // ACCESS CONTROL: reissue message
-                    if (!ac.reissueMessage(command.queueId)) {
-                        throw new AccessDeniedException("Not allowed to reissue messages from DLQ.");
-                    }
-                    // ----- Passed Access Control for reissueMessage; Perform operation
-
-                    affectedMessages = _matsBrokerBrowseAndActions.reissueAllMessages(command.queueId,
-                            command.limitMessages, random());
                 }
                 else {
                     throw new AssertionError("Should not be able to get here.");

@@ -27,14 +27,14 @@ document.addEventListener('keydown', (event) => {
     }
 
     if (document.getElementById("matsbm_page_broker_overview")) {
-        matsbm_brokerOverviewKeyListener(event);
+        matsbm_broker_overview_KeyListener(event);
     } else if (document.getElementById("matsbm_page_browse_queue")) {
-        matsbm_browseQueueKeyListener(event);
+        matsbm_browse_queue_KeyListener(event);
     } else if (document.getElementById("matsbm_page_examine_message")) {
         if (matsbm_is_call_modal_active()) {
-            matsbm_modalActiveKeyListener(event);
+            matsbm_examine_message_modal_active_KeyListener(event);
         } else {
-            matsbm_examineMessageKeyListener(event);
+            matsbm_examine_message_KeyListener(event);
         }
     }
 }, false);
@@ -108,28 +108,52 @@ function matsbm_fetch_error_message(error) {
 }
 
 function matsbm_hide(elemId) {
-    if (document.getElementById(elemId)) {
-        document.getElementById(elemId).classList.add(
-            elemId.includes("limit_div") ? "matsbm_input_limit_div_hidden" : "matsbm_button_hidden");
+    let element = document.getElementById(elemId);
+    if (element) {
+        if (elemId.includes("limit_div")) {
+            element.classList.add("matsbm_input_limit_div_hidden");
+            let inputField = element.querySelector("input");
+            inputField.setAttribute("tabindex", "-1")
+            inputField.blur();
+        } else {
+            element.classList.add("matsbm_button_hidden");
+            if (element.tagName === 'BUTTON') {
+                element.setAttribute("tabindex", "-1");
+            }
+        }
     }
 }
 
 function matsbm_show(elemId) {
-    if (document.getElementById(elemId)) {
-        document.getElementById(elemId).classList.remove(
-            elemId.includes("limit_div") ? "matsbm_input_limit_div_hidden" : "matsbm_button_hidden");
+    let element = document.getElementById(elemId);
+    if (element) {
+        if (elemId.includes("limit_div")) {
+            element.classList.remove("matsbm_input_limit_div_hidden");
+            let inputField = element.querySelector("input");
+            inputField.removeAttribute("tabindex");
+            inputField.focus();
+        } else {
+            element.classList.remove("matsbm_button_hidden");
+            if (element.tagName === 'BUTTON') {
+                element.removeAttribute("tabindex");
+            }
+        }
     }
 }
 
 function matsbm_disable(buttonId) {
-    if (document.getElementById(buttonId)) {
-        document.getElementById(buttonId).classList.add("matsbm_button_disabled");
+    let button = document.getElementById(buttonId);
+    if (button) {
+        button.classList.add("matsbm_button_disabled");
+        button.setAttribute("tabindex", "-1");
     }
 }
 
 function matsbm_enable(buttonId) {
-    if (document.getElementById(buttonId)) {
-        document.getElementById(buttonId).classList.remove("matsbm_button_disabled");
+    let button = document.getElementById(buttonId);
+    if (button) {
+        button.classList.remove("matsbm_button_disabled");
+        button.removeAttribute("tabindex");
     }
 }
 
@@ -146,7 +170,7 @@ function matsbm_is_button_enabled(buttonId) {
 // ::: BROKER OVERVIEW
 
 // Key Listener for Broker Overview
-function matsbm_brokerOverviewKeyListener(event) {
+function matsbm_broker_overview_KeyListener(event) {
     const name = event.key;
     if (name === "Escape" || name === "u") {
         matsbm_click("matsbm_button_forceupdate");
@@ -177,14 +201,20 @@ function matsbm_button_show_bad_destinations(event) {
 
 // ::: BROWSE QUEUE
 
+// Called at bottom of Browse Queue HTML output
+function matsbm_browse_queue_view_loaded() {
+    matsbm_browse_queue_show_all_normal_buttons_hide_rest();
+    matsbm_evaluate_checkall_and_buttons();
+}
+
 // Key Listener for Browse Queue
-function matsbm_browseQueueKeyListener(event) {
+function matsbm_browse_queue_KeyListener(event) {
     const name = event.key;
     if (name === "Escape") {
         // ?: Is the "Confirm Delete" button active (non-hidden)?
-        if (matsbm_queueview_is_reissue_or_delete_confirm_active()) {
+        if (matsbm_browse_queue_is_reissue_mute_or_delete_confirm_active()) {
             // -> Yes it is active - then it is this we'll escape
-            matsbm_delete_or_reissue_cancel();
+            matsbm_delete_mute_or_reissue_cancel();
         } else {
             setTimeout(() => {
                 document.getElementById("matsbm_back_broker_overview").click();
@@ -195,8 +225,13 @@ function matsbm_browseQueueKeyListener(event) {
 
     // ?: Is active element an input text field? (i.e. "limit messages")
     var activeElement = document.activeElement;
-    if (activeElement && activeElement.tagName === 'INPUT' && activeElement.type === 'text') {
-        return;
+    if (activeElement && (activeElement.tagName === 'INPUT') && (activeElement.type === 'text')) {
+        // -> Yes, input text field active, so ignore all keypresses - except..
+        // ?: Is the key not "x"?
+        if (name !== "x") {
+            // -> Yes, not 'x', so ignore
+            return;
+        }
     }
 
     if (name === "u") {
@@ -204,67 +239,79 @@ function matsbm_browseQueueKeyListener(event) {
     }
     if (name === "r") {
         matsbm_click("matsbm_reissue_selected");
-    }
-    if (name === "R") {
         matsbm_click("matsbm_reissue_all");
+    }
+    if (name === "m") {
+        matsbm_click("matsbm_mute_selected");
+        matsbm_click("matsbm_mute_all");
     }
     if (name === "d") {
         matsbm_click("matsbm_delete_selected");
-    }
-    if (name === "D") {
         matsbm_click("matsbm_delete_all");
     }
     if (name === "x") {
         matsbm_click("matsbm_delete_selected_confirm");
         matsbm_click("matsbm_reissue_all_confirm");
+        matsbm_click("matsbm_mute_all_confirm");
         matsbm_click("matsbm_delete_all_confirm");
     }
 }
 
-function matsbm_queueview_is_reissue_or_delete_confirm_active() {
+function matsbm_browse_queue_is_reissue_mute_or_delete_confirm_active() {
     let allDeleteConfirmButtonsHidden =
         document.getElementById("matsbm_delete_selected_confirm").classList.contains("matsbm_button_hidden")
         && document.getElementById("matsbm_delete_all_confirm").classList.contains("matsbm_button_hidden")
         && (!document.getElementById("matsbm_reissue_all_confirm")
-            || document.getElementById("matsbm_reissue_all_confirm").classList.contains("matsbm_button_hidden"));
+            || document.getElementById("matsbm_reissue_all_confirm").classList.contains("matsbm_button_hidden"))
+        && (!document.getElementById("matsbm_mute_all_confirm")
+            || document.getElementById("matsbm_mute_all_confirm").classList.contains("matsbm_button_hidden"));
 
     return !allDeleteConfirmButtonsHidden;
 }
 
-function matsbm_queueview_hide_all_normal_buttons() {
+function matsbm_browse_queue_hide_all_normal_buttons() {
     matsbm_hide("matsbm_reissue_selected");
+    matsbm_hide("matsbm_mute_selected");
     matsbm_hide("matsbm_delete_selected");
     matsbm_hide("matsbm_reissue_all");
+    matsbm_hide("matsbm_mute_all");
     matsbm_hide("matsbm_delete_all");
     matsbm_hide("matsbm_button_forceupdate");
 }
 
-function matsbm_queueview_hide_rest() {
+function matsbm_browse_queue_hide_rest_of_buttons() {
     matsbm_hide("matsbm_delete_selected_cancel");
     matsbm_hide("matsbm_delete_selected_confirm");
     matsbm_hide("matsbm_delete_all_cancel");
     matsbm_hide("matsbm_delete_all_confirm");
     matsbm_hide("matsbm_reissue_all_cancel");
     matsbm_hide("matsbm_reissue_all_confirm");
+    matsbm_hide("matsbm_mute_all_cancel");
+    matsbm_hide("matsbm_mute_all_confirm");
 
     matsbm_hide("matsbm_all_limit_div");
 }
 
-function matsbm_queueview_show_all_normal_buttons_hide_rest() {
+function matsbm_browse_queue_show_all_normal_buttons_hide_rest() {
     matsbm_show("matsbm_reissue_selected");
+    matsbm_show("matsbm_mute_selected");
     matsbm_show("matsbm_delete_selected");
     matsbm_show("matsbm_reissue_all");
+    matsbm_show("matsbm_mute_all");
     matsbm_show("matsbm_delete_all");
     matsbm_show("matsbm_button_forceupdate");
 
-    matsbm_queueview_hide_rest();
+    matsbm_browse_queue_hide_rest_of_buttons();
+
+    // Focus the force update
+    document.getElementById("matsbm_button_forceupdate").focus();
 }
 
-// :: COMMON CANCEL for REISSUE and DELETE
+// :: COMMON CANCEL for REISSUE, MUTE and DELETE
 
-function matsbm_delete_or_reissue_cancel(event) {
-    console.log("Cancel Reissue/Delete");
-    matsbm_queueview_show_all_normal_buttons_hide_rest();
+function matsbm_delete_mute_or_reissue_cancel(event) {
+    console.log("Cancel Reissue/Mute/Delete");
+    matsbm_browse_queue_show_all_normal_buttons_hide_rest();
 }
 
 // :: REISSUE SELECTED (immediate, no confirm)
@@ -274,21 +321,35 @@ function matsbm_reissue_selected(event, queueId) {
         return;
     }
     console.log("Execute Reissue Selected");
-    matsbm_queueview_hide_all_normal_buttons();
+    matsbm_browse_queue_hide_all_normal_buttons();
     // Invoke after a small delay, so that animation of hiding buttons is well underway.
     setTimeout(() => {
-        matsbm_reissue_or_delete_selected(event, queueId, "reissue")
+        matsbm_operation_on_selected(event, queueId, "reissue")
     }, 500);
 }
 
-// :: DELETE SELECTED
+// :: MUTE SELECTED (immediate, no confirm)
+
+function matsbm_mute_selected(event, queueId) {
+    if (!matsbm_is_button_enabled("matsbm_mute_selected")) {
+        return;
+    }
+    console.log("Execute Mute Selected");
+    matsbm_browse_queue_hide_all_normal_buttons();
+    // Invoke after a small delay, so that animation of hiding buttons is well underway.
+    setTimeout(() => {
+        matsbm_operation_on_selected(event, queueId, "mute")
+    }, 500);
+}
+
+// :: DELETE SELECTED (propse, confirm action required)
 
 function matsbm_delete_selected_propose(event) {
     if (!matsbm_is_button_enabled("matsbm_delete_selected")) {
         return;
     }
     console.log("Propose Delete Selected");
-    matsbm_queueview_hide_all_normal_buttons();
+    matsbm_browse_queue_hide_all_normal_buttons();
 
     // Show Delete Confirm and Delete Cancel
     matsbm_show("matsbm_delete_selected_confirm");
@@ -298,7 +359,7 @@ function matsbm_delete_selected_propose(event) {
 // Action for the "Confirm Delete" button made visible by clicking "Delete".
 function matsbm_delete_selected_confirm(event, queueId) {
     console.log("Execute Delete Selected");
-    matsbm_reissue_or_delete_selected(event, queueId, "delete")
+    matsbm_operation_on_selected(event, queueId, "delete")
 }
 
 // :: REISSUE ALL
@@ -308,7 +369,7 @@ function matsbm_reissue_all_propose(event) {
         return;
     }
     console.log("Propose Reissue All");
-    matsbm_queueview_hide_all_normal_buttons();
+    matsbm_browse_queue_hide_all_normal_buttons();
 
     // Show Delete Confirm and Delete Cancel
     matsbm_show("matsbm_reissue_all_cancel");
@@ -320,10 +381,36 @@ function matsbm_reissue_all_confirm(event, queueId) {
     console.log("Execute Reissue All");
     const limitMessages = document.getElementById("matsbm_all_limit_messages").value;
 
-    matsbm_queueview_hide_rest();
+    matsbm_browse_queue_hide_rest_of_buttons();
     // Invoke after a small delay, so that animation of hiding buttons is well underway.
     setTimeout(() => {
-        matsbm_reissue_or_delete_all(event, queueId, "reissue", limitMessages)
+        matsbm_operation_on_all(event, queueId, "reissue", limitMessages)
+    }, 500);
+}
+
+// :: REISSUE ALL
+
+function matsbm_mute_all_propose(event) {
+    if (!matsbm_is_button_enabled("matsbm_mute_all")) {
+        return;
+    }
+    console.log("Propose Mute All");
+    matsbm_browse_queue_hide_all_normal_buttons();
+
+    // Show Delete Confirm and Delete Cancel
+    matsbm_show("matsbm_mute_all_cancel");
+    matsbm_show("matsbm_mute_all_confirm");
+    matsbm_show("matsbm_all_limit_div")
+}
+
+function matsbm_mute_all_confirm(event, queueId) {
+    console.log("Execute Mute All");
+    const limitMessages = document.getElementById("matsbm_all_limit_messages").value;
+
+    matsbm_browse_queue_hide_rest_of_buttons();
+    // Invoke after a small delay, so that animation of hiding buttons is well underway.
+    setTimeout(() => {
+        matsbm_operation_on_all(event, queueId, "mute", limitMessages)
     }, 500);
 }
 
@@ -334,7 +421,7 @@ function matsbm_delete_all_propose(event) {
         return;
     }
     console.log("Propose Delete all");
-    matsbm_queueview_hide_all_normal_buttons();
+    matsbm_browse_queue_hide_all_normal_buttons();
 
     // Show Delete Confirm and Delete Cancel
     matsbm_show("matsbm_delete_all_cancel");
@@ -345,7 +432,7 @@ function matsbm_delete_all_propose(event) {
 function matsbm_delete_all_confirm(event, queueId) {
     console.log("Execute Delete all");
     const limitMessages = document.getElementById("matsbm_all_limit_messages").value;
-    matsbm_reissue_or_delete_all(event, queueId, "delete", limitMessages)
+    matsbm_operation_on_all(event, queueId, "delete", limitMessages)
 }
 
 // :: CHECKBOXES
@@ -407,25 +494,30 @@ function matsbm_evaluate_checkall_and_buttons() {
     }
 
     // We're changing selection: Cancel the "Confirm Delete" if it was active.
-    matsbm_delete_or_reissue_cancel();
+    matsbm_browse_queue_show_all_normal_buttons_hide_rest();
 
     // ?: Activate or deactivate Reissue/Delete based on whether any is selected.
     if (numchecked) {
         // -> Yes, checked, so enable "selected" buttons, and disable "all" buttons.
         matsbm_enable('matsbm_reissue_selected');
+        matsbm_enable('matsbm_mute_selected');
         matsbm_enable('matsbm_delete_selected');
         matsbm_disable('matsbm_reissue_all');
+        matsbm_disable('matsbm_mute_all');
         matsbm_disable('matsbm_delete_all');
     } else {
         // -> No, not checked, so disable "selected" buttons, and enable "all" buttons.
         matsbm_disable('matsbm_reissue_selected');
+        matsbm_disable('matsbm_mute_selected');
         matsbm_disable('matsbm_delete_selected');
         // ?: Are there messages on the queue at all?
         if (matsbm_number_of_messages_on_queue) {
             matsbm_enable('matsbm_reissue_all');
+            matsbm_enable('matsbm_mute_all');
             matsbm_enable('matsbm_delete_all');
         } else {
             matsbm_disable('matsbm_reissue_all');
+            matsbm_disable('matsbm_mute_all');
             matsbm_disable('matsbm_delete_all');
         }
     }
@@ -442,8 +534,10 @@ function matsbm_evaluate_checkall_and_buttons() {
     document.getElementById("matsbm_num_messages_shown").textContent = selectionText;
 }
 
-function matsbm_reissue_or_delete_selected(event, queueId, action) {
-    matsbm_queueview_hide_rest();
+function matsbm_operation_on_selected(event, queueId, action) {
+    let {actionPresent, actionPast, operation} = matsbm_parse_action(action);
+
+    matsbm_browse_queue_hide_rest_of_buttons();
 
     // :: Find which messages
     const msgSysMsgIds = [];
@@ -452,9 +546,6 @@ function matsbm_reissue_or_delete_selected(event, queueId, action) {
             msgSysMsgIds.push(checkbox.getAttribute("data-msgid"));
         }
     }
-    const actionPresent = action === "reissue" ? "Reissuing" : "Deleting";
-    const actionPast = action === "reissue" ? "reissued" : "deleted";
-    const operation = action === "reissue" ? "PUT" : "DELETE";
 
     console.log(actionPresent + " [" + msgSysMsgIds.length + "] selected message(s)...")
 
@@ -462,7 +553,7 @@ function matsbm_reissue_or_delete_selected(event, queueId, action) {
 
     let jsonPath = matsbm_jsonpath();
     let requestBody = {
-        action: action === "reissue" ? "reissue_selected" : "delete_selected",
+        action: action + '_selected',
         queueId: queueId,
         msgSysMsgIds: msgSysMsgIds
     };
@@ -476,40 +567,7 @@ function matsbm_reissue_or_delete_selected(event, queueId, action) {
             return;
         }
         response.json().then(result => {
-            console.log(result);
-            let actionMessage = document.getElementById('matsbm_action_message');
-            actionMessage.innerHTML = "Done, " + result.numberOfAffectedMessages
-                + " message" + (result.numberOfAffectedMessages > 1 ? "s" : "")
-                + " " + actionPast
-                + ". Time taken: " + result.timeTakenMillis + " ms."
-                + (action === 'reissue' ? " <b>[Check console or log for new message ids!]</b>" : "");
-            actionMessage.classList.add(action === "reissue" ? 'matsbm_action_reissued' : 'matsbm_action_deleted')
-            for (const msgSysMsgId of Object.keys(result.affectedMessages)) {
-                const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
-                if (row) {
-                    row.classList.add('matsbm_' + actionPast);
-                } else {
-                    console.error("Couldn't find message row for msgSysMsgId [" + msgSysMsgId + "].");
-                }
-            }
-
-            console.log("Done, " + actionPast + " [" + result.numberOfAffectedMessages + "] messages(s):");
-            let count = 0;
-            for (const messageMeta of Object.values(result.affectedMessages)) {
-                console.log("  " + count + ":" + JSON.stringify(messageMeta));
-                count++;
-            }
-            // Annoying CSS "delayed transition" also somehow "overwrites" the row color transition..?!
-            // Using JS hack instead, to delay second part of transition.
-            setTimeout(() => {
-                for (const [msgSysMsgId, messageMeta] of Object.entries(result.affectedMessages)) {
-                    const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
-                    if (row) {
-                        row.classList.add('matsbs_delete_or_reissue');
-                    }
-                }
-                setTimeout(() => window.location.reload(), action === "reissue" ? 2000 : 1200);
-            }, 1500)
+            matsbm_after_multiple_operation(action, actionPast, result);
         }).catch(error => {
             matsbm_json_parse_error_message(error);
         });
@@ -518,15 +576,10 @@ function matsbm_reissue_or_delete_selected(event, queueId, action) {
     });
 }
 
+function matsbm_operation_on_all(event, queueId, action, limitMessages) {
+    let {actionPresent, actionPast, operation} = matsbm_parse_action(action);
 
-function matsbm_reissue_or_delete_all(event, queueId, action, limitMessages) {
-    console.log("Delete all, limitMessages:", limitMessages);
-
-    matsbm_queueview_hide_rest();
-
-    const actionPresent = action === "reissue" ? "Reissuing" : "Deleting";
-    const actionPast = action === "reissue" ? "reissued" : "deleted";
-    const operation = action === "reissue" ? "PUT" : "DELETE";
+    matsbm_browse_queue_hide_rest_of_buttons();
 
     console.log(actionPresent + " up to [" + limitMessages + "] message(s)...")
 
@@ -534,7 +587,7 @@ function matsbm_reissue_or_delete_all(event, queueId, action, limitMessages) {
 
     let jsonPath = matsbm_jsonpath();
     let requestBody = {
-        action: action === "reissue" ? "reissue_all" : "delete_all",
+        action: action + '_all',
         queueId: queueId,
         limitMessages: limitMessages
     };
@@ -548,40 +601,7 @@ function matsbm_reissue_or_delete_all(event, queueId, action, limitMessages) {
             return;
         }
         response.json().then(result => {
-            console.log(result);
-            let actionMessage = document.getElementById('matsbm_action_message');
-            actionMessage.innerHTML = "Done, " + result.numberOfAffectedMessages
-                + " message" + (result.numberOfAffectedMessages > 1 ? "s" : "")
-                + " " + actionPast
-                + ". Time taken: " + result.timeTakenMillis + " ms."
-                + (action === 'reissue' ? " <b>[Check console or log for new message ids!]</b>" : "");
-            actionMessage.classList.add(action === "reissue" ? 'matsbm_action_reissued' : 'matsbm_action_deleted')
-            for (const msgSysMsgId of Object.keys(result.affectedMessages)) {
-                const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
-                if (row) {
-                    row.classList.add('matsbm_' + actionPast);
-                } else {
-                    console.error("Couldn't find message row for msgSysMsgId [" + msgSysMsgId + "].");
-                }
-            }
-
-            console.log("Done, " + actionPast + " [" + result.numberOfAffectedMessages + "] messages(s):");
-            let count = 0;
-            for (const messageMeta of Object.values(result.affectedMessages)) {
-                console.log("  " + count + ":" + JSON.stringify(messageMeta));
-                count++;
-            }
-            // Annoying CSS "delayed transition" also somehow "overwrites" the row color transition..?!
-            // Using JS hack instead, to delay second part of transition.
-            setTimeout(() => {
-                for (const [msgSysMsgId, messageMeta] of Object.entries(result.affectedMessages)) {
-                    const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
-                    if (row) {
-                        row.classList.add('matsbs_delete_or_reissue');
-                    }
-                }
-                setTimeout(() => window.location.reload(), action === "reissue" ? 2000 : 1200);
-            }, 1500)
+            matsbm_after_multiple_operation(action, actionPast, result);
         }).catch(error => {
             matsbm_json_parse_error_message(error);
         });
@@ -590,11 +610,78 @@ function matsbm_reissue_or_delete_all(event, queueId, action, limitMessages) {
     });
 }
 
+function matsbm_parse_action(action) {
+    let actionPresent;
+    let actionPast;
+    let operation;
+    if (action === "reissue") {
+        actionPresent = "Reissuing";
+        actionPast = "reissued";
+        operation = "PUT";
+    } else if (action === "mute") {
+        actionPresent = "Muting";
+        actionPast = "muted";
+        operation = "PUT";
+    } else if (action === "delete") {
+        actionPresent = "Deleting";
+        actionPast = "deleted";
+        operation = "DELETE";
+    } else {
+        throw new Error("Unknown action [" + action + "].");
+    }
+    return {actionPresent, actionPast, operation};
+}
+
+function matsbm_after_multiple_operation(action, actionPast, result) {
+    console.log(result);
+    let actionMessage = document.getElementById('matsbm_action_message');
+    actionMessage.innerHTML = "Done, " + result.numberOfAffectedMessages
+        + " message" + (result.numberOfAffectedMessages > 1 ? "s" : "")
+        + " " + actionPast
+        + ". Time taken: " + result.timeTakenMillis + " ms."
+        + (action !== 'delete' ? " <b>[Check console or log for new message ids!]</b>" : "");
+    actionMessage.classList.add('matsbm_action_' + actionPast)
+    for (const msgSysMsgId of Object.keys(result.affectedMessages)) {
+        const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
+        if (row) {
+            row.classList.add('matsbm_' + actionPast);
+        } else {
+            console.error("Couldn't find message row for msgSysMsgId [" + msgSysMsgId + "].");
+        }
+    }
+    console.log("Done, " + actionPast + " [" + result.numberOfAffectedMessages + "] messages(s):");
+    let count = 0;
+    for (const messageMeta of Object.values(result.affectedMessages)) {
+        console.log("  " + count + ":" + JSON.stringify(messageMeta));
+        count++;
+    }
+    // Annoying CSS "delayed transition" also somehow "overwrites" the row color transition..?!
+    // Using JS hack instead, to delay second part of transition.
+    setTimeout(() => {
+        for (const [msgSysMsgId, messageMeta] of Object.entries(result.affectedMessages)) {
+            const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
+            if (row) {
+                // Handle an annoying issue with Firefox, which won't transition height down to 0. (Works on Chrome)
+                row.addEventListener('transitionend', () => {
+                    row.style.contentVisibility = 'hidden';
+                });
+                row.classList.add('matsbs_delete_mute_or_reissue');
+            }
+        }
+        setTimeout(() => window.location.reload(), action === "reissue" ? 2000 : 1200);
+    }, 1500)
+}
+
 // ::: EXAMINE MESSAGE
+
+// Called at bottom of Examine Message HTML output
+function matsbm_examine_message_view_loaded() {
+    matsbm_delete_single_cancel();
+}
 
 // .. Key Listener for Examine Message
 
-function matsbm_examineMessageKeyListener(event) {
+function matsbm_examine_message_KeyListener(event) {
     const name = event.key;
     if (name === "Escape") {
         // ?: Is the "Confirm Delete" button active (non-hidden)?
@@ -609,9 +696,11 @@ function matsbm_examineMessageKeyListener(event) {
         return;
     }
 
-
     if (name.toLowerCase() === "r") {
         matsbm_click("matsbm_reissue_single");
+    }
+    if (name.toLowerCase() === "m") {
+        matsbm_click("matsbm_mute_single");
     }
     if (name.toLowerCase() === "d") {
         matsbm_click("matsbm_delete_single");
@@ -621,19 +710,36 @@ function matsbm_examineMessageKeyListener(event) {
     }
 }
 
-// .. REISSUE / DELETE
+function matsbm_examine_message_hide_all_buttons() {
+    matsbm_hide("matsbm_delete_single_confirm");
+    matsbm_hide("matsbm_delete_single_cancel");
+    matsbm_hide("matsbm_reissue_single");
+    matsbm_hide("matsbm_mute_single");
+    matsbm_hide("matsbm_delete_single");
+}
+
+// .. REISSUE / MUTE / DELETE single
 
 function matsbm_reissue_single(event, queueId, msgSysMsgId) {
-    matsbm_examineview_hide_all_buttons();
+    matsbm_examine_message_hide_all_buttons();
     // Invoke after a small delay, so that animation of hiding buttons is well underway.
     setTimeout(() => {
-        matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, "reissue")
+        matsbm_operation_on_single(event, queueId, msgSysMsgId, "reissue")
+    }, 500);
+}
+
+function matsbm_mute_single(event, queueId, msgSysMsgId) {
+    matsbm_examine_message_hide_all_buttons();
+    // Invoke after a small delay, so that animation of hiding buttons is well underway.
+    setTimeout(() => {
+        matsbm_operation_on_single(event, queueId, msgSysMsgId, "mute")
     }, 500);
 }
 
 function matsbm_delete_single_propose(event) {
     // Hide Reissue and Delete
     matsbm_hide("matsbm_reissue_single");
+    matsbm_hide("matsbm_mute_single");
     matsbm_hide("matsbm_delete_single");
     // Show Delete Confirm and Delete Cancel
     matsbm_show("matsbm_delete_single_confirm");
@@ -643,6 +749,7 @@ function matsbm_delete_single_propose(event) {
 function matsbm_delete_single_cancel(event) {
     // Show Reissue and Delete
     matsbm_show("matsbm_reissue_single");
+    matsbm_show("matsbm_mute_single");
     matsbm_show("matsbm_delete_single");
     // Hide Delete Confirm and Delete Cancel visible
     matsbm_hide("matsbm_delete_single_confirm");
@@ -650,10 +757,10 @@ function matsbm_delete_single_cancel(event) {
 }
 
 function matsbm_delete_single_confirm(event, queueId, msgSysMsgId) {
-    matsbm_examineview_hide_all_buttons();
+    matsbm_examine_message_hide_all_buttons();
     // Invoke after a small delay, so that animation of hiding buttons is well underway.
     setTimeout(() => {
-        matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, "delete")
+        matsbm_operation_on_single(event, queueId, msgSysMsgId, "delete")
     }, 500);
 }
 
@@ -666,20 +773,10 @@ function matsbm_is_delete_single_confirm_active() {
     return !confirmDeleteButton.classList.contains('matsbm_button_hidden');
 }
 
-function matsbm_examineview_hide_all_buttons() {
-    matsbm_hide("matsbm_delete_single_confirm");
-    matsbm_hide("matsbm_delete_single_cancel");
-    matsbm_hide("matsbm_reissue_single");
-    matsbm_hide("matsbm_delete_single");
-}
-
-function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
+function matsbm_operation_on_single(event, queueId, msgSysMsgId, action) {
+    let {actionPresent, actionPast, operation} = matsbm_parse_action(action);
     // Hide all buttons.
-    matsbm_examineview_hide_all_buttons();
-
-    const actionPresent = action === "reissue" ? "Reissuing" : "Deleting";
-    const actionPast = action === "reissue" ? "reissued" : "deleted";
-    const operation = action === "reissue" ? "PUT" : "DELETE";
+    matsbm_examine_message_hide_all_buttons();
 
     console.log(actionPresent + " single message")
 
@@ -687,7 +784,7 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
 
     let jsonPath = matsbm_jsonpath();
     let requestBody = {
-        action: action === "reissue" ? "reissue_selected" : "delete_selected",
+        action: action + "_selected",
         queueId: queueId,
         msgSysMsgIds: [msgSysMsgId]
     };
@@ -708,9 +805,9 @@ function matsbm_reissue_or_delete_single(event, queueId, msgSysMsgId, action) {
                 actionMessage.classList.add('matsbm_action_error');
             } else {
                 actionMessage.textContent = "Done, message " + actionPast + "!"
-                    + (action === 'reissue' ? " (Check console for new message id)" : "")
+                    + (action !== 'delete' ? " (Check console for new message id)" : "")
                     + " Time taken: " + result.timeTakenMillis + " ms";
-                actionMessage.classList.add(action === 'reissue' ? 'matsbm_action_reissued' : 'matsbm_action_deleted')
+                actionMessage.classList.add('matsbm_action_' + actionPast)
             }
             console.log("Done, " + actionPast + " [" + result.numberOfAffectedMessages + "] messages(s):");
             let count = 0;
@@ -815,7 +912,7 @@ function matsbm_callmodal(event) {
 }
 
 // Modal Key listener: when modal is active.
-function matsbm_modalActiveKeyListener(event) {
+function matsbm_examine_message_modal_active_KeyListener(event) {
     const name = event.key;
     const code = event.code;
     console.log(`Key pressed ${name} \r\n Key code value: ${code}`);

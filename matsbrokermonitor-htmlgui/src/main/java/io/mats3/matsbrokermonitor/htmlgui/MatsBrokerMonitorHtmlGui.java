@@ -11,6 +11,10 @@ import io.mats3.matsbrokermonitor.htmlgui.impl.MatsBrokerMonitorHtmlGuiImpl;
 import io.mats3.serial.MatsSerializer;
 
 /**
+ * A HTML UX for the MatsBrokerMonitor system. Meant to be created as a singleton using the
+ * {@link #create(MatsBrokerMonitor, MatsBrokerBrowseAndActions) create}-methods, and then reused. Is obviously
+ * thread-safe, as it is meant to be used by multiple threads.
+ * 
  * @author Endre Stølsvik 2022-01-02 12:19 - http://stolsvik.com/, endre@stolsvik.com
  */
 public interface MatsBrokerMonitorHtmlGui {
@@ -42,7 +46,8 @@ public interface MatsBrokerMonitorHtmlGui {
 
     /**
      * The embeddable HTML GUI - map this to GET, content type is <code>"text/html; charset=utf-8"</code>. This might
-     * call to {@link #json(Appendable, Map, String, AccessControl)}.
+     * via the browser call back to {@link #json(Appendable, Map, String, AccessControl)} - which you also must
+     * mount at (typically) the same URL (PUT and DELETEs go there, GETs go here).
      */
     void html(Appendable out, Map<String, String[]> requestParameters, AccessControl ac)
             throws IOException, AccessDeniedException;
@@ -108,17 +113,24 @@ public interface MatsBrokerMonitorHtmlGui {
             return false;
         }
 
-        default boolean deleteMessage(String fromQueueId) {
+        default boolean reissueMessage(String fromDeadLetterQueueId) {
             return false;
         }
 
-        default boolean reissueMessage(String fromDeadLetterQueueId) {
+        default boolean muteMessage(String fromDeadLetterQueueId) {
+            return false;
+        }
+
+        default boolean deleteMessage(String fromQueueId) {
             return false;
         }
     }
 
     /**
-     * @param username the username to use in the {@link AccessControl#username()} method.
+     * Quick way to get an {@link AccessControl} instance which allow all operations.
+     * 
+     * @param username
+     *            the username to use in the {@link AccessControl#username()} method.
      * @return an {@link AccessControl} which allows all operations.
      */
     static AccessControl getAccessControlAllowAll(String username) {
@@ -144,17 +156,23 @@ public interface MatsBrokerMonitorHtmlGui {
             }
 
             @Override
-            public boolean deleteMessage(String fromQueueId) {
+            public boolean reissueMessage(String fromDeadLetterQueueId) {
                 return true;
             }
 
             @Override
-            public boolean reissueMessage(String fromDeadLetterQueueId) {
+            public boolean muteMessage(String fromDeadLetterQueueId) {
+                return true;
+            }
+
+            @Override
+            public boolean deleteMessage(String fromQueueId) {
                 return true;
             }
         };
     }
 
+    // TODO: LEGACY: Delete in 2025, ASAP.
     AccessControl ACCESS_CONTROL_ALLOW_ALL = getAccessControlAllowAll("{unknown}");
 
     class AccessDeniedException extends RuntimeException {

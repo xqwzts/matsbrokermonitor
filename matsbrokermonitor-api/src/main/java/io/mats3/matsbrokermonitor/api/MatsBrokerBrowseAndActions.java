@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType;
 
 /**
  * API for browsing queues and performing actions on messages of a Mats Broker. This is the API that the Mats Broker
@@ -23,14 +24,14 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 public interface MatsBrokerBrowseAndActions extends Closeable {
 
     /**
-     * Synthetic DLQ for failed reissues where we could not determine original queue. We have very little recourse when
-     * this happens, and we don't want to delete the message either. Letting it lay on the original DLQ is not a good
-     * solution either - you want them out of the way. Therefore, we put them on another DLQ instead. However, the only
-     * solution MatsBrokerMonitor provide after this move is to delete the message after inspection.
-     * <p/>
+     * Synthetic DLQ for failed operations (reissue or mute) where we could not determine original queue. We have very
+     * little recourse when this happens, and we don't want to delete the message either. Letting it lay on the original
+     * DLQ is not a good solution either - you want them out of the way. Therefore, we put them on another DLQ instead.
+     * However, the only solution MatsBrokerMonitor provide after this move is to delete the message after inspection.
+     * <p>
      * Value is <code>"DLQ.MatsBrokerMonitor.FailedReissues"</code>.
      */
-    String QUEUE_ID_FOR_FAILED_REISSUE = "DLQ.MatsBrokerMonitor.FailedReissues";
+    String QUEUE_ID_FOR_FAILED_OPERATIONS = "DLQ.MatsBrokerMonitor.FailedOperations";
 
     void start();
 
@@ -47,7 +48,7 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      * close the iterable.
      *
      * @param queueId
-     *            the full name of the queue, including mats prefix.
+     *            the full name of the queue, including mats prefix. (NOT fully qualified with e.g. "queue://")
      * @return a {@link MatsBrokerMessageIterable}, containing either all (unbounded), or a max number of messages (for
      *         ActiveMQ, it is 400) - note that it is absolutely essential that this object is closed after use! You
      *         should have a max number of messages that is read, as it can potentially be many and unbounded (so if
@@ -61,7 +62,7 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      * requested message might not be present, in which case {@link Optional#empty()} is returned.
      *
      * @param queueId
-     *            the full name of the queue, including mats prefix.
+     *            the full name of the queue, including mats prefix. (NOT fully qualified with e.g. "queue://")
      * @param messageSystemId
      *            the broker's id for this message, for JMS it is the message.getJMSMessageID().
      * @return the specified message, if present.
@@ -73,7 +74,7 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      * Deletes the specified message from the specified queue.
      *
      * @param queueId
-     *            the full name of the queue, including mats prefix.
+     *            the full name of the queue, including mats prefix. (NOT fully qualified with e.g. "queue://")
      * @param messageSystemIds
      *            the broker's id for the messages to be deleted, for JMS it is the message.getJMSMessageID().
      * @return a Map of the messageSystemIds of the messages deleted, to an instance of
@@ -89,7 +90,7 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      * of messages currently on the queue.
      *
      * @param queueId
-     *            the full name of the queue, including mats prefix.
+     *            the full name of the queue, including mats prefix. (NOT fully qualified with e.g. "queue://")
      * @param limitMessages
      *            the max number of messages to delete - will typically be the number of messages we got from the last
      *            update from the {@link MatsBrokerMonitor} via
@@ -107,10 +108,10 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      * queueId is actually a DLQ - it is up to the caller to ensure this. The messages reissued will be put on the same
      * queue as they were originally on - which is gotten from a property on the message which is set by the Mats
      * implementation - if this is missing, the message will be put on a new synthetic DLQ named
-     * <code>{@link #QUEUE_ID_FOR_FAILED_REISSUE}"</code>, and the message will be logged.
+     * <code>{@link #QUEUE_ID_FOR_FAILED_OPERATIONS}"</code>, and the message will be logged.
      *
      * @param deadLetterQueueId
-     *            the full name of the queue, including mats prefix.
+     *            the full name of the queue, including mats prefix. (NOT fully qualified with e.g. "queue://")
      * @param messageSystemIds
      *            the broker's id for the messages to be reissued, for JMS it is the message.getJMSMessageID().
      * @param reissuingUsername
@@ -125,13 +126,38 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
             Collection<String> messageSystemIds, String reissuingUsername) throws BrokerIOException;
 
     /**
+     * Mutes the specified message Ids on the specified Dead Letter Queue. Note that there is no check that the queueId
+     * is actually a DLQ - it is up to the caller to ensure this. The muted messages will be put on a special DLQ based
+     * on the queue they were originally on, with the midfix as specified by
+     * {@link StageDestinationType#DEAD_LETTER_QUEUE_MUTED DEAD_LETTER_QUEUE_MUTED}. The queue they were originally on
+     * is gotten from a property on the message which is set by the Mats implementation - if this is missing, the
+     * message will be put on a new synthetic DLQ named <code>{@link #QUEUE_ID_FOR_FAILED_OPERATIONS}"</code>, and the
+     * message will be logged.
+     *
+     * @param deadLetterQueueId
+     *            the full name of the queue, including mats prefix. (NOT fully qualified with e.g. "queue://")
+     * @param messageSystemIds
+     *            the broker's id for the messages to be muted, for JMS it is the message.getJMSMessageID().
+     * @param mutingUsername
+     *            the username of the user muting the messages, which will be put on the message as a property.
+     * @param muteComment
+     *            a comment to put on the message as a property, explaining why the message was muted. This is useful
+     *            for the user to remember why the message was muted, and for the system to be able to show this to the
+     *            user later. E.g. a Jira issue link, or any other comment.
+     * @return a Map of the messageSystemIds of the messages muted, to an instance of {@link MatsBrokerMessageMetadata}
+     *         which contains the metadata of the muted message, including the new messageSystemId of the muted message,
+     *         if available.
+     * @throws BrokerIOException
+     *             if problems talking with the broker.
+     */
+    Map<String, MatsBrokerMessageMetadata> muteMessages(String deadLetterQueueId,
+            Collection<String> messageSystemIds, String mutingUsername, String muteComment) throws BrokerIOException;
+
+    /**
      * Reissues all message on the specified Dead Letter Queue, up to the specified max number of messages which should
      * be the number of messages currently on the queue. Note that there is no check that the queueId is actually a DLQ
-     * - it is up to the caller to ensure this. The messages reissued will be put on the same queue as they were
-     * originally on - which is gotten from a property on the message which is set by the Mats implementation - if this
-     * is missing, the message will be put on a new synthetic DLQ named
-     * <code>"{@link #QUEUE_ID_FOR_FAILED_REISSUE}"</code>, and the message will be logged.
-     * <p/>
+     * - it is up to the caller to ensure this. Read more at {@link #reissueMessages(String, Collection, String)}.
+     * <p>
      * The reissuing employs a "cookie" to ensure that if the messages are again DLQed while we are reissuing them, we
      * will not reissue the same messages again: This is a random string which is put on the message when it is
      * reissued, and which is checked when we get the message from the DLQ. If the same cookie is present, we know that
@@ -139,7 +165,7 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      * we stop the reissuing process.
      *
      * @param deadLetterQueueId
-     *            the full name of the queue, including mats prefix.
+     *            the full name of the queue, including mats prefix. (NOT fully qualified with e.g. "queue://")
      * @param limitMessages
      *            the max number of messages to reissue - will typically be the number of messages we got from the last
      *            update from the {@link MatsBrokerMonitor} via
@@ -154,6 +180,32 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
      */
     Map<String, MatsBrokerMessageMetadata> reissueAllMessages(String deadLetterQueueId, int limitMessages,
             String reissuingUsername) throws BrokerIOException;
+
+    /**
+     * Mutes all message of the specified Dead Letter Queue, up to the specified max number of messages which should be
+     * the number of messages currently on the queue. Note that there is no check that the queueId is actually a DLQ -
+     * it is up to the caller to ensure this. Read more at {@link #muteMessages(String, Collection, String, String)}.
+     *
+     * @param deadLetterQueueId
+     *            the full name of the queue, including mats prefix. (NOT fully qualified with e.g. "queue://")
+     * @param limitMessages
+     *            the max number of messages to reissue - will typically be the number of messages we got from the last
+     *            update from the {@link MatsBrokerMonitor} via
+     *            {@link MatsBrokerDestination#getNumberOfQueuedMessages()}.
+     * @param mutingUsername
+     *            the username of the user reissuing the messages, which will be put on the message as a property.
+     * @param muteComment
+     *            a comment to put on the message as a property, explaining why the message was muted. This is useful
+     *            for the user to remember why the message was muted, and for the system to be able to show this to the
+     *            user later. E.g. a Jira issue link, or any other comment.
+     * @return a Map of the messageSystemIds of the messages reissued, to an instance of
+     *         {@link MatsBrokerMessageMetadata} which contains the metadata of the reissued message, including the new
+     *         messageSystemId of the reissued message, if available.
+     * @throws BrokerIOException
+     *             if problems talking with the broker.
+     */
+    Map<String, MatsBrokerMessageMetadata> muteAllMessages(String deadLetterQueueId, int limitMessages,
+            String mutingUsername, String muteComment) throws BrokerIOException;
 
     interface MatsBrokerMessageIterable extends Iterable<MatsBrokerMessageRepresentation>, AutoCloseable {
         /**
@@ -320,12 +372,14 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
         Optional<String> getDlqStageOrigin();
 
         /**
-         * For messages residing on a DLQ: The username of the user that reissued this message from the DLQ via
-         * MatsBrokerMonitor (assuming that the message has already been tried reissued!).
+         * For messages residing on a DLQ or Muted DLQ: The username of the user that reissued or muted this message
+         * from the DLQ via MatsBrokerMonitor. For reissued, this is relevant if the message again DLQs. For muted, this
+         * shows who muted the DLQ message.
          *
-         * @return the username of the user that reissued this message from the DLQ via MatsBrokerMonitor, if available.
+         * @return the username of the user that reissued or muted this message from the DLQ via MatsBrokerMonitor, if
+         *         available.
          */
-        Optional<String> getDlqLastReissuedUsername();
+        Optional<String> getDlqLastOperationUsername();
 
         /**
          * @return the timestamp (millis-from-epoch) when the message will expire, or <code>0</code> if never.

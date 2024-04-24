@@ -98,34 +98,9 @@ class BrowseQueue {
             // ?: Is this a MatsStage Queue or DLQ?
             if (matsBrokerDestination.getMatsStageId().isPresent()) {
                 // -> Mats stage queue.
-                String typeName;
-                switch (matsBrokerDestination.getStageDestinationType().orElse(UNKNOWN)) {
-                    case STANDARD:
-                        typeName = "Standard Incoming Queue";
-                        break;
-                    case NON_PERSISTENT_INTERACTIVE:
-                        typeName = "Non-Persistent Interactive Queue";
-                        break;
-                    case DEAD_LETTER_QUEUE:
-                        typeName = "DLQ";
-                        break;
-                    case DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE:
-                        typeName = "Non-Persistent Interactive DLQ";
-                        break;
-                    case DEAD_LETTER_QUEUE_MUTED:
-                        typeName = "Muted DLQ";
-                        break;
-                    case WIRETAP:
-                        typeName = "Wiretap Queue";
-                        break;
-                    default:
-                        typeName = "Unknown Type Queue";
-                        break;
-                }
-
-                out.html("<h1>Browsing <i>");
-                out.DATA(typeName);
-                out.html("</i> for <div class='matsbm_stageid'>")
+                String typeName = matsBrokerDestination.getStageDestinationType().orElse(UNKNOWN).getTypeName();
+                out.html("<h1>Browsing <i><b>").DATA(typeName)
+                        .html("</b></i> for <div class='matsbm_stageid'>")
                         .DATA(matsBrokerDestination.getMatsStageId().get()).html("</div></h1>");
             }
             else {
@@ -196,62 +171,110 @@ class BrowseQueue {
             out.html("</div>");
         }
 
-        // :: BUTTONS: REISSUE, DELETE, FORCE UPDATE
+        // :: BUTTONS: REISSUE, MUTE, DELETE, FORCE UPDATE
 
+        // REISSUE AND MUTE selected:
+        // ?: Is this a DLQ? (Both Normal and Muted DLQ)
         if (matsBrokerDestination.isDlq()) {
             // Reissue selected (instant, no confirm)
-            out.html("<input type='button' id='matsbm_reissue_selected' value='Reissue [r]'"
-                    + " class='matsbm_button matsbm_button_reissue matsbm_button_disabled'"
-                    + " onclick='matsbm_reissue_selected(event, \"").DATA(queueId).html("\")'>");
+            if (ac.reissueMessage(queueId)) {
+                out.html("<button id='matsbm_reissue_selected'"
+                        + " class='matsbm_button matsbm_button_reissue matsbm_button_disabled'"
+                        + " onclick='matsbm_reissue_selected(event, \"")
+                        .DATA(queueId).html("\")'>Reissue [r]</button>");
+            }
+
+            // ?: Is this a NOT a Muted DLQ?
+            if (ac.muteMessage(queueId) && matsBrokerDestination.getStageDestinationType().isPresent() &&
+                    (matsBrokerDestination.getStageDestinationType()
+                            .get() != StageDestinationType.DEAD_LETTER_QUEUE_MUTED)) {
+                // -> No, normal DLQ, so output Mute button
+                out.html("<button id='matsbm_mute_selected'"
+                        + " class='matsbm_button matsbm_button_mute matsbm_button_disabled'"
+                        + " onclick='matsbm_mute_selected(event,\"")
+                        .DATA(queueId).html("\")'>Mute [m]</button>");
+            }
         }
 
-        // Delete selected
-        out.html("<input type='button' id='matsbm_delete_selected' value='Delete... [d]'"
-                + " class='matsbm_button matsbm_button_delete matsbm_button_disabled'"
-                + " onclick='matsbm_delete_selected_propose(event)'>");
-        // Cancel delete selected
-        out.html("<button id='matsbm_delete_selected_cancel'"
-                + " class='matsbm_button matsbm_button_wider matsbm_button_delete_cancel matsbm_button_hidden'"
-                + " onclick='matsbm_delete_or_reissue_cancel(event)'>Cancel <b>Delete Selected</b> [Esc]</button>");
-        // Confirm delete selected
-        out.html("<button id='matsbm_delete_selected_confirm'"
-                + " class='matsbm_button matsbm_button_wider matsbm_button_delete matsbm_button_hidden'"
-                + " onclick='matsbm_delete_selected_confirm(event, \"").DATA(queueId).html("\")'>"
-                        + "Confirm <b>Delete Selected</b> [x]</button>");
+        // DELETE selected
+        if (ac.deleteMessage(queueId)) {
+            // Propose delete selected
+            out.html("<button id='matsbm_delete_selected'"
+                    + " class='matsbm_button matsbm_button_delete matsbm_button_disabled'"
+                    + " onclick='matsbm_delete_selected_propose(event)'>Delete... [d]</button>");
+            // Cancel delete selected
+            out.html("<button id='matsbm_delete_selected_cancel'"
+                    + " class='matsbm_button matsbm_button_wider matsbm_button_delete_cancel matsbm_button_hidden'"
+                    + " onclick='matsbm_delete_mute_or_reissue_cancel(event)'>Cancel <b>Delete Selected</b> [Esc]</button>");
+            // Confirm delete selected
+            out.html("<button id='matsbm_delete_selected_confirm'"
+                    + " class='matsbm_button matsbm_button_wider matsbm_button_delete matsbm_button_hidden'"
+                    + " onclick='matsbm_delete_selected_confirm(event, \"").DATA(queueId).html("\")'>"
+                    + "Confirm <b>Delete Selected</b> [x]</button>");
+        }
 
+        out.html("&nbsp;&nbsp;&nbsp;");
+
+        // REISSUE AND MUTE all:
+        // ?: Is this a DLQ? (Both Normal and Muted DLQ)
         if (matsBrokerDestination.isDlq()) {
-            // Reissue all
-            out.html("<input type='button' id='matsbm_reissue_all' value='Reissue All... [R]'"
-                    + " class='matsbm_button matsbm_button_reissue"
-                    + (numberOfQueuedMessages > 0 ? "" : " matsbm_button_disabled")
-                    + "' onclick='matsbm_reissue_all_propose(event)'>");
-            // Cancel reissue all
-            out.html("<button id='matsbm_reissue_all_cancel'"
-                    + " class='matsbm_button matsbm_button_wider matsbm_button_reissue_cancel matsbm_button_hidden'"
-                    + " onclick='matsbm_delete_or_reissue_cancel(event)'>Cancel <b>Reissue All</b> [Esc]</button>");
-            // Confirm reissue all
-            out.html("<button id='matsbm_reissue_all_confirm'"
-                    + " class='matsbm_button matsbm_button_wider matsbm_button_reissue matsbm_button_hidden'"
-                    + " onclick='matsbm_reissue_all_confirm(event, \"").DATA(queueId).html("\")'>"
-                            + "Confirm <b>Reissue All</b> [x]</button>");
+            if (ac.reissueMessage(queueId)) {
+                // Propose reissue all
+                out.html("<button id='matsbm_reissue_all'"
+                        + " class='matsbm_button matsbm_button_reissue"
+                        + (numberOfQueuedMessages > 0 ? "" : " matsbm_button_disabled")
+                        + "' onclick='matsbm_reissue_all_propose(event)'>Reissue All... [r]</button>");
+                // Cancel reissue all
+                out.html("<button id='matsbm_reissue_all_cancel'"
+                        + " class='matsbm_button matsbm_button_wider matsbm_button_reissue_cancel matsbm_button_hidden'"
+                        + " onclick='matsbm_delete_mute_or_reissue_cancel(event)'>Cancel <b>Reissue All</b> [Esc]</button>");
+                // Confirm reissue all
+                out.html("<button id='matsbm_reissue_all_confirm'"
+                        + " class='matsbm_button matsbm_button_wider matsbm_button_reissue matsbm_button_hidden'"
+                        + " onclick='matsbm_reissue_all_confirm(event, \"").DATA(queueId).html("\")'>"
+                        + "Confirm <b>Reissue All</b> [x]</button>");
+            }
+            // ?: Is this a NOT a Muted DLQ?
+            if (ac.muteMessage(queueId) && matsBrokerDestination.getStageDestinationType().isPresent() &&
+                    (matsBrokerDestination.getStageDestinationType()
+                            .get() != StageDestinationType.DEAD_LETTER_QUEUE_MUTED)) {
+                // -> No, normal DLQ, so output Mute buttons
+                // Propose mute all
+                out.html("<button id='matsbm_mute_all'"
+                        + " class='matsbm_button matsbm_button_mute"
+                        + (numberOfQueuedMessages > 0 ? "" : " matsbm_button_disabled")
+                        + "' onclick='matsbm_mute_all_propose(event)'>Mute All... [m]</button>");
+                // Cancel mute all
+                out.html("<button id='matsbm_mute_all_cancel'"
+                        + " class='matsbm_button matsbm_button_wider matsbm_button_mute_cancel matsbm_button_hidden'"
+                        + " onclick='matsbm_delete_mute_or_reissue_cancel(event)'>Cancel <b>Mute All</b> [Esc]</button>");
+                // Confirm mute all
+                out.html("<button id='matsbm_mute_all_confirm'"
+                        + " class='matsbm_button matsbm_button_wider matsbm_button_mute matsbm_button_hidden'"
+                        + " onclick='matsbm_mute_all_confirm(event, \"").DATA(queueId).html("\")'>"
+                                + "Confirm <b>Mute All</b> [x]</button>");
+            }
         }
 
-        // Delete all
-        out.html("<input type='button' id='matsbm_delete_all' value='Delete All... [D]'"
-                + " class='matsbm_button matsbm_button_delete"
-                + (numberOfQueuedMessages > 0 ? "" : " matsbm_button_disabled")
-                + "' onclick='matsbm_delete_all_propose(event)'>");
-        // Cancel delete all
-        out.html("<button id='matsbm_delete_all_cancel'"
-                + " class='matsbm_button matsbm_button_wider matsbm_button_delete_cancel matsbm_button_hidden'"
-                + " onclick='matsbm_delete_or_reissue_cancel(event)'>Cancel <b>Delete All</b> [Esc]</button>");
-        // Confirm delete all
-        out.html("<button id='matsbm_delete_all_confirm'"
-                + " class='matsbm_button matsbm_button_wider matsbm_button_delete matsbm_button_hidden'"
-                + " onclick='matsbm_delete_all_confirm(event, \"").DATA(queueId).html("\")'>"
-                        + "Confirm <b>Delete All</b> [x]</button>");
+        // DELETE all
+        if (ac.deleteMessage(queueId)) {
+            // Propose delete all
+            out.html("<button id='matsbm_delete_all'"
+                    + " class='matsbm_button matsbm_button_delete"
+                    + (numberOfQueuedMessages > 0 ? "" : " matsbm_button_disabled")
+                    + "' onclick='matsbm_delete_all_propose(event)'>Delete All... [d]</button>");
+            // Cancel delete all
+            out.html("<button id='matsbm_delete_all_cancel'"
+                    + " class='matsbm_button matsbm_button_wider matsbm_button_delete_cancel matsbm_button_hidden'"
+                    + " onclick='matsbm_delete_mute_or_reissue_cancel(event)'>Cancel <b>Delete All</b> [Esc]</button>");
+            // Confirm delete all
+            out.html("<button id='matsbm_delete_all_confirm'"
+                    + " class='matsbm_button matsbm_button_wider matsbm_button_delete matsbm_button_hidden'"
+                    + " onclick='matsbm_delete_all_confirm(event, \"").DATA(queueId).html("\")'>"
+                    + "Confirm <b>Delete All</b> [x]</button>");
+        }
 
-        // Limit messages input field (for both reissue all, and delete all)
+        // Limit messages input field (for all of reissue all, mute all, and delete all)
         out.html("<div id='matsbm_all_limit_div' class='matsbm_input_limit_div matsbm_input_limit_div_hidden'>")
                 .html("<label for='matsbm_reissue_all_max_messages'>Limit: </label>"
                         + "<input type='text' id='matsbm_all_limit_messages' value='")
@@ -259,9 +282,9 @@ class BrowseQueue {
                 .html("' autocomplete='off' inputmode='numeric' class='matsbm_input_max'> messages</div>");
 
         // Force update
-        out.html("<input type='button' id='matsbm_button_forceupdate' value='Update Now! [u]'"
+        out.html("<button id='matsbm_button_forceupdate'"
                 + " class='matsbm_button matsbm_button_forceupdate"
-                + "' onclick='matsbm_button_forceupdate(event)'>");
+                + "' onclick='matsbm_button_forceupdate(event)'>Update Now! [u]</button>");
         out.html("<span id='matsbm_action_message'></span>");
         out.html("<br>");
         out.html("</div>\n"); // /matsbm_actionbuttons
@@ -428,6 +451,9 @@ class BrowseQueue {
         if (messageCount == 0) {
             out.html("<h1>No messages!</h1><br>\n");
         }
+
+        // Call into JavaScript to set state for buttons etc.
+        out.html("<script>matsbm_browse_queue_view_loaded();</script>\n");
 
         // Don't output last </div>, as caller does it.
     }
