@@ -10,7 +10,7 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
 /**
  * API for browsing queues and performing actions on messages of a Mats Broker. This is the API that the Mats Broker
  * Monitor uses to browse and perform actions on the broker.
- * <p/>
+ * <p>
  * Note: This is the "read queues and actions on messages" API, which complement the "monitor the broker" API which is
  * {@link MatsBrokerMonitor}. The reason for this separation of the API is that the pieces defined in this piece can be
  * done with ordinary JMS operations, while the operations in the monitor API are not part of a standard JMS API and
@@ -39,7 +39,7 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
     /**
      * <b>NOTICE!! It is imperative that the returned iterable is closed!</b>. Loop through it ASAP (remember a max
      * number), and then close it in a finally-block - prefer <i>try-with-resources</i>.
-     * <p/>
+     * <p>
      * <b>NOTICE!! You should not hold on to the returned {@link MatsBrokerMessageRepresentation}s coming from the
      * iterable, as the contained message may be large. For example, if you put these into a list, the JVM will not be
      * able to GC the messages until the list is GCed, and you might consume a lot of memory.</b> This means that you
@@ -165,7 +165,7 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
     /**
      * The "metadata" of a message, i.e. the information that is available without deserializing the MatsTrace. This is
      * a concrete class, and its field names are such that it can be used as a DTO for serializing to JSON.
-     * <p/>
+     * <p>
      * <i>Note: As a user of the API, you should employ this as if an API interface. The class is final, you should not
      * create instance of it, and it may change - probably to get more fields.</i>
      */
@@ -312,7 +312,7 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
          * For messages residing on a DLQ: For <i>Mats Managed Dlq Divert</i>, this is the "Origin" ("debug info") of
          * the Stage that DLQed this message - i.e. <i>where</i> in the Application source code the stage was defined.
          * If the message was DLQed by the message broker, this will be <code>empty</code>.
-         * <p/>
+         * <p>
          * Note that the StageId that processed the message can be found by {@link #getToStageId()}.
          *
          * @return the "stage origin" of the Mats Stage that processed this message and then DLQed it, if available.

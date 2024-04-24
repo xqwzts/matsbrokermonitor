@@ -92,7 +92,7 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
 
         /**
          * The number of messages that currently reside in the queue.
-         * <p/>
+         * <p>
          * (Endre: Seems to be {@link #enqueueCount} - {@link #dequeueCount}).
          */
         long size;
@@ -113,7 +113,7 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
         /**
          * The number of messages that have been dispatched (sent) to the consumer over the lifetime of the queue. Note
          * that dispatched messages may not have all been acknowledged (since last restart).
-         * <p/>
+         * <p>
          * (Endre: This number can evidently be higher than {@link #enqueueCount}, which I assume means that
          * redeliveries are included.)
          */
@@ -121,7 +121,7 @@ public interface ActiveMqBrokerStatsQuerier extends Closeable {
         /**
          * The number of messages that have been dispatched and are currently awaiting acknowledgment from the consumer.
          * So as this number decreases, the DequeueCount increases.
-         * <p/>
+         * <p>
          * (Endre: This number is included in the {@link #size} number, as inflight messages are not yet dequeued).
          */
         long inflightCount;

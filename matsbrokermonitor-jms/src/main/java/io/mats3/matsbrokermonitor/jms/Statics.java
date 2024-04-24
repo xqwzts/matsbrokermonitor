@@ -9,7 +9,7 @@ public interface Statics {
 
     /**
      * For delete and reissue, how many milliseconds to wait in receive.
-     * <p/>
+     * <p>
      * Value is <code>750</code>.
      */
     long RECEIVE_TIMEOUT_MILLIS = 750;

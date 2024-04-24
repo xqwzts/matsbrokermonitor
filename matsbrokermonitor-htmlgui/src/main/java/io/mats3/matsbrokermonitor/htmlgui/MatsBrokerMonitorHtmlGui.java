@@ -50,7 +50,7 @@ public interface MatsBrokerMonitorHtmlGui {
     /**
      * The HTML GUI will invoke JSON-over-HTTP to the same URL it is located at - map this to PUT and DELETE, content
      * type is <code>"application/json; charset=utf-8"</code>.
-     * <p/>
+     * <p>
      * NOTICE: If you need to change the JSON Path, i.e. the path which this GUI employs to do "active" operations, you
      * can do so by setting the JS global variable "matsbm_json_path" when outputting the HTML, overriding the default
      * which is to use the current URL path (i.e. the same as the GUI is served on). They may be on the same path since

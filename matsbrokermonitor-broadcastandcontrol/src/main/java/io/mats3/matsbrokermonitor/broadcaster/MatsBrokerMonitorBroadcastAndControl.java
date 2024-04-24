@@ -34,21 +34,21 @@ public class MatsBrokerMonitorBroadcastAndControl implements Closeable {
 
     /**
      * The EndpointId to which the update event is published.
-     * <p/>
+     * <p>
      * Value is <code>"mats.MatsBrokerMonitorBroadcastUpdate"</code>.
      */
     public static final String BROADCAST_UPDATE_EVENT_TOPIC_ENDPOINT_ID = "mats.MatsBrokerMonitor.broadcastUpdate";
 
     /**
      * The EndpointId to which one may request operations, currently forceUpdate.
-     * <p/>
+     * <p>
      * Value is <code>"mats.MatsBrokerMonitorControl"</code>.
      */
     public static final String MATSBROKERMONITOR_CONTROL = "mats.MatsBrokerMonitor.control";
 
     /**
      * Copied from MatsInterceptable.MatsLoggingInterceptor
-     * <p/>
+     * <p>
      * We don't want all these updates to be logged on all the JVMs carrying MatsFactories, as it will be annoying noise
      * without much merit.
      */
@@ -125,7 +125,7 @@ public class MatsBrokerMonitorBroadcastAndControl implements Closeable {
 
     /**
      * NOTE: THIS IS COPIED OVER TO MatsBrokerMonitorBroadcastReceiver
-     * <p/>
+     * <p>
      * UpdateEvent DTO from MatsBrokerMonitor, which is sent to SubscriptionTerminator ("topic") EndpointId
      * {@link #BROADCAST_UPDATE_EVENT_TOPIC_ENDPOINT_ID}.
      */
@@ -205,7 +205,7 @@ public class MatsBrokerMonitorBroadcastAndControl implements Closeable {
 
     /**
      * NOTE: THIS IS COPIED OVER TO MatsBrokerMonitorBroadcastReceiver
-     * <p/>
+     * <p>
      * "Command object", which can be sent to Endpoint {@link #MATSBROKERMONITOR_CONTROL}.
      */
     private static class MatsBrokerMonitorCommandDto {

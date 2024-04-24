@@ -23,12 +23,12 @@ import java.util.function.Consumer;
  * <li>Biggest point: <b>The number of messages on all the destinations and Dead Letter Queues.</b></li>
  * <li>Bonus point: The age of any head (first) message on the queue.</li>
  * </ul>
- * <p/>
+ * <p>
  * Note: "Fully Qualified Destination Name" means that the name fully specifies the queue or topic, e.g. for ActiveMQ
  * this includes a schema-like notation "queue://" or "topic://" as prefix. This to handle a queue having the same name
  * as a topic - even though the Mats API forbids this: An "endpointId" fully qualifies a Mats endpoint seen from the
  * MatsFactory's side, no matter if it is e.g. a "terminator" (queue-based) or "subscriptionTerminator" (topic-based).
- * <p/>
+ * <p>
  * Note: This is the "monitor the queues" part of the MatsBrokerMonitor. The "browse the queues and actions on messages"
  * part is found in {@link MatsBrokerBrowseAndActions}. The reason for this separation of the API is that the
  * functionality defined in this part must be implemented specifically for each broker (the JMS API does not have
@@ -130,12 +130,12 @@ public interface MatsBrokerMonitor extends Closeable {
         /**
          * A full update will be sent when {@link #forceUpdate(String, boolean)} was invoked with the 'full' parameter
          * set to <code>true</code>, and will be sent periodically, and might be sent when destinations disappear.
-         * <p/>
+         * <p>
          * When this is <code>true</code>, the receiver should consider the {@link #getEventDestinations()} as
          * authoritative information about all currently known Mats3-relevant destinations on the broker, thus
          * overwriting any local view kept by incremental updates. {@link MatsBrokerMonitor#getSnapshot()
          * BrokerSnapshots} taken after such an event will also reflect the new situation.
-         * <p/>
+         * <p>
          * When this is <code>false</code>, the receiver shall assume that any destinations not mentioned have zero
          * messages pending.
          *
@@ -151,7 +151,7 @@ public interface MatsBrokerMonitor extends Closeable {
          * to the broker - there will only be one node with <code>true</code>, all others will have <code>false</code>.
          * If you are to forward or record the statistics, the node having <code>true</code> here would be the correct
          * node to do it on.
-         * <p/>
+         * <p>
          * Note: If you are getting this update by the 'matsbrokermonitor-broadcastreceiver' module (via the
          * 'matsbrokermonitor-broadcastandcontrol' module), this will always return <code>false</code>, as this is then
          * a "broadcast copy" of the UpdateEvent produced by the node which did the actual statistics request to the
@@ -209,7 +209,7 @@ public interface MatsBrokerMonitor extends Closeable {
             /**
              * <i>Dead Letter Queue for a Non-Persistent Interactive</i> Mats destination, e.g.
              * "DLQ.[matsQueuePrefix]matssys.NPIA.ExampleService.someMethod.stage2".
-             * <p/>
+             * <p>
              * <b>Note: This is not in use by 'Mats Managed DLQ Divert', as the DLQ for NPIA will be the same as for the
              * standard queue.</b> However, if the broker ends up DLQing the NPIA messages, it will employ its standard
              * DLQ handling, which typically is to prefix the existing queue name by "DLQ.". Thus, we will have to
@@ -222,7 +222,7 @@ public interface MatsBrokerMonitor extends Closeable {
              * "DLQ.[matsQueuePrefix]matssys.MUTED_DLQ.ExampleService.someMethod.stage2". This is used when we have a
              * DLQ message that we do not want to have warnings on anymore, because we're already aware of the problem,
              * and are working on it.
-             * <p/>
+             * <p>
              * <b>Note: There is only one "Muted" DLQ, even though there could potentially be two DLQs
              * ({@link #DEAD_LETTER_QUEUE} and {@link #DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE}).
              */
@@ -321,7 +321,7 @@ public interface MatsBrokerMonitor extends Closeable {
          * return {@link Optional#empty()}, while {@link #getDestinationName()} will be the actual DLQ name (e.g. for
          * ActiveMQ, it is <code>"ActiveMQ.DLQ"</code>, while for Artemis it is <code>"DLQ"</code>) - and the
          * {@link #getFqDestinationName()} will be the fully qualified name, e.g. <code>"queue://ActiveMQ.DLQ"</code>.
-         * <p/>
+         * <p>
          * <b>Note: It is highly recommended to configure the broker with an individual DLQ policy!</b>
          *
          * @return whether this is the global DLQ for the broker ({@link #isDlq()} will then also return
@@ -336,7 +336,7 @@ public interface MatsBrokerMonitor extends Closeable {
          * (default "mats."), and any "DLQ." prefix (thus standard/default "DLQ.mats.") and any other prefixes
          * representing the different QueueTypes (e.g. "mats.WIRETAP." for Wiretap). Thus, if this is a DLQ, then this
          * will be the Mats StageId for which it is the DLQ.
-         * <p/>
+         * <p>
          * <b>Please read the information about Global DLQ here: {@link #isBrokerDefaultGlobalDlq()}</b>
          *
          * @return the Mats StageId if the {@link #getDestinationName()} represent a Mats Stage, or DLQ for such.

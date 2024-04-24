@@ -105,7 +105,7 @@ public interface MatsFabricAggregatedRepresentation {
      * "standard" and "DLQ" queues, but indeed all specified by {@link StageDestinationType}. If you have a
      * destinationName, you can find the Stage for it by using this method - and then you can get a reference to all the
      * other queues connected to that stage.
-     * <p/>
+     * <p>
      * Note: This method only searches for the Stage in the stacked representation (as gotten by
      * {@link #stack(Collection)}) by comparing against the {@link MatsBrokerDestination#getDestinationName()} from the
      * MatsBrokerDestination instances present in the stages represented in the stack. This means that if you have a
