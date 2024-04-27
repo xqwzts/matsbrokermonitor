@@ -660,6 +660,14 @@
     transition: visibility 0s linear 1s, opacity 1s 0s, transform 1s, background-color 1s;
 }
 
+.matsbm_part_hidden_mute {
+    background-color: #f4b136;
+    opacity: 0;
+    visibility: hidden;
+    transform: scaleX(0.8) scaleY(0.8);
+    transition: visibility 0s linear 1s, opacity 1s 0s, transform 1s, background-color 1s;
+}
+
 .matsbm_part_hidden_delete {
     opacity: 0;
     background-color: #f44336;
