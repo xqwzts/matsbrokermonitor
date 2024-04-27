@@ -941,9 +941,8 @@ function matsbm_examine_message_modal_active_KeyListener(event) {
             const nextProcessRow = document.getElementById("matsbm_processrow_" + matsbm_activecallmodal);
             nextCallRow.classList.add("matsbm_row_active")
             nextProcessRow.classList.add("matsbm_row_active")
-            // Due to the CSS scroll-margin, this works even with sticky headers.
-            document.getElementById("matsbm_callrow_" + (matsbm_activecallmodal - 1))
-                .scrollIntoView({behavior: "smooth", block: "nearest"});
+            // Scroll "process" (1/2) row into view
+            nextProcessRow.scrollIntoView({behavior: "smooth", block: "nearest"});
         } else {
             // Back out
             matsbm_activecallmodal++;
@@ -964,6 +963,7 @@ function matsbm_examine_message_modal_active_KeyListener(event) {
             const nextProcessRow = document.getElementById("matsbm_processrow_" + matsbm_activecallmodal);
             nextCallRow.classList.add("matsbm_row_active")
             nextProcessRow.classList.add("matsbm_row_active")
+            // Scroll "call" (2/2) row into view
             nextCallRow.scrollIntoView({behavior: "smooth", block: "nearest"});
         } else {
             // Back out
