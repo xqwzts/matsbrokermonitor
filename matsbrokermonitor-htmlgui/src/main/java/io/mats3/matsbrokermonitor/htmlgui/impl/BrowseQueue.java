@@ -1,7 +1,12 @@
 package io.mats3.matsbrokermonitor.htmlgui.impl;
 
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.DEAD_LETTER_QUEUE;
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.DEAD_LETTER_QUEUE_MUTED;
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE;
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.NON_PERSISTENT_INTERACTIVE;
 import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.STANDARD;
 import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.UNKNOWN;
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.WIRETAP;
 import static io.mats3.matsbrokermonitor.htmlgui.impl.BrokerOverview.out_queueCount;
 
 import java.io.IOException;
@@ -26,7 +31,6 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerBrowseAndActions.MatsBrokerMessa
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerSnapshot;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
-import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType;
 import io.mats3.matsbrokermonitor.api.MatsFabricAggregatedRepresentation;
 import io.mats3.matsbrokermonitor.api.MatsFabricAggregatedRepresentation.MatsStageBrokerRepresentation;
 import io.mats3.matsbrokermonitor.htmlgui.MatsBrokerMonitorHtmlGui.AccessControl;
@@ -136,37 +140,40 @@ class BrowseQueue {
             MatsStageBrokerRepresentation stage = stageO.get();
             Optional<MatsBrokerDestination> incomingDest = stage.getDestination(STANDARD);
             if (incomingDest.isPresent()) {
-                out_queueCount(out, incomingDest.get(), true);
+                out_queueCount(out, incomingDest.get(), true,
+                        matsBrokerDestination.getStageDestinationType().orElse(UNKNOWN) == STANDARD);
             }
 
-            Optional<MatsBrokerDestination> npiaDest = stage.getDestination(
-                    StageDestinationType.NON_PERSISTENT_INTERACTIVE);
+            Optional<MatsBrokerDestination> npiaDest = stage.getDestination(NON_PERSISTENT_INTERACTIVE);
             if (npiaDest.isPresent()) {
-                out_queueCount(out, npiaDest.get(), true);
+                out_queueCount(out, npiaDest.get(), true,
+                        matsBrokerDestination.getStageDestinationType().orElse(UNKNOWN) == NON_PERSISTENT_INTERACTIVE);
             }
 
-            Optional<MatsBrokerDestination> dlqDest = stage.getDestination(
-                    StageDestinationType.DEAD_LETTER_QUEUE);
+            Optional<MatsBrokerDestination> dlqDest = stage.getDestination(DEAD_LETTER_QUEUE);
             if (dlqDest.isPresent()) {
-                out_queueCount(out, dlqDest.get(), true);
+                out_queueCount(out, dlqDest.get(), true,
+                        matsBrokerDestination.getStageDestinationType().orElse(UNKNOWN) == DEAD_LETTER_QUEUE);
             }
 
             Optional<MatsBrokerDestination> npiaDlqDest = stage.getDestination(
-                    StageDestinationType.DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE);
+                    DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE);
             if (npiaDlqDest.isPresent()) {
-                out_queueCount(out, npiaDlqDest.get(), true);
+                out_queueCount(out, npiaDlqDest.get(), true,
+                        matsBrokerDestination.getStageDestinationType()
+                                .orElse(UNKNOWN) == DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE);
             }
 
-            Optional<MatsBrokerDestination> mutedDlqDest = stage.getDestination(
-                    StageDestinationType.DEAD_LETTER_QUEUE_MUTED);
+            Optional<MatsBrokerDestination> mutedDlqDest = stage.getDestination(DEAD_LETTER_QUEUE_MUTED);
             if (mutedDlqDest.isPresent()) {
-                out_queueCount(out, mutedDlqDest.get(), true);
+                out_queueCount(out, mutedDlqDest.get(), true,
+                        matsBrokerDestination.getStageDestinationType().orElse(UNKNOWN) == DEAD_LETTER_QUEUE_MUTED);
             }
 
-            Optional<MatsBrokerDestination> wiretapDest = stage.getDestination(
-                    StageDestinationType.WIRETAP);
+            Optional<MatsBrokerDestination> wiretapDest = stage.getDestination(WIRETAP);
             if (wiretapDest.isPresent()) {
-                out_queueCount(out, wiretapDest.get(), true);
+                out_queueCount(out, wiretapDest.get(), true,
+                        matsBrokerDestination.getStageDestinationType().orElse(UNKNOWN) == WIRETAP);
             }
             out.html("</div>");
         }
@@ -187,7 +194,7 @@ class BrowseQueue {
             // ?: Is this a NOT a Muted DLQ?
             if (ac.muteMessage(queueId) && matsBrokerDestination.getStageDestinationType().isPresent() &&
                     (matsBrokerDestination.getStageDestinationType()
-                            .get() != StageDestinationType.DEAD_LETTER_QUEUE_MUTED)) {
+                            .get() != DEAD_LETTER_QUEUE_MUTED)) {
                 // -> No, normal DLQ, so output Mute button
                 out.html("<button id='matsbm_mute_selected'"
                         + " class='matsbm_button matsbm_button_mute matsbm_button_disabled'"
@@ -237,7 +244,7 @@ class BrowseQueue {
             // ?: Is this a NOT a Muted DLQ?
             if (ac.muteMessage(queueId) && matsBrokerDestination.getStageDestinationType().isPresent() &&
                     (matsBrokerDestination.getStageDestinationType()
-                            .get() != StageDestinationType.DEAD_LETTER_QUEUE_MUTED)) {
+                            .get() != DEAD_LETTER_QUEUE_MUTED)) {
                 // -> No, normal DLQ, so output Mute buttons
                 // Propose mute all
                 out.html("<button id='matsbm_mute_all'"
@@ -483,7 +490,8 @@ class BrowseQueue {
                     if (brokerMsg.isDlqMessageRefused().orElse(false)) {
                         out.html("<br><b><span style='color:red;'>Refused!</span></b>");
                     }
-                    else if (brokerMsg.getDlqDeliveryCount().isPresent() && (brokerMsg.getDlqDeliveryCount().get() > 1)) {
+                    else if (brokerMsg.getDlqDeliveryCount().isPresent() && (brokerMsg.getDlqDeliveryCount()
+                            .get() > 1)) {
                         out.html("<br><b>").DATA(brokerMsg.getDlqDeliveryCount().get())
                                 .html(" delivery attempts before DLQ.</b>");
                     }

@@ -521,10 +521,11 @@ class BrokerOverview {
     }
 
     static void out_queueCount(Outputter out, MatsBrokerDestination destination) throws IOException {
-        out_queueCount(out, destination, false);
+        out_queueCount(out, destination, false, false);
     }
 
-    static void out_queueCount(Outputter out, MatsBrokerDestination destination, boolean fromQueueBrowse)
+    static void out_queueCount(Outputter out, MatsBrokerDestination destination, boolean fromQueueBrowse,
+            boolean active)
             throws IOException {
         boolean isDlq = destination.isDlq();
         long numberOfQueuedMessages = destination.getNumberOfQueuedMessages();
@@ -576,10 +577,11 @@ class BrokerOverview {
                         : "Non-" + Statics.MATS3_HTML + " Queue: ";
             }
             // Use these resolves to get the correct css class and text
-            out.html("<a class='").html(cssClass).html("' href='?browse&destinationId=")
+            out.html("<a class='").html(cssClass).html(active ? " active_destination" : "")
+                    .html("' href='?browse&destinationId=")
                     .html("queue:")
                     .DATA(destination.getDestinationName())
-                    .html(numberOfQueuedMessages == 1 ? "&autojump" : "")
+                    .html(((numberOfQueuedMessages == 1) && (!fromQueueBrowse)) ? "&autojump" : "")
                     .html("'>")
                     .html(text);
             out.DATA(numberOfQueuedMessages);
