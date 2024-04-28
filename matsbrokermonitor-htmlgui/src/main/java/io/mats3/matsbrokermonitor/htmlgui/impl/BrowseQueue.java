@@ -210,7 +210,7 @@ class BrowseQueue {
             out.html("<button id='matsbm_delete_selected_confirm'"
                     + " class='matsbm_button matsbm_button_wider matsbm_button_delete matsbm_button_hidden'"
                     + " onclick='matsbm_delete_selected_confirm(event, \"").DATA(queueId).html("\")'>"
-                    + "Confirm <b>Delete Selected</b> [x]</button>");
+                            + "Confirm <b>Delete Selected</b> [x]</button>");
         }
 
         out.html("&nbsp;&nbsp;&nbsp;");
@@ -232,7 +232,7 @@ class BrowseQueue {
                 out.html("<button id='matsbm_reissue_all_confirm'"
                         + " class='matsbm_button matsbm_button_wider matsbm_button_reissue matsbm_button_hidden'"
                         + " onclick='matsbm_reissue_all_confirm(event, \"").DATA(queueId).html("\")'>"
-                        + "Confirm <b>Reissue All</b> [x]</button>");
+                                + "Confirm <b>Reissue All</b> [x]</button>");
             }
             // ?: Is this a NOT a Muted DLQ?
             if (ac.muteMessage(queueId) && matsBrokerDestination.getStageDestinationType().isPresent() &&
@@ -271,7 +271,7 @@ class BrowseQueue {
             out.html("<button id='matsbm_delete_all_confirm'"
                     + " class='matsbm_button matsbm_button_wider matsbm_button_delete matsbm_button_hidden'"
                     + " onclick='matsbm_delete_all_confirm(event, \"").DATA(queueId).html("\")'>"
-                    + "Confirm <b>Delete All</b> [x]</button>");
+                            + "Confirm <b>Delete All</b> [x]</button>");
         }
 
         // Limit messages input field (for all of reissue all, mute all, and delete all)
@@ -332,7 +332,6 @@ class BrowseQueue {
             additionsIncluded.put(tableAddition, include);
             out.html(include ? columnHeadingHtml : "");
         }
-        out.html("<th>TraceId</th>");
         out.html("<th>Init App</th>");
         out.html("<th>InitatorId</th>");
         out.html("<th>Type</th>");
@@ -348,27 +347,28 @@ class BrowseQueue {
         try (matsBrokerMessageIterable) {
             // Notice: Outputting the information in a streaming fashion, so that we don't have to hold on to the
             // MatsBrokerMessageRepresentation instances, which can be large. (They can thus be GCed as soon as we've
-            // output their info.)
-            for (MatsBrokerMessageRepresentation msgRepr : matsBrokerMessageIterable) {
+            // output their info, ideally only holding one in memory at any time)
+            for (MatsBrokerMessageRepresentation brokerMsg : matsBrokerMessageIterable) {
                 if (firstMessageId == null) {
-                    firstMessageId = msgRepr.getMessageSystemId();
+                    firstMessageId = brokerMsg.getMessageSystemId();
                 }
-                out.html("<tr id='matsbm_msgid_").DATA(msgRepr.getMessageSystemId()).html("'>");
+                // :: First, "columnar" row
+                out.html("<tr id='matsbm_msgid_").DATA(brokerMsg.getMessageSystemId()).html("'>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>");
+                out.html("<td rowspan='2'><div class='matsbm_table_browse_nobreak'>");
                 out.html("<input type='checkbox' class='matsbm_checkmsg' autocomplete='off' data-msgid='")
-                        .DATA(msgRepr.getMessageSystemId()).html("' onchange='matsbm_checkmsg(event)'>");
+                        .DATA(brokerMsg.getMessageSystemId()).html("' onchange='matsbm_checkmsg(event)'>");
                 out.html("</div></td>");
 
                 out.html("<td><div class='matsbm_table_browse_nobreak'>");
-                Instant instant = Instant.ofEpochMilli(msgRepr.getTimestamp());
+                Instant instant = Instant.ofEpochMilli(brokerMsg.getTimestamp());
                 out.html(Statics.formatTimestampSpan(instant.toEpochMilli()));
                 out.html("</div></td>");
 
                 // View/Examine-button
                 out.html("<td><div class='matsbm_table_browse_nobreak'>");
                 out.html("<a class='matsbm_table_examinemsg' href='?examineMessage&destinationId=queue:").DATA(queueId)
-                        .html("&messageSystemId=").DATA(msgRepr.getMessageSystemId()).html("'>");
+                        .html("&messageSystemId=").DATA(brokerMsg.getMessageSystemId()).html("'>");
                 out.html("View</a>");
                 out.html("</div></td>");
 
@@ -377,44 +377,99 @@ class BrowseQueue {
                     // ?: Did it choose to be included?
                     if (additionsIncluded.get(tableAddition)) {
                         // -> Yes, so include it.
-                        String html = tableAddition.convertMessageToHtml(msgRepr);
+                        String html = tableAddition.convertMessageToHtml(brokerMsg);
                         out.html(html != null ? html : "<td><div></div></td>");
                     }
                 }
 
-                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(msgRepr.getTraceId())
-                        .html("</div></td>");
-
                 out.html("<td><div class='matsbm_table_browse_breakall'>");
-                out.DATA(msgRepr.getInitiatingApp() != null ? msgRepr.getInitiatingApp() : "{missing init app}");
+                out.DATA(brokerMsg.getInitiatingApp() != null ? brokerMsg.getInitiatingApp() : "{missing init app}");
                 out.html("</div></td>");
 
                 out.html("<td><div class='matsbm_table_browse_breakall'>");
-                out.DATA(msgRepr.getInitiatorId() != null ? msgRepr.getInitiatorId() : "{missing init id}");
+                out.DATA(brokerMsg.getInitiatorId() != null ? brokerMsg.getInitiatorId() : "{missing init id}");
                 out.html("</div></td>");
 
-                String dispatchType = msgRepr.getDispatchType() != null ? msgRepr.getDispatchType() : "{missing type}";
-                String messageType = msgRepr.getMessageType() != null ? msgRepr.getMessageType() : "{missing}";
+                String dispatchType = brokerMsg.getDispatchType() != null
+                        ? brokerMsg.getDispatchType()
+                        : "{missing type}";
+                String messageType = brokerMsg.getMessageType() != null ? brokerMsg.getMessageType() : "{missing}";
                 out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(dispatchType).html(" / ")
                         .DATA(messageType.replace("SUBSCRIPTION", "SUB")).html(" from</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(msgRepr.getFromStageId())
+                out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(brokerMsg.getFromStageId())
                         .html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(msgRepr.isPersistent()
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(brokerMsg.isPersistent()
                         ? "Persistent"
                         : "<b>Non-Persistent</b>").html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(msgRepr.isInteractive()
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(brokerMsg.isInteractive()
                         ? "<b>Interactive</b>"
                         : "Non-Interactive").html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(msgRepr.getExpirationTimestamp() == 0
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(brokerMsg.getExpirationTimestamp() == 0
                         ? "Never expires"
-                        : "<b>" + Statics.formatTimestampSpan(msgRepr.getExpirationTimestamp()) + "</b>")
+                        : "<b>" + Statics.formatTimestampSpan(brokerMsg.getExpirationTimestamp()) + "</b>")
                         .html("</div></td>");
 
                 out.html("</tr>\n");
+
+                // Secondary, "long info" row
+                out.html("<tr><td colspan='11'><div class='matsbm_table_browse_breakall'>");
+                out.html("<b>TraceId:</b> ").DATA(brokerMsg.getTraceId());
+
+                boolean isDlqInfo = brokerMsg.isDlqMessageRefused().orElse(false) ||
+                        brokerMsg.getDlqExceptionStacktrace().isPresent();
+                if (isDlqInfo) {
+                    out.html("<br>");
+                    if (brokerMsg.isDlqMessageRefused().orElse(false)) {
+                        out.html("<b>Refused:</b> ");
+                    }
+                    if (brokerMsg.getDlqDeliveryCount().isPresent() && (brokerMsg.getDlqDeliveryCount().get() > 1)) {
+                        out.html("<b>").DATA(brokerMsg.getDlqDeliveryCount().get()).html(" delivery attempts.</b> ");
+                    }
+                    if (brokerMsg.getDlqExceptionStacktrace().isPresent()) {
+                        String wholeException = brokerMsg.getDlqExceptionStacktrace().get();
+                        String firstLine = wholeException.substring(0, wholeException.indexOf('\n'));
+                        // From the first line, chop of any package information - i.e. up to the last dot before the
+                        // colon
+                        int colonPos = firstLine.indexOf(':');
+                        String firstLineToColon = colonPos > 0
+                                ? firstLine.substring(0, colonPos)
+                                : firstLine;
+                        int lastDotBeforeColon = firstLineToColon.lastIndexOf('.');
+                        String firstLineNoPackage = lastDotBeforeColon > 0
+                                ? firstLine.substring(lastDotBeforeColon + 1)
+                                : firstLine;
+                        String firstLineKeep;
+                        if (firstLineNoPackage.startsWith("MatsEndpoint$MatsRefuseMessageException:")) {
+                            firstLineKeep = "MatsRefuseMessageException:" + firstLine.substring(colonPos + 1);
+                        }
+                        else {
+                            firstLineKeep = firstLineNoPackage;
+                        }
+                        if (brokerMsg.isDlqMessageRefused().orElse(false)) {
+                            out.DATA(firstLineKeep);
+                        }
+                        else {
+                            out.html("<b>Exception:</b> ").DATA(firstLineKeep);
+                        }
+                        // Filter and find all "Caused by" lines
+                        List<String> causedByLines = wholeException.lines()
+                                .filter(l -> l.startsWith("Caused by:"))
+                                .collect(Collectors.toList());
+                        if (!causedByLines.isEmpty()) {
+                            // Print them out
+                            out.html("<br>\n");
+                            for (String causedByLine : causedByLines) {
+                                out.html("<b>Caused by:</b>").DATA(causedByLine.substring(10)).html("<br>\n");
+                            }
+                        }
+                    }
+                }
+
+                out.html("</tr>");
 
                 // Max out
                 if (++messageCount >= MAX_MESSAGES_BROWSER) {
@@ -429,13 +484,8 @@ class BrowseQueue {
         out.html("</table>");
 
         // This text is displayed above the table. THE MAGIC OF CSS!!!
-        out.html("<div id='matsbm_num_messages_shown'>Browsing ").DATA(messageCount).html(
-                " messages directly from queue.");
-        if (messageCount > 100) {
-            out.html(" <i>(Note: Our max is ").DATA(MAX_MESSAGES_BROWSER).html(
-                    ", but the message broker might have a smaller max browse. ActiveMQ default is 400)</i>\n");
-        }
-        out.html("</div></div>");
+        out.html("<div id='matsbm_num_messages_shown'>..</div>");
+        out.html("</div>");
 
         if (autoJumpIfSingleMessage && (messageCount == 1)) {
             out.html("<div class='matsbm_autojump'>Single message!</div>\n");
@@ -452,8 +502,16 @@ class BrowseQueue {
             out.html("<h1>No messages!</h1><br>\n");
         }
 
-        // Call into JavaScript to set state for buttons etc.
-        out.html("<script>matsbm_browse_queue_view_loaded();</script>\n");
+        // :: Call into JavaScript to set state for buttons, and update the "number of messages" text.
+        out.html("<script>\n");
+        out.html("matsbm_browse_queue_view_loaded();\n");
+        out.html("document.getElementById('matsbm_num_messages_shown').innerHTML = '");
+        out.html("Browsing <b>").DATA(messageCount).html(" messages</b> directly from queue.");
+        if ((messageCount > 100) || (messageCount != numberOfQueuedMessages)) {
+            out.html(" <i><b>(Note: Our max is ").DATA(MAX_MESSAGES_BROWSER);
+            out.html(", but the message broker might have a smaller max browse. ActiveMQ default is 400)</b></i>");
+        }
+        out.html("';\n</script>\n");
 
         // Don't output last </div>, as caller does it.
     }

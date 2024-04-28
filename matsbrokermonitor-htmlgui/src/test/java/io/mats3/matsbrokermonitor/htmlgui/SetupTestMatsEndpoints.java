@@ -76,6 +76,7 @@ public class SetupTestMatsEndpoints {
 
             // Check if we are directed to throw!
             if (context.getTraceProperty(THROW, Boolean.class) == Boolean.TRUE) {
+                IllegalArgumentException e = new IllegalArgumentException("Just to have a nested exception!");
                 throw new RuntimeException("Throwing as directed by TraceProperty! THIS IS A REALLY LONG MESSAGE: "
                         + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
                         + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
@@ -83,14 +84,8 @@ public class SetupTestMatsEndpoints {
                         + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
                         + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
                         + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: ");
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE"
+                , e);
             }
 
             // Use the 'multiplier' in the request to formulate the reply.. I.e. multiply the number..!
@@ -188,7 +183,7 @@ public class SetupTestMatsEndpoints {
             return;
         }
         if (Math.random() < 0.01) {
-            throw new MatsRefuseMessageException("Random DLQ!");
+            throw new MatsRefuseMessageException("Random DLQ! This is throwing randomly as directed!");
         }
     }
 

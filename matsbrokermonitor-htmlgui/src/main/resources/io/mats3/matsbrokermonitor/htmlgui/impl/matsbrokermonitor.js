@@ -205,6 +205,31 @@ function matsbm_button_show_bad_destinations(event) {
 function matsbm_browse_queue_view_loaded() {
     matsbm_browse_queue_show_all_normal_buttons_hide_rest();
     matsbm_evaluate_checkall_and_buttons();
+
+    // Handle "pair rows" hover effect
+    const firstRows = document.querySelectorAll('#matsbm_table_browse_queue tbody tr:nth-of-type(2n+1)');
+    firstRows.forEach((row) => {
+        row.addEventListener('mouseenter', () => {
+            row.classList.add('hover');
+            row.nextElementSibling.classList.add('hover');
+        });
+        row.addEventListener('mouseleave', () => {
+            row.classList.remove('hover');
+            row.nextElementSibling.classList.remove('hover');
+        });
+    });
+
+    const secondRows = document.querySelectorAll('#matsbm_table_browse_queue tbody tr:nth-of-type(2n+2)');
+    secondRows.forEach((row) => {
+        row.addEventListener('mouseenter', () => {
+            row.classList.add('hover');
+            row.previousElementSibling.classList.add('hover');
+        });
+        row.addEventListener('mouseleave', () => {
+            row.classList.remove('hover');
+            row.previousElementSibling.classList.remove('hover');
+        });
+    });
 }
 
 // Key Listener for Browse Queue
@@ -304,7 +329,7 @@ function matsbm_browse_queue_show_all_normal_buttons_hide_rest() {
     matsbm_browse_queue_hide_rest_of_buttons();
 
     // Focus the force update
-    document.getElementById("matsbm_button_forceupdate").focus();
+    document.getElementById("matsbm_button_forceupdate").focus({ focusVisible: true });
 }
 
 // :: COMMON CANCEL for REISSUE, MUTE and DELETE
@@ -645,6 +670,7 @@ function matsbm_after_multiple_operation(action, actionPast, result) {
         const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
         if (row) {
             row.classList.add('matsbm_' + actionPast);
+            row.nextElementSibling.classList.add('matsbm_' + actionPast);
         } else {
             console.error("Couldn't find message row for msgSysMsgId [" + msgSysMsgId + "].");
         }
@@ -662,10 +688,14 @@ function matsbm_after_multiple_operation(action, actionPast, result) {
             const row = document.getElementById('matsbm_msgid_' + msgSysMsgId);
             if (row) {
                 // Handle an annoying issue with Firefox, which won't transition height down to 0. (Works on Chrome)
-                row.addEventListener('transitionend', () => {
+                let listener = () => {
                     row.style.contentVisibility = 'hidden';
-                });
+                    row.nextElementSibling.style.contentVisibility = 'hidden';
+                    row.removeEventListener('transitionend', listener);
+                }
+                row.addEventListener("transitionend", listener);
                 row.classList.add('matsbs_delete_mute_or_reissue');
+                row.nextElementSibling.classList.add('matsbs_delete_mute_or_reissue');
             }
         }
         setTimeout(() => window.location.reload(), action === "reissue" ? 2000 : 1200);
@@ -742,8 +772,10 @@ function matsbm_delete_single_propose(event) {
     matsbm_hide("matsbm_mute_single");
     matsbm_hide("matsbm_delete_single");
     // Show Delete Confirm and Delete Cancel
-    matsbm_show("matsbm_delete_single_confirm");
     matsbm_show("matsbm_delete_single_cancel");
+    matsbm_show("matsbm_delete_single_confirm");
+    // Focus the "Cancel Delete" button, to be as safe as possible.
+    document.getElementById("matsbm_delete_single_cancel").focus({ focusVisible: true });
 }
 
 function matsbm_delete_single_cancel(event) {
@@ -752,8 +784,8 @@ function matsbm_delete_single_cancel(event) {
     matsbm_show("matsbm_mute_single");
     matsbm_show("matsbm_delete_single");
     // Hide Delete Confirm and Delete Cancel visible
-    matsbm_hide("matsbm_delete_single_confirm");
     matsbm_hide("matsbm_delete_single_cancel");
+    matsbm_hide("matsbm_delete_single_confirm");
 }
 
 function matsbm_delete_single_confirm(event, queueId, msgSysMsgId) {
