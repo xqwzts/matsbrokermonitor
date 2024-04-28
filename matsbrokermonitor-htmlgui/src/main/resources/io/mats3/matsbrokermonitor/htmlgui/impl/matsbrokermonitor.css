@@ -489,7 +489,8 @@
     box-shadow: rgba(0, 0, 0, 0.5) 0 3px 8px;
     color: #FFFFFF;
     display: inline-block;
-    padding: 1px 10px;
+    text-align: center;
+    padding: 3px 8px 4px 8px;
 }
 
 /* Max messages input box */
@@ -537,6 +538,11 @@
 #matsbm_table_browse_queue tr:nth-of-type(2n+2) td {
     padding-top: 0.15em;
     font-size: 85%;
+}
+
+/* Special for the buttons, no padding. */
+#matsbm_table_browse_queue td.button_cell {
+    padding: 0;
 }
 
 #matsbm_table_browse_queue tr:nth-of-type(2n+2) {
