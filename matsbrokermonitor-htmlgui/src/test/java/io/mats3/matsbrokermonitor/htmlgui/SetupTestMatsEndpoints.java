@@ -1,5 +1,6 @@
 package io.mats3.matsbrokermonitor.htmlgui;
 
+import java.util.MissingFormatArgumentException;
 import java.util.Objects;
 
 import org.junit.Assert;
@@ -76,7 +77,9 @@ public class SetupTestMatsEndpoints {
 
             // Check if we are directed to throw!
             if (context.getTraceProperty(THROW, Boolean.class) == Boolean.TRUE) {
-                IllegalArgumentException e = new IllegalArgumentException("Just to have a nested exception!");
+                MissingFormatArgumentException e1 = new MissingFormatArgumentException(
+                        "Just to have a nested exception! Here's quite some long text blah blah testing 123..!");
+                IllegalArgumentException e2 = new IllegalArgumentException("Just to have a nested exception!", e1);
                 throw new RuntimeException("Throwing as directed by TraceProperty! THIS IS A REALLY LONG MESSAGE: "
                         + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
                         + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
@@ -84,8 +87,8 @@ public class SetupTestMatsEndpoints {
                         + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
                         + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
                         + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE"
-                , e);
+                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE",
+                        e2);
             }
 
             // Use the 'multiplier' in the request to formulate the reply.. I.e. multiply the number..!

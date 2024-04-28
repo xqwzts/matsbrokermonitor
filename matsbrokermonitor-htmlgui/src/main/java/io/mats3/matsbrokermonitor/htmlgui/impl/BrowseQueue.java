@@ -366,10 +366,10 @@ class BrowseQueue {
                 out.html("</div></td>");
 
                 // View/Examine-button
-                out.html("<td><div class='matsbm_table_browse_nobreak'>");
+                out.html("<td class='button_cell'><div class='matsbm_table_browse_nobreak'>");
                 out.html("<a class='matsbm_table_examinemsg' href='?examineMessage&destinationId=queue:").DATA(queueId)
                         .html("&messageSystemId=").DATA(brokerMsg.getMessageSystemId()).html("'>");
-                out.html("View</a>");
+                out.html("Details</a>");
                 out.html("</div></td>");
 
                 // :: Include the "additions" table cells for the message.
@@ -394,7 +394,7 @@ class BrowseQueue {
                         ? brokerMsg.getDispatchType()
                         : "{missing type}";
                 String messageType = brokerMsg.getMessageType() != null ? brokerMsg.getMessageType() : "{missing}";
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(dispatchType).html(" / ")
+                out.html("<td><div class='matsbm_table_browse_nobreak'>").DATA(dispatchType).html(": ")
                         .DATA(messageType.replace("SUBSCRIPTION", "SUB")).html(" from</div></td>");
 
                 out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(brokerMsg.getFromStageId())
@@ -415,57 +415,77 @@ class BrowseQueue {
 
                 out.html("</tr>\n");
 
-                // Secondary, "long info" row
-                out.html("<tr><td colspan='11'><div class='matsbm_table_browse_breakall'>");
+                // Secondary, "long info" row.
+                /*
+                 * Notice the use of "max-width: 250px". This is effectively ignored, but evidently constrains the table
+                 * layout engine to not mess up the layout of the "primary" row when the "secondary" row overflows: The
+                 * deals is to avoid an annoying situation whereby if the exception message is very long, the
+                 * "word-wrap: break-all" breaks it just nice, but at the same time the "primary" row will be re-flowed
+                 * and suddenly start "fairly" allocate the space between the cells, giving a situation where it breaks
+                 * text in those cells too early (and thus use more vertical space), even though it could have laid them
+                 * out without breaking (reducing the length of the exception message to NOT break immediately gave the
+                 * desired situation in the primary row, even though nothing changed for that row isolated). This was
+                 * consistent between Chrome and Firefox. Using any absolute max-width fixes it. (I initially used
+                 * "90vw" (which is dynamic to the browser width, but evidently absolute enough wrt. the cell size),
+                 * which seemed like a mid-way solution. But since it evidently ignores it when rendering and wrapping
+                 * the text anyway, I could just go for a very small fixed pixel width.)
+                 */
+                out.html("<tr><td colspan='11' style='max-width: 250px'><div class='matsbm_table_browse_breakall'>");
                 out.html("<b>TraceId:</b> ").DATA(brokerMsg.getTraceId());
 
-                boolean isDlqInfo = brokerMsg.isDlqMessageRefused().orElse(false) ||
-                        brokerMsg.getDlqExceptionStacktrace().isPresent();
-                if (isDlqInfo) {
+                if (brokerMsg.getDlqExceptionStacktrace().isPresent()) {
                     out.html("<br>");
+                    String wholeException = brokerMsg.getDlqExceptionStacktrace().get();
+                    String firstLine = wholeException.substring(0, wholeException.indexOf('\n'));
+                    // From the first line, chop of any package information - i.e. up to the last dot before the
+                    // colon
+                    int colonPos = firstLine.indexOf(':');
+                    String firstLineToColon = colonPos > 0
+                            ? firstLine.substring(0, colonPos)
+                            : firstLine;
+                    int lastDotBeforeColon = firstLineToColon.lastIndexOf('.');
+                    String firstLineNoPackage = lastDotBeforeColon > 0
+                            ? firstLine.substring(lastDotBeforeColon + 1)
+                            : firstLine;
+                    String firstLineKeep;
+                    if (firstLineNoPackage.startsWith("MatsEndpoint$MatsRefuseMessageException:")) {
+                        firstLineKeep = "MatsRefuseMessageException:" + firstLine.substring(colonPos + 1);
+                    }
+                    else {
+                        firstLineKeep = firstLineNoPackage;
+                    }
                     if (brokerMsg.isDlqMessageRefused().orElse(false)) {
-                        out.html("<b>Refused:</b> ");
+                        out.html("<b><span style='color:red;'>Refused:</span></b> ");
                     }
-                    if (brokerMsg.getDlqDeliveryCount().isPresent() && (brokerMsg.getDlqDeliveryCount().get() > 1)) {
-                        out.html("<b>").DATA(brokerMsg.getDlqDeliveryCount().get()).html(" delivery attempts.</b> ");
+                    else if (brokerMsg.getDlqDeliveryCount().isPresent()
+                            && (brokerMsg.getDlqDeliveryCount().get() > 1)) {
+                        out.html("<b>").DATA(brokerMsg.getDlqDeliveryCount().get())
+                                .html(" delivery attempts before DLQ, last Exception: </b>");
                     }
-                    if (brokerMsg.getDlqExceptionStacktrace().isPresent()) {
-                        String wholeException = brokerMsg.getDlqExceptionStacktrace().get();
-                        String firstLine = wholeException.substring(0, wholeException.indexOf('\n'));
-                        // From the first line, chop of any package information - i.e. up to the last dot before the
-                        // colon
-                        int colonPos = firstLine.indexOf(':');
-                        String firstLineToColon = colonPos > 0
-                                ? firstLine.substring(0, colonPos)
-                                : firstLine;
-                        int lastDotBeforeColon = firstLineToColon.lastIndexOf('.');
-                        String firstLineNoPackage = lastDotBeforeColon > 0
-                                ? firstLine.substring(lastDotBeforeColon + 1)
-                                : firstLine;
-                        String firstLineKeep;
-                        if (firstLineNoPackage.startsWith("MatsEndpoint$MatsRefuseMessageException:")) {
-                            firstLineKeep = "MatsRefuseMessageException:" + firstLine.substring(colonPos + 1);
+                    else {
+                        out.html("<b>Exception:</b> ");
+                    }
+                    out.html("<code style='font-size: 115%'>").DATA(firstLineKeep).html("</code>");
+                    // Filter and find all "Caused by" lines
+                    List<String> causedByLines = wholeException.lines()
+                            .filter(l -> l.startsWith("Caused by:"))
+                            .collect(Collectors.toList());
+                    if (!causedByLines.isEmpty()) {
+                        // Print them out
+                        out.html("<br>\n");
+                        for (String causedByLine : causedByLines) {
+                            out.html("&nbsp;&nbsp;&nbsp;<b>Caused by:</b><code style='font-size: 115%'>")
+                                    .DATA(causedByLine.substring(10)).html("</code><br>\n");
                         }
-                        else {
-                            firstLineKeep = firstLineNoPackage;
-                        }
-                        if (brokerMsg.isDlqMessageRefused().orElse(false)) {
-                            out.DATA(firstLineKeep);
-                        }
-                        else {
-                            out.html("<b>Exception:</b> ").DATA(firstLineKeep);
-                        }
-                        // Filter and find all "Caused by" lines
-                        List<String> causedByLines = wholeException.lines()
-                                .filter(l -> l.startsWith("Caused by:"))
-                                .collect(Collectors.toList());
-                        if (!causedByLines.isEmpty()) {
-                            // Print them out
-                            out.html("<br>\n");
-                            for (String causedByLine : causedByLines) {
-                                out.html("<b>Caused by:</b>").DATA(causedByLine.substring(10)).html("<br>\n");
-                            }
-                        }
+                    }
+                }
+                else {
+                    if (brokerMsg.isDlqMessageRefused().orElse(false)) {
+                        out.html("<br><b><span style='color:red;'>Refused!</span></b>");
+                    }
+                    else if (brokerMsg.getDlqDeliveryCount().isPresent() && (brokerMsg.getDlqDeliveryCount().get() > 1)) {
+                        out.html("<br><b>").DATA(brokerMsg.getDlqDeliveryCount().get())
+                                .html(" delivery attempts before DLQ.</b>");
                     }
                 }
 
@@ -508,8 +528,8 @@ class BrowseQueue {
         out.html("document.getElementById('matsbm_num_messages_shown').innerHTML = '");
         out.html("Browsing <b>").DATA(messageCount).html(" messages</b> directly from queue.");
         if ((messageCount > 100) || (messageCount != numberOfQueuedMessages)) {
-            out.html(" <i><b>(Note: Our max is ").DATA(MAX_MESSAGES_BROWSER);
-            out.html(", but the message broker might have a smaller max browse. ActiveMQ default is 400)</b></i>");
+            out.html(" <i><b>(Note: Our max browse is ").DATA(MAX_MESSAGES_BROWSER);
+            out.html(", but the message broker might have a smaller max. ActiveMQ default is 400)</b></i>");
         }
         out.html("';\n</script>\n");
 
