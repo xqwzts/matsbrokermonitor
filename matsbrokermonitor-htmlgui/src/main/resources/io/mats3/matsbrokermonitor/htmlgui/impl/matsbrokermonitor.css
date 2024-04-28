@@ -555,21 +555,10 @@
     border-bottom: thick solid #009879;
 }
 
-/* .. the cell types */
-.matsbm_table_browse_nobreak {
-    white-space: nowrap;
-}
-
-.matsbm_table_browse_breakall {
-    word-break: break-all;
-    overflow: hidden;
-}
-
 /* :: Transition when messages have been reissued or deleted */
-
 /* .. for transition, need fixed max-height */
 #matsbm_table_browse_queue div {
-    max-height: 5em;
+    max-height: 12em;
 }
 
 #matsbm_table_browse_queue .matsbm_reissued {
@@ -608,6 +597,16 @@
 .matsbm_table_browse_queue_container {
     position: relative;
     padding-top: 2em;
+}
+
+/* .. the cell types */
+.matsbm_table_browse_nobreak {
+    white-space: nowrap;
+}
+
+.matsbm_table_browse_breakall {
+    word-break: break-all;
+    overflow: hidden;
 }
 
 #matsbm_num_messages_shown {
