@@ -654,7 +654,8 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 MDC.put("mats.mbm.correlationId", correlationId);
             }
 
-            String msg = "#MBM_UPDATE# (Request " + (requestSameNode ? "IS" : "is NOT") + " from this node)"
+            String msg = "#MBM_UPDATE# (Request " + (requestSameNode ? "IS" : "is NOT") + " from this node,"
+                    + " this: " + _nodeId + ", originating: " + originatingNodeId + ")"
                     + " We've received a batch of ["
                     + _countOfDestinationsReceivedSinceLastBatch
                     + "] destination stats messages, current number of destinations ["
