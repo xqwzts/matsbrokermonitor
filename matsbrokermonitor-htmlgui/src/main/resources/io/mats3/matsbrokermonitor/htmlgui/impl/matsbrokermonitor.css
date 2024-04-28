@@ -954,16 +954,17 @@
     border: thin solid #a0a0a0;
     margin: 0.2em 0 0.2em 0.5em;
     padding: 0.2em 0.2em 0.2em 0.2em;
-    max-width: 1000px;
+    max-width: calc(100% - 1em);
 }
 
 /* .. the actual JSON, with scrollbars */
 .matsbm_box_call_or_state_div {
     background: white;
     overflow: auto;
-    max-height: 350px;
+    max-height: 25em;
     padding: 0.5em;
-    white-space: pre;
+    white-space: pre-wrap;
+    word-break: break-all;
     font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;;
     font-size: 0.9em;
 }

@@ -403,7 +403,7 @@ public class ExamineMessage {
 
         out.html("<tr>");
         out.html("<td>Type</td>");
-        out.html("<td>").DATA(brokerMsg.getDispatchType()).html(" / ").DATA(brokerMsg.getMessageType()).html("</td>");
+        out.html("<td>").DATA(brokerMsg.getDispatchType()).html(": ").DATA(brokerMsg.getMessageType()).html("</td>");
         out.html("</tr>\n");
 
         if (matsTrace != null) {
