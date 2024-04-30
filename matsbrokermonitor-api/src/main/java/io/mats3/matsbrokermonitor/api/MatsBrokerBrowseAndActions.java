@@ -296,9 +296,9 @@ public interface MatsBrokerBrowseAndActions extends Closeable {
          */
         String getToStageId();
 
-        Optional<Boolean> isAudit();
+        boolean isNoAudit();
 
-        boolean isPersistent();
+        boolean isNonPersistent();
 
         boolean isInteractive();
 

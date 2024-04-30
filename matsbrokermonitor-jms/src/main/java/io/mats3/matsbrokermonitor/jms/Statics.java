@@ -40,11 +40,17 @@ public interface Statics {
     String JMS_MSG_PROP_MATS_MESSAGE_ID = "mats_MsgId"; // String
     String JMS_MSG_PROP_DISPATCH_TYPE = "mats_DispatchType"; // String
     String JMS_MSG_PROP_MESSAGE_TYPE = "mats_MsgType"; // String
-    String JMS_MSG_PROP_INITIATING_APP = "mats_InitApp"; // String // note: Added 2022-01-21
-    String JMS_MSG_PROP_INITIATOR_ID = "mats_InitId"; // String // note: Added 2022-01-21
     String JMS_MSG_PROP_FROM = "mats_From"; // String
-    String JMS_MSG_PROP_TO = "mats_To"; // String
-    String JMS_MSG_PROP_AUDIT = "mats_Audit"; // Boolean
+    String JMS_MSG_PROP_INITIATING_APP = "mats_InitApp"; // String
+    String JMS_MSG_PROP_INITIATOR_ID = "mats_InitId"; // String
+    String JMS_MSG_PROP_TO = "mats_To"; // String (needed if a message ends up on a global/common DLQ)
+    // Four next are set if non-default:
+    String JMS_MSG_PROP_INTERACTIVE = "mats_IA"; // Boolean - not set if false
+    String JMS_MSG_PROP_NON_PERSISTENT = "mats_NP"; // Boolean - not set if false
+    String JMS_MSG_PROP_NO_AUDIT = "mats_NA"; // Boolean - not set if false
+    String JMS_MSG_PROP_EXPIRES = "mats_Expires"; // Long - not set if 'never expires'
+    // TODO: Delete 'JMS_MSG_PROP_AUDIT' ASAP, latest 2025
+    String JMS_MSG_PROP_AUDIT = "mats_Audit"; // Boolean - not set if false
 
     // :: For 'Mats Managed DLQ Divert' - note that most of these should be cleared when reissued from DLQ!
     String JMS_MSG_PROP_DLQ_EXCEPTION = "mats_dlq_Exception"; // String (not set if DLQed on receive-side)

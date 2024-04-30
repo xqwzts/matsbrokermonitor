@@ -10,7 +10,6 @@ import java.util.Optional;
 
 import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
-import javax.jms.DeliveryMode;
 import javax.jms.Destination;
 import javax.jms.JMSException;
 import javax.jms.MapMessage;
@@ -853,9 +852,9 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         private final String _initiatingApp;
         private final String _initiatorId;
         private final String _toStageId;
-        private final Boolean _isAudit; // Nullable
 
-        private final boolean _persistent;
+        private final boolean _isNoAudit;
+        private final boolean _nonPersistent;
         private final boolean _interactive;
         private final long _expirationTimestamp;
 
@@ -897,13 +896,25 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
             _initiatingApp = message.getStringProperty(JMS_MSG_PROP_INITIATING_APP);
             _initiatorId = message.getStringProperty(JMS_MSG_PROP_INITIATOR_ID);
             _toStageId = message.getStringProperty(JMS_MSG_PROP_TO);
-            _isAudit = message.propertyExists(JMS_MSG_PROP_AUDIT)
-                    ? message.getBooleanProperty(JMS_MSG_PROP_AUDIT)
-                    : null;
-
-            _persistent = message.getJMSDeliveryMode() == DeliveryMode.PERSISTENT;
-            _interactive = message.getJMSPriority() > 4; // Mats-JMS uses 9 for "interactive"
-            _expirationTimestamp = message.getJMSExpiration();
+            // TODO: Simplify by deleting 'JMS_MSG_PROP_AUDIT' ASAP, latest 2025
+            if (message.propertyExists(JMS_MSG_PROP_AUDIT)) {
+                _isNoAudit = !message.getBooleanProperty(JMS_MSG_PROP_AUDIT);
+            }
+            else if (message.propertyExists(JMS_MSG_PROP_NO_AUDIT)) {
+                _isNoAudit = message.getBooleanProperty(JMS_MSG_PROP_NO_AUDIT);
+            }
+            else {
+                _isNoAudit = false;
+            }
+            _nonPersistent = message.propertyExists(JMS_MSG_PROP_NON_PERSISTENT)
+                    && message.getBooleanProperty(JMS_MSG_PROP_NON_PERSISTENT);
+            _interactive = message.propertyExists(JMS_MSG_PROP_INTERACTIVE)
+                    && message.getBooleanProperty(JMS_MSG_PROP_INTERACTIVE);
+            _expirationTimestamp = message.getJMSExpiration() != 0
+                    ? message.getJMSExpiration()
+                    : message.propertyExists(JMS_MSG_PROP_EXPIRES)
+                            ? message.getLongProperty(JMS_MSG_PROP_EXPIRES)
+                            : 0;
 
             // :: If DLQed message
             _dlq_ExceptionStacktrace = message.getStringProperty(JMS_MSG_PROP_DLQ_EXCEPTION);
@@ -985,13 +996,13 @@ public class JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
         }
 
         @Override
-        public Optional<Boolean> isAudit() {
-            return Optional.ofNullable(_isAudit);
+        public boolean isNoAudit() {
+            return _isNoAudit;
         }
 
         @Override
-        public boolean isPersistent() {
-            return _persistent;
+        public boolean isNonPersistent() {
+            return _nonPersistent;
         }
 
         @Override

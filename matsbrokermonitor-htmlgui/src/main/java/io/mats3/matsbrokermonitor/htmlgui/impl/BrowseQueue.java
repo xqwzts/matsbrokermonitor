@@ -19,6 +19,8 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.SortedMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -45,6 +47,16 @@ class BrowseQueue {
 
     // Note: The queue-browser of ActiveMQ has a default max, from the server side, of 400.
     private static final int MAX_MESSAGES_BROWSER = 2000;
+
+    private static final Pattern FIRST_PART_OF_EXCEPTION = Pattern.compile("^(.*?)\\s*(?=at |Suppressed:|Caused by:)",
+            Pattern.DOTALL | Pattern.MULTILINE);
+
+    private static final Pattern CONDENSE_KNOWN_MATS_EXCEPTIONS = Pattern.compile(
+            "(?:^|\\s|\\.)(?:\\w|\\$)+\\$(Mats\\w+Exception): (.*(?:\\n(?!\\s*(?:at |\\$|Caused by:|Suppressed:)).*)*)",
+            Pattern.DOTALL);
+
+    private static final Pattern CAUSED_BY_SUPPRESSED_REGEX = Pattern.compile(
+            "^(\\t*)(Caused by:|Suppressed:)(.*(?:\\n(?!\\t*at |\\t*(Caused by:|Suppressed:)).*)*)", Pattern.MULTILINE);
 
     static void gui_BrowseQueue(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, List<? super MonitorAddition> monitorAdditions,
@@ -77,6 +89,10 @@ class BrowseQueue {
         if (matsBrokerDestination == null) {
             out.html("<h1>No info about queue!</h1><br>\n");
             out.html("<b>Queue:</b> ").DATA(queueId).html("<br>\n");
+            out.html("<button id='matsbm_button_forceupdate'"
+                    + " class='matsbm_button matsbm_button_forceupdate"
+                    + "' onclick='matsbm_button_forceupdate(event)'>Update Now! [u]</button>");
+            out.html("<span id='matsbm_action_message'></span>");
             out.html("</div>");
             out.html("</div>");
             return;
@@ -289,6 +305,7 @@ class BrowseQueue {
                 .html("' autocomplete='off' inputmode='numeric' class='matsbm_input_max'> messages</div>");
 
         // Force update
+
         out.html("<button id='matsbm_button_forceupdate'"
                 + " class='matsbm_button matsbm_button_forceupdate"
                 + "' onclick='matsbm_button_forceupdate(event)'>Update Now! [u]</button>");
@@ -343,8 +360,8 @@ class BrowseQueue {
         out.html("<th>InitatorId</th>");
         out.html("<th>Type</th>");
         out.html("<th>From Id</th>");
-        out.html("<th>Persistent</th>");
-        out.html("<th>Interactive</th>");
+        out.html("<th>Persist</th>");
+        out.html("<th>Interact</th>");
         out.html("<th>Expires</th>");
         out.html("</thead>");
         out.html("<tbody>");
@@ -407,17 +424,22 @@ class BrowseQueue {
                 out.html("<td><div class='matsbm_table_browse_breakall'>").DATA(brokerMsg.getFromStageId())
                         .html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(brokerMsg.isPersistent()
-                        ? "Persistent"
-                        : "<b>Non-Persistent</b>").html("</div></td>");
+                out.html("<td style='text-align:center'><div class='matsbm_table_browse_nobreak'>").html(brokerMsg
+                        .isNonPersistent()
+                                ? "<b>Non-Persist</b>"
+                                : "Persistent").html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(brokerMsg.isInteractive()
+                out.html("<td style='text-align:center'><div>").html(brokerMsg.isInteractive()
                         ? "<b>Interactive</b>"
-                        : "Non-Interactive").html("</div></td>");
+                        : "Standard").html("</div></td>");
 
-                out.html("<td><div class='matsbm_table_browse_nobreak'>").html(brokerMsg.getExpirationTimestamp() == 0
-                        ? "Never expires"
-                        : "<b>" + Statics.formatTimestampSpan(brokerMsg.getExpirationTimestamp()) + "</b>")
+                out.html("<td style='text-align:center'><div class='matsbm_table_browse_nobreak'>")
+                        .html(brokerMsg.getExpirationTimestamp() == 0
+                                ? "Never"
+                                : "<b>" + (brokerMsg.getExpirationTimestamp() - System.currentTimeMillis() < 0
+                                        ? "<span style='color:red'>Expired!</span> "
+                                        : "")
+                                        + Statics.formatTimestampSpan(brokerMsg.getExpirationTimestamp()) + "</b>")
                         .html("</div></td>");
 
                 out.html("</tr>\n");
@@ -438,14 +460,27 @@ class BrowseQueue {
                  * the text anyway, I could just go for a very small fixed pixel width.)
                  */
                 out.html("<tr><td colspan='11' style='max-width: 250px'><div class='matsbm_table_browse_breakall'>");
-                out.html("<b>TraceId:</b> ").DATA(brokerMsg.getTraceId());
+                out.html("<b>TraceId:</b> <span style='font-size: 110%; white-space:pre-wrap'>")
+                        .DATA(brokerMsg.getTraceId()).html("</span>");
 
                 if (brokerMsg.getDlqExceptionStacktrace().isPresent()) {
                     out.html("<br>");
                     String wholeException = brokerMsg.getDlqExceptionStacktrace().get();
-                    String firstLine = wholeException.substring(0, wholeException.indexOf('\n'));
-                    // From the first line, chop of any package information - i.e. up to the last dot before the
-                    // colon
+
+                    // :: Find the first line or multiline of the exception, fallbacking if fails.
+                    Matcher firstPartMatcher = FIRST_PART_OF_EXCEPTION.matcher(wholeException);
+                    String firstLine;
+                    if (firstPartMatcher.find()) {
+                        firstLine = firstPartMatcher.group(1);
+                    }
+                    else if (wholeException.contains("\n")) {
+                        firstLine = wholeException.substring(0, wholeException.indexOf('\n'));
+                    }
+                    else {
+                        firstLine = wholeException;
+                    }
+                    // From the first line or multiline, chop of any package information - i.e. up to the last dot
+                    // before the colon
                     int colonPos = firstLine.indexOf(':');
                     String firstLineToColon = colonPos > 0
                             ? firstLine.substring(0, colonPos)
@@ -454,15 +489,16 @@ class BrowseQueue {
                     String firstLineNoPackage = lastDotBeforeColon > 0
                             ? firstLine.substring(lastDotBeforeColon + 1)
                             : firstLine;
-                    String firstLineKeep;
-                    if (firstLineNoPackage.startsWith("MatsEndpoint$MatsRefuseMessageException:")) {
-                        firstLineKeep = "MatsRefuseMessageException:" + firstLine.substring(colonPos + 1);
-                    }
-                    else {
-                        firstLineKeep = firstLineNoPackage;
-                    }
+
+                    // :: Condense known Mats exceptions, multiline
+                    Matcher matsExceptionMatcher = CONDENSE_KNOWN_MATS_EXCEPTIONS.matcher(firstLineNoPackage);
+                    String firstLineKeep = matsExceptionMatcher.find()
+                            ? matsExceptionMatcher.group(1) + ": " + matsExceptionMatcher.group(2)
+                            : firstLineNoPackage;
+
+                    // :: Print out the first line, with red color if Refused
                     if (brokerMsg.isDlqMessageRefused().orElse(false)) {
-                        out.html("<b><span style='color:red;'>Refused:</span></b> ");
+                        out.html("<b><span style='color:red'>Refused:</span></b> ");
                     }
                     else if (brokerMsg.getDlqDeliveryCount().isPresent()
                             && (brokerMsg.getDlqDeliveryCount().get() > 1)) {
@@ -472,18 +508,20 @@ class BrowseQueue {
                     else {
                         out.html("<b>Exception:</b> ");
                     }
-                    out.html("<code style='font-size: 115%'>").DATA(firstLineKeep).html("</code>");
-                    // Filter and find all "Caused by" lines
-                    List<String> causedByLines = wholeException.lines()
-                            .filter(l -> l.startsWith("Caused by:"))
-                            .collect(Collectors.toList());
-                    if (!causedByLines.isEmpty()) {
-                        // Print them out
-                        out.html("<br>\n");
-                        for (String causedByLine : causedByLines) {
-                            out.html("&nbsp;&nbsp;&nbsp;<b>Caused by:</b><code style='font-size: 115%'>")
-                                    .DATA(causedByLine.substring(10)).html("</code><br>\n");
-                        }
+                    out.html("<code style='font-size: 120%; white-space:pre-wrap'>").DATA(firstLineKeep).html(
+                            "</code>");
+
+                    // :: Handle the rest of the exception, cause-by-cause and suppressed, multiline.
+                    Matcher causedBySuppressedMatcher = CAUSED_BY_SUPPRESSED_REGEX.matcher(wholeException);
+                    while (causedBySuppressedMatcher.find()) {
+                        String tabs = causedBySuppressedMatcher.group(1);
+                        int tabsLength = tabs.length();
+                        String prefix = causedBySuppressedMatcher.group(2);
+                        String message = causedBySuppressedMatcher.group(3).trim();
+                        out.html("\n<br>").html("&nbsp;|&nbsp;&nbsp;".repeat(tabsLength))
+                                .html("<b>").DATA(prefix).html(
+                                        "</b> <code style='font-size: 120%; white-space:pre-wrap'>").DATA(message)
+                                .html("</code>");
                     }
                 }
                 else {

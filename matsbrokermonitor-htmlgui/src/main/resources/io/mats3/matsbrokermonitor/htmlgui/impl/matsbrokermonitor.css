@@ -540,7 +540,7 @@
 
 #matsbm_table_browse_queue tr:nth-of-type(2n+2) td {
     padding-top: 0.15em;
-    font-size: 85%;
+    font-size: 80%;
 }
 
 /* Special for the buttons, no padding. */
@@ -567,7 +567,7 @@
 /* :: Transition when messages have been reissued or deleted */
 /* .. for transition, need fixed max-height */
 #matsbm_table_browse_queue div {
-    max-height: 12em;
+    max-height: 30em;
 }
 
 #matsbm_table_browse_queue .matsbm_reissued {

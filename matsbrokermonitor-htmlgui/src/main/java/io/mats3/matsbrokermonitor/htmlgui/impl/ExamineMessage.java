@@ -299,7 +299,7 @@ public class ExamineMessage {
         String initiatingApp;
         String initiatorId;
         if (matsTrace != null) {
-            initiatingApp = matsTrace.getInitializingAppName() + "; v." + matsTrace.getInitializingAppVersion();
+            initiatingApp = matsTrace.getInitiatingAppName() + "; v." + matsTrace.getInitiatingAppVersion();
             initiatorId = matsTrace.getInitiatorId();
         }
         else {
@@ -310,7 +310,7 @@ public class ExamineMessage {
         out.html("<tr><td>Initiating App @ Host</td>");
         out.html("<td>").DATA(initiatingApp);
         if (matsTrace != null) {
-            out.html(" @ ").DATA(matsTrace.getInitializingHost());
+            out.html(" @ ").DATA(matsTrace.getInitiatingHost());
         }
         out.html("</td></tr>\n");
 
@@ -332,7 +332,7 @@ public class ExamineMessage {
 
         if (matsTrace != null) {
             out.html("<tr><td>Mats Flow Init Timestamp</td>");
-            out.html("<td>").DATA(Statics.formatTimestampSpan(matsTrace.getInitializedTimestamp()));
+            out.html("<td>").DATA(Statics.formatTimestampSpan(matsTrace.getInitiatingTimestamp()));
             out.html("</td></tr>\n");
         }
 
@@ -356,9 +356,9 @@ public class ExamineMessage {
         }
 
         out.html("<tr><td>&nbsp;&nbsp;Persistent</td>");
-        out.html("<td>").html((matsTrace != null ? (!matsTrace.isNonPersistent()) : brokerMsg.isPersistent())
-                ? "Persistent <i>(default)</i>"
-                : "<b>Non-Persistent</b> <i>(non-default)</i>");
+        out.html("<td>").html(brokerMsg.isNonPersistent()
+                ? "<b>Non-Persistent</b> <i>(non-default)</i>"
+                : "Persistent <i>(default)</i>");
         out.html("</td></tr>\n");
 
         out.html("<tr><td>&nbsp;&nbsp;Interactive</td>");
@@ -375,13 +375,11 @@ public class ExamineMessage {
             out.html("</td></tr>\n");
         }
 
-        if (matsTrace != null) {
-            out.html("<tr><td>&nbsp;&nbsp;Audit</td>");
-            out.html("<td>").html(matsTrace.isNoAudit()
-                    ? "<b>No audit</b> <i>(non-default)</i>"
-                    : "Audit <i>(default)</i>");
-            out.html("</td></tr>\n");
-        }
+        out.html("<tr><td>&nbsp;&nbsp;Audit</td>");
+        out.html("<td>").html(brokerMsg.isNoAudit()
+                ? "<b>No audit</b> <i>(non-default)</i>"
+                : "Audit <i>(default)</i>");
+        out.html("</td></tr>\n");
 
         out.html("</tbody>");
         out.html("</table>");
@@ -498,10 +496,12 @@ public class ExamineMessage {
 
         out.html("<tr>");
         out.html("<td>MsgSys Expires</td>");
-        out.html("<td>").DATA(brokerMsg.getExpirationTimestamp() == 0
+        out.html("<td>").html(brokerMsg.getExpirationTimestamp() == 0
                 ? "Never expires"
-                : Statics.formatTimestampSpan(brokerMsg.getExpirationTimestamp()))
-                .html("</td>");
+                : (brokerMsg.getExpirationTimestamp() - System.currentTimeMillis() < 0
+                        ? "<b><span style='color:red'>Expired!</span></b> "
+                        : "") + (Statics.formatTimestampSpan(brokerMsg.getExpirationTimestamp())));
+        out.html("</td>");
         out.html("</tr>");
 
         out.html("</tbody>");
@@ -913,9 +913,9 @@ public class ExamineMessage {
             // -> KeepTrace.MINIMAL
             out.html("<td colspan='").DATA(highestStackHeight + 1).html("'>INIT<br>from: ")
                     .DATA(matsTrace.getInitiatorId()).html("</td\n>");
-            out.html("<td>").DATA(matsTrace.getInitializingAppName())
-                    .html("; v.").DATA(matsTrace.getInitializingAppVersion()).html("</td>\n");
-            out.html("<td>").DATA(matsTrace.getInitializingHost()).html("</td>\n");
+            out.html("<td>").DATA(matsTrace.getInitiatingAppName())
+                    .html("; v.").DATA(matsTrace.getInitiatingAppVersion()).html("</td>\n");
+            out.html("<td>").DATA(matsTrace.getInitiatingHost()).html("</td>\n");
             out.html("<td>").html(debugInfoToHtml(matsTrace.getDebugInfo())).html("</td>\n");
         }
         out.html("</tr>\n");
@@ -931,11 +931,11 @@ public class ExamineMessage {
 
         // :: MATSTRACE Calls table
 
-        long initializedTimestamp = matsTrace.getInitializedTimestamp();
+        long initializedTimestamp = matsTrace.getInitiatingTimestamp();
         // NOTE: If we are KeepMatsTrace.MINIMAL, then there is only 1 entry here
         String prevIndent = "";
         int prevIndentLevel = 0;
-        long previousCalledTimestamp = matsTrace.getInitializedTimestamp();
+        long previousCalledTimestamp = matsTrace.getInitiatingTimestamp();
         for (int i = 0; i < callFlow.size(); i++) {
             Call<?> currentCall = callFlow.get(i);
             // If there is only one call, then it is either first, or MINIMAL and last.
@@ -989,15 +989,15 @@ public class ExamineMessage {
                         .html("; v.").DATA(currentCall.getCallingAppVersion());
             }
             else {
-                out.DATA(matsTrace.getInitializingAppName())
-                        .html("; v.").DATA(matsTrace.getInitializingAppVersion());
+                out.DATA(matsTrace.getInitiatingAppName())
+                        .html("; v.").DATA(matsTrace.getInitiatingAppVersion());
             }
             out.html("</td><td>@");
             if (currentCallNumber > 1) {
                 out.DATA(currentCall.getCallingHost());
             }
             else {
-                out.DATA(matsTrace.getInitializingHost());
+                out.DATA(matsTrace.getInitiatingHost());
             }
             out.html("</td><td class='matsbm_from_info'>");
             if (currentCallNumber > 1) {
@@ -1091,10 +1091,10 @@ public class ExamineMessage {
                     ? currentCall.getFrom()
                     : previousTo;
             String appAndVer = currentCallNumber == 1
-                    ? matsTrace.getInitializingAppName() + "; v." + matsTrace.getInitializingAppVersion()
+                    ? matsTrace.getInitiatingAppName() + "; v." + matsTrace.getInitiatingAppVersion()
                     : currentCall.getCallingAppName() + "; v." + currentCall.getCallingAppVersion();
             String host = currentCallNumber == 1
-                    ? matsTrace.getInitializingHost()
+                    ? matsTrace.getInitiatingHost()
                     : currentCall.getCallingHost();
             String debugInfoHtml = currentCallNumber == 1
                     ? debugInfoToHtml(matsTrace.getDebugInfo())

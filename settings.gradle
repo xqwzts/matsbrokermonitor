@@ -1,9 +1,5 @@
 import java.nio.charset.Charset
 
-// To work against source of Mats3: Include the Mats3 project, sibling to this project.
-// NOTE! This should never be committed!! NOTE!
-// includeBuild '../mats3'
-
 // From https://docs.gradle.org/current/userguide/github-actions.html
 // To run a build scan locally, either force this block to kick in by: $ CI=true ./gradlew build
 // Or run the build with: $ ./gradlew build --scan
@@ -19,6 +15,10 @@ gradleEnterprise {
         }
     }
 }
+
+// To work against source of Mats3: Include the Mats3 project, sibling to this project.
+// NOTE! This should never be committed!! NOTE!
+//includeBuild '../mats3'
 
 rootProject.name = 'matsbrokermonitor'
 
