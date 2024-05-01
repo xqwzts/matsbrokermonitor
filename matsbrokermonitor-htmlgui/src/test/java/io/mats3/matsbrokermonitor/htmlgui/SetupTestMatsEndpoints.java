@@ -78,49 +78,7 @@ public class SetupTestMatsEndpoints {
 
             // Check if we are directed to throw!
             if (context.getTraceProperty(THROW, Boolean.class) == Boolean.TRUE) {
-                var e1 = new MissingFormatArgumentException(
-                        "Just to have a nested exception! Here's quite some long text blah blah testing 123..!");
-                var e2 = new IllegalArgumentException("Just to have a nested exception!", e1);
-                var toBeThrown = new MatsThisIsNotReallyAMatsException("Throwing as directed by TraceProperty!"
-                        + " THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
-                        + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE\n"
-                        + "This is a second line of the REALLY LONG MESSAGE!\n"
-                        + "\n"
-                        + "This is a third line of the REALLY LONG MESSAGE! (after a blank!)"
-                        + " {curlies}[brackets]$<lessgreater>\"quotes\"%!;* <- special chars!"
-                        + " (there's two newlines after here)\n\n",
-                        e2);
-
-                var nested2OnSuppressedL2b = new IllegalArgumentException("Nested 2 on Suppressed L2b\n"
-                        + "This is a second line on Nested 2 on Suppressed L2b");
-                var nested1OnSuppressedL2b = new IllegalArgumentException("Nested 1 on Suppressed L2b",
-                        nested2OnSuppressedL2b);
-                var suppressedL2bException = new RuntimeException("Suppressed L2b Exception", nested1OnSuppressedL2b);
-
-                var nested2OnSupppressedL1 = new IllegalArgumentException("Nested 2 on Suppressed L1\n"
-                        + "This is a second line on Nested 2 on Suppressed L1\n"
-                        + "\n"
-                        + "This is a third line on Nested 2 on Suppressed L1 (after a blank line)\n"
-                        + " {curlies}[brackets]$<lessgreater>\"quotes\"%!;* <- special chars!"
-                        + " (there's two newlines after here)\n\n");
-                nested2OnSupppressedL1.addSuppressed(suppressedL2bException);
-                var nested1OnSupppressedL1 = new IllegalArgumentException("Nested 1 on Suppressed L1",
-                        nested2OnSupppressedL1);
-                var suppressedL1Exception = new RuntimeException("Suppressed L1 Exception", nested1OnSupppressedL1);
-
-                var nestedOnSuppressedL2 = new IllegalArgumentException("Nested on Suppressed L2");
-                var suppressedOnSuppressedL2 = new RuntimeException("Suppressed L2 on Suppressed",
-                        nestedOnSuppressedL2);
-                suppressedL1Exception.addSuppressed(suppressedOnSuppressedL2);
-
-                toBeThrown.addSuppressed(suppressedL1Exception);
-                throw toBeThrown;
+                throw new RuntimeException("We were directed to throw by TraceProperty!");
             }
 
             // Use the 'multiplier' in the request to formulate the reply.. I.e. multiply the number..!
@@ -128,16 +86,6 @@ public class SetupTestMatsEndpoints {
         });
 
         ep.getEndpointConfig().setConcurrency(BASE_CONCURRENCY * 4);
-    }
-
-    static class ThisIsARandomInnerClass {
-        static class ThisIsYetAnotherLevelOfInnerClass {
-            static class MatsThisIsNotReallyAMatsException extends RuntimeException {
-                public MatsThisIsNotReallyAMatsException(String message, Exception nested) {
-                    super(message, nested);
-                }
-            }
-        }
     }
 
     public static void setupMainMultiStagedService(String servicePrefix, MatsFactory matsFactory) {
@@ -225,11 +173,123 @@ public class SetupTestMatsEndpoints {
             return;
         }
         if (Math.random() < 0.01) {
-            throw new MatsRefuseMessageException("Random DLQ! This is throwing randomly as directed!"
-                    + (Math.random() > 0.5
-                            ? " This is MULTILINE!\nThis is a second line!\nThis is a third line {curlies}[brackets]$<lessgreater>\"quotes\"%!;*"
-                                    + " <- those are some special characters! (there's two newlines after here)\n\n"
-                            : ""));
+            double rand = Math.random();
+            if (rand > 0.86) {
+                throw new ToStringMatsRefuseMessageException("ToStringMatsRefuseMessageException [Special toString (\n"
+                        + "{some.package.looking.Information=Looking like an exception})]: Check 1, 2, 3)"
+                        + "{qurlies}[brackets]$<lessgreater>\"quotes\"%\\!;* <- special chars!})]\n"
+                        + "some.package.looking.Information: So it looks like exception here."
+                        + " 2x Linefeeds after here, should be culled.\n\n",
+                        new IllegalArgumentException("Nested 1",
+                                new IllegalStateException("Nested 2",
+                                        new IllegalStateException("Nested 3"))));
+            }
+            else if (rand > 0.71) {
+                throw new ToStringMatsRefuseMessageException("ToStringMatsRefuseMessageException"
+                        + " [Special toString case that made problems (\n"
+                        + "{some.package.looking.Information=Looking like an exception})]: Check 1, 2, 3)"
+                        + "{qurlies}[brackets]$<lessgreater>\"quotes\"%\\!;* <- special chars!})]\n"
+                        + "some.package.looking.Information: So it looks like exception here. "
+                        + "Here's a tab followed with 'at', then some text, to see if we trip on that: \tat test ok!\n",
+                        new IllegalArgumentException("Nested 1",
+                                new IllegalStateException("Nested 2",
+                                        new IllegalStateException("Nested 3"))));
+            }
+            else if (rand > 0.57) {
+                throw new ToStringMatsRefuseMessageException("",
+                        new IllegalArgumentException("The above had empty toString()!",
+                                new IllegalStateException("Nested 2",
+                                        new IllegalStateException("Nested 3"))));
+            }
+            else if (rand > 0.43) {
+                throw new ToStringMatsRefuseMessageException("SingleWord",
+                        new IllegalArgumentException("The above should read 'SingleWord'!"));
+            }
+            else if (rand > 0.28) {
+                throw new ToStringMatsRefuseMessageException("xyz.tralala:Text.Some more text",
+                        new IllegalArgumentException("The above should read 'xyz.tralala:Text.Some more text'!"));
+            }
+            else if (rand > 0.14) {
+                throw newCrazyNestedAndSuppressedException();
+            }
+            else {
+                throw new MatsThisIsNotReallyAMatsException(
+                        "Random DLQ! MULTILINE! This is throwing randomly as directed!"
+                                + "\nThis is a second line!\nThis is a third line {curlies}[brackets]$<lessgreater>\"quotes\"%!;*"
+                                + " <- those are some special characters! Test\tTab\tTest!\n"
+                                + "(there's two newlines after here)\n\n");
+            }
+        }
+    }
+
+    private static MatsRefuseMessageException newCrazyNestedAndSuppressedException() {
+        var e1 = new MissingFormatArgumentException(
+                "Just to have a nested exception! Here's quite some long text blah blah testing 123..!");
+        var e2 = new IllegalArgumentException("Just to have a nested exception!", e1);
+        var toBeThrown = new MatsRefuseMessageException("Crazy nested and suppressed exception! MULTILINE! "
+                + " THIS IS A REALLY LONG MESSAGE: "
+                + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: "
+                + "THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE: THIS IS A REALLY LONG MESSAGE\n"
+                + "This is a second line of the REALLY LONG MESSAGE!\n"
+                + "\n"
+                + "This is a third line of the REALLY LONG MESSAGE! (after a blank!)"
+                + " {curlies}[brackets]$<lessgreater>\"quotes\"%!;* <- special chars!"
+                + " (there's two newlines after here)\n\n",
+                e2);
+
+        var nested2OnSuppressedL2b = new IllegalArgumentException("Nested 2 on Suppressed L2b\n"
+                + "This is a second line on Nested 2 on Suppressed L2b");
+        var nested1OnSuppressedL2b = new IllegalArgumentException("Nested 1 on Suppressed L2b",
+                nested2OnSuppressedL2b);
+        var suppressedL2bException = new RuntimeException("Suppressed L2b Exception", nested1OnSuppressedL2b);
+
+        var nested2OnSupppressedL1 = new IllegalArgumentException("Nested 2 on Suppressed L1\n"
+                + "This is a second line on Nested 2 on Suppressed L1\n"
+                + "\n"
+                + "This is a third line on Nested 2 on Suppressed L1 (after a blank line)\n"
+                + " {curlies}[brackets]$<lessgreater>\"quotes\"%!;* <- special chars!"
+                + " (there's two newlines after here)\n\n");
+        nested2OnSupppressedL1.addSuppressed(suppressedL2bException);
+        var nested1OnSupppressedL1 = new IllegalArgumentException("Nested 1 on Suppressed L1",
+                nested2OnSupppressedL1);
+        var suppressedL1Exception = new RuntimeException("Suppressed L1 Exception", nested1OnSupppressedL1);
+
+        var nestedOnSuppressedL2 = new IllegalArgumentException("Nested on Suppressed L2");
+        var suppressedOnSuppressedL2 = new RuntimeException("Suppressed L2 on Suppressed",
+                nestedOnSuppressedL2);
+        suppressedL1Exception.addSuppressed(suppressedOnSuppressedL2);
+
+        toBeThrown.addSuppressed(suppressedL1Exception);
+        return toBeThrown;
+    }
+
+    static class ThisIsARandomInnerClass {
+        static class ThisIsYetAnotherLevelOfInnerClass {
+            static class MatsThisIsNotReallyAMatsException extends MatsRefuseMessageException {
+                public MatsThisIsNotReallyAMatsException(String message) {
+                    super(message);
+                }
+            }
+        }
+    }
+
+    private static final class ToStringMatsRefuseMessageException extends MatsRefuseMessageException {
+        public ToStringMatsRefuseMessageException(String message) {
+            super(message);
+        }
+
+        public ToStringMatsRefuseMessageException(String message, Throwable cause) {
+            super(message, cause);
+        }
+
+        @Override
+        public String toString() {
+            return getMessage();
         }
     }
 

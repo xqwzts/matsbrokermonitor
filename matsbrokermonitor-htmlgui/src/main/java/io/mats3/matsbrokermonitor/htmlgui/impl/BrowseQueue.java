@@ -48,15 +48,16 @@ class BrowseQueue {
     // Note: The queue-browser of ActiveMQ has a default max, from the server side, of 400.
     private static final int MAX_MESSAGES_BROWSER = 2000;
 
-    private static final Pattern FIRST_PART_OF_EXCEPTION = Pattern.compile("^(.*?)\\s*(?=at |Suppressed:|Caused by:)",
-            Pattern.DOTALL | Pattern.MULTILINE);
+    private static final Pattern FIRST_PART_OF_EXCEPTION = Pattern.compile("^(.*?)(?=\\n\\s*at )", Pattern.DOTALL);
 
-    private static final Pattern CONDENSE_KNOWN_MATS_EXCEPTIONS = Pattern.compile(
-            "(?:^|\\s|\\.)(?:\\w|\\$)+\\$(Mats\\w+Exception): (.*(?:\\n(?!\\s*(?:at |\\$|Caused by:|Suppressed:)).*)*)",
-            Pattern.DOTALL);
+    private static final Pattern CHECK_START_OF_EXCEPTION_IS_NORMAL = Pattern.compile(
+            "^(?:[a-zA-Z_][a-zA-Z0-9_]*\\.)*[A-Za-z_][A-Za-z0-9_]*(?:\\$[A-Za-z_][A-Za-z0-9_]*)*:");
 
-    private static final Pattern CAUSED_BY_SUPPRESSED_REGEX = Pattern.compile(
-            "^(\\t*)(Caused by:|Suppressed:)(.*(?:\\n(?!\\t*at |\\t*(Caused by:|Suppressed:)).*)*)", Pattern.MULTILINE);
+    private static final Pattern CONDENSE_KNOWN_MATS_EXCEPTIONS = Pattern.compile("(?:^|\\s|\\.)(?:\\w|\\$)+"
+            + "\\$(Mats\\w+Exception): (.*(?:\\n(?!\\s*(?:at |\\$|Caused by:|Suppressed:)).*)*)", Pattern.DOTALL);
+
+    private static final Pattern FIND_CAUSED_BY_AND_SUPPRESSED_REGEX = Pattern.compile("^(\\t*)(Caused by:|Suppressed:)"
+            + "(.*(?:\\n(?!\\t*at |\\t*\\.\\.\\. \\d+ more|\\t*(Caused by:|Suppressed:)).*)*)", Pattern.MULTILINE);
 
     static void gui_BrowseQueue(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, List<? super MonitorAddition> monitorAdditions,
@@ -465,36 +466,48 @@ class BrowseQueue {
 
                 if (brokerMsg.getDlqExceptionStacktrace().isPresent()) {
                     out.html("<br>");
+
                     String wholeException = brokerMsg.getDlqExceptionStacktrace().get();
 
                     // :: Find the first line or multiline of the exception, fallbacking if fails.
                     Matcher firstPartMatcher = FIRST_PART_OF_EXCEPTION.matcher(wholeException);
-                    String firstLine;
+                    String firstPartToString; // The first line(s) of an Exception is its toString() output!
+                    // ?: If we find the first part, use that
                     if (firstPartMatcher.find()) {
-                        firstLine = firstPartMatcher.group(1);
+                        firstPartToString = firstPartMatcher.group(1);
                     }
+                    // ?: If we don't find the first part, try to find the first line
                     else if (wholeException.contains("\n")) {
-                        firstLine = wholeException.substring(0, wholeException.indexOf('\n'));
+                        firstPartToString = wholeException.substring(0, wholeException.indexOf('\n'));
                     }
+                    // Failing that, just use everything (This must be a very weird exception, but might be possible)
                     else {
-                        firstLine = wholeException;
+                        firstPartToString = wholeException;
                     }
-                    // From the first line or multiline, chop of any package information - i.e. up to the last dot
-                    // before the colon
-                    int colonPos = firstLine.indexOf(':');
-                    String firstLineToColon = colonPos > 0
-                            ? firstLine.substring(0, colonPos)
-                            : firstLine;
-                    int lastDotBeforeColon = firstLineToColon.lastIndexOf('.');
-                    String firstLineNoPackage = lastDotBeforeColon > 0
-                            ? firstLine.substring(lastDotBeforeColon + 1)
-                            : firstLine;
 
-                    // :: Condense known Mats exceptions, multiline
-                    Matcher matsExceptionMatcher = CONDENSE_KNOWN_MATS_EXCEPTIONS.matcher(firstLineNoPackage);
-                    String firstLineKeep = matsExceptionMatcher.find()
-                            ? matsExceptionMatcher.group(1) + ": " + matsExceptionMatcher.group(2)
-                            : firstLineNoPackage;
+                    String firstLineKeep = firstPartToString;
+                    Matcher startOfExceptionIsNormal = CHECK_START_OF_EXCEPTION_IS_NORMAL.matcher(firstPartToString);
+                    // ?: Check if the start of the Exception is "normal", i.e. "package.subpack.Classname: message"
+                    // (An Exception can override toString() and utterly change the beginning - we then want to
+                    // back off and just use everything).
+                    if (startOfExceptionIsNormal.find()) {
+                        // -> Yes, normal
+                        // :: Chop off the package information to save space.
+                        int colonPos = firstPartToString.indexOf(':');
+                        String firstLineToColon = colonPos > 0
+                                ? firstPartToString.substring(0, colonPos)
+                                : firstPartToString;
+                        int lastDotBeforeColon = firstLineToColon.lastIndexOf('.');
+                        String firstLineNoPackage = (lastDotBeforeColon > 0) && (lastDotBeforeColon < colonPos)
+                                ? firstPartToString.substring(lastDotBeforeColon + 1)
+                                : firstPartToString;
+
+                        // :: Condense known Mats exceptions, multiline
+                        Matcher matsExceptionMatcher = CONDENSE_KNOWN_MATS_EXCEPTIONS.matcher(firstLineNoPackage);
+                        firstLineKeep = matsExceptionMatcher.find()
+                                ? matsExceptionMatcher.group(1) + ": " + matsExceptionMatcher.group(2)
+                                : firstLineNoPackage;
+                    }
 
                     // :: Print out the first line, with red color if Refused
                     if (brokerMsg.isDlqMessageRefused().orElse(false)) {
@@ -512,7 +525,7 @@ class BrowseQueue {
                             "</code>");
 
                     // :: Handle the rest of the exception, cause-by-cause and suppressed, multiline.
-                    Matcher causedBySuppressedMatcher = CAUSED_BY_SUPPRESSED_REGEX.matcher(wholeException);
+                    Matcher causedBySuppressedMatcher = FIND_CAUSED_BY_AND_SUPPRESSED_REGEX.matcher(wholeException);
                     while (causedBySuppressedMatcher.find()) {
                         String tabs = causedBySuppressedMatcher.group(1);
                         int tabsLength = tabs.length();
