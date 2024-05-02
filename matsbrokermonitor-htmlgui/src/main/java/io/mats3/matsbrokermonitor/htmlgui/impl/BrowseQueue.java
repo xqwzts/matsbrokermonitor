@@ -57,7 +57,7 @@ class BrowseQueue {
             + "\\$(Mats\\w+Exception): (.*(?:\\n(?!\\s*(?:at |\\$|Caused by:|Suppressed:)).*)*)", Pattern.DOTALL);
 
     private static final Pattern FIND_CAUSED_BY_AND_SUPPRESSED_REGEX = Pattern.compile("^(\\t*)(Caused by:|Suppressed:)"
-            + "(.*(?:\\n(?!\\t*at |\\t*\\.\\.\\. \\d+ more|\\t*(Caused by:|Suppressed:)).*)*)", Pattern.MULTILINE);
+            + "(.*(?:\\n(?!\\t*(at |\\.\\.\\. \\d+ more|Caused by:|Suppressed:)).*)*)", Pattern.MULTILINE);
 
     static void gui_BrowseQueue(MatsBrokerMonitor matsBrokerMonitor,
             MatsBrokerBrowseAndActions matsBrokerBrowseAndActions, List<? super MonitorAddition> monitorAdditions,
@@ -516,34 +516,35 @@ class BrowseQueue {
                     else if (brokerMsg.getDlqDeliveryCount().isPresent()
                             && (brokerMsg.getDlqDeliveryCount().get() > 1)) {
                         out.html("<b>").DATA(brokerMsg.getDlqDeliveryCount().get())
-                                .html(" delivery attempts before DLQ, last Exception: </b>");
+                                .html(" delivery attempts before DLQ, last Exception:</b> ");
                     }
                     else {
                         out.html("<b>Exception:</b> ");
                     }
-                    out.html("<code style='font-size: 120%; white-space:pre-wrap'>").DATA(firstLineKeep).html(
-                            "</code>");
+                    out.html("<code style='font-size: 120%; white-space:pre-wrap'>").DATA(firstLineKeep.trim())
+                            .html("</code>");
 
                     // :: Handle the rest of the exception, cause-by-cause and suppressed, multiline.
                     Matcher causedBySuppressedMatcher = FIND_CAUSED_BY_AND_SUPPRESSED_REGEX.matcher(wholeException);
                     while (causedBySuppressedMatcher.find()) {
                         String tabs = causedBySuppressedMatcher.group(1);
-                        int tabsLength = tabs.length();
                         String prefix = causedBySuppressedMatcher.group(2);
-                        String message = causedBySuppressedMatcher.group(3).trim();
-                        out.html("\n<br>").html("&nbsp;|&nbsp;&nbsp;".repeat(tabsLength))
-                                .html("<b>").DATA(prefix).html(
-                                        "</b> <code style='font-size: 120%; white-space:pre-wrap'>").DATA(message)
+                        String message = causedBySuppressedMatcher.group(3);
+                        out.html("<br>\n").html("&nbsp;|&nbsp;&nbsp;".repeat(tabs.length()))
+                                .html("<b>")
+                                .DATA(prefix)
+                                .html("</b> <code style='font-size: 120%; white-space:pre-wrap'>")
+                                .DATA(message.trim())
                                 .html("</code>");
                     }
                 }
                 else {
                     if (brokerMsg.isDlqMessageRefused().orElse(false)) {
-                        out.html("<br><b><span style='color:red;'>Refused!</span></b>");
+                        out.html("<br>\n<b><span style='color:red;'>Refused!</span></b>");
                     }
-                    else if (brokerMsg.getDlqDeliveryCount().isPresent() && (brokerMsg.getDlqDeliveryCount()
-                            .get() > 1)) {
-                        out.html("<br><b>").DATA(brokerMsg.getDlqDeliveryCount().get())
+                    else if (brokerMsg.getDlqDeliveryCount().isPresent()
+                            && (brokerMsg.getDlqDeliveryCount().get() > 1)) {
+                        out.html("<br>\n<b>").DATA(brokerMsg.getDlqDeliveryCount().get())
                                 .html(" delivery attempts before DLQ.</b>");
                     }
                 }
