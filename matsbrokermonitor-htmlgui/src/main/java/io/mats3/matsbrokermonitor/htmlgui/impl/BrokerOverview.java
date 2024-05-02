@@ -348,8 +348,28 @@ class BrokerOverview {
                 MatsStageBrokerRepresentation first = stages.values().iterator().next();
                 // There will either be an incoming, or a DLQ, otherwise the stage wouldn't be defined.
                 MatsBrokerDestination firstDestinationOrDlq = first.getDestination(STANDARD)
-                        .orElseGet(() -> first.getDestination(StageDestinationType.DEAD_LETTER_QUEUE)
-                                .orElseThrow(() -> new AssertionError("Missing both Incoming and DLQ destinations!")));
+                        .or(() -> first.getDestination(StageDestinationType.NON_PERSISTENT_INTERACTIVE))
+                        .or(() -> first.getDestination(StageDestinationType.DEAD_LETTER_QUEUE))
+                        .or(() -> first.getDestination(
+                                StageDestinationType.DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE))
+                        .or(() -> first.getDestination(StageDestinationType.DEAD_LETTER_QUEUE_MUTED))
+                        .or(() -> first.getDestination(StageDestinationType.WIRETAP))
+                        .orElse(null);
+
+                // ?: Assert that we actually got a destination
+                if (firstDestinationOrDlq == null) {
+                    // -> No, no destination. This should not happen - but we don't want to crash the GUI by throwing
+                    // an assert exception, so we'll just output a red row.
+                    out.html("<tr><td colspan=3><div class='matsbm_endpoint_group_row' style='color:red'><b> ** ")
+                            .DATA(endpointId).html(" ** IS MISSING KNOWN DESTIONATION TYPES!!"
+                                    + " This should not happen, so bug report it!</b></div></td></tr>");
+                    continue;
+                }
+
+                out.html("<tr class='matsbm_endpoint_group_row")
+                        .html(epHasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
+                        .html(epHasDlqsMsgs ? " matsbm_marker_has_dlqs" : "")
+                        .html("'>");
 
                 boolean privateEp = endpointId.contains(".private.");
                 boolean queue = firstDestinationOrDlq
