@@ -489,6 +489,11 @@ public class MatsBrokerMonitor_TestJettyServer {
                         + StageDestinationType.DEAD_LETTER_QUEUE.getMidfix()
                         + "FakeMatsEndpoint.methodWithJustDLQ");
 
+                // :: Send to another Fake endpoint (so that they are not consumed), on Muted only.
+                sendToQueue.accept("DLQ." + MATS_DESTINATION_PREFIX
+                        + StageDestinationType.DEAD_LETTER_QUEUE_MUTED.getMidfix()
+                        + "FakeMatsEndpoint.methodWithJustMutedDLQ");
+
                 // :: ALL The different types of StageDestinationTypes for a fake Endpoint (i.e. no consumers there)
                 // .. Standard
                 sendToQueue.accept(MATS_DESTINATION_PREFIX

@@ -106,7 +106,7 @@ class BrokerOverview {
 
         // ==== HEADER INCOMING & DLQ SUMMARY
 
-        // :: Header info: INCOMING MESSAGES
+        // :: Header info: TOTAL INCOMING MESSAGES
         // Count
         boolean brokerHasTooOldMsgs = false;
         out.html("<div class='matsbm_overview_message'>\n");
@@ -121,15 +121,15 @@ class BrokerOverview {
             out.html(", worst queue has <b>").DATA(maxStage).html("</b> message").html(maxStage > 1 ? "s" : "");
         }
         // Oldest
-        OptionalLong oldestIncomingO = destinations.stream()
+        OptionalLong brokerOldestIncomingO = destinations.stream()
                 .filter(dest -> (dest.getStageDestinationType().orElse(UNKNOWN) == STANDARD)
                         || (dest.getStageDestinationType().orElse(UNKNOWN) == NON_PERSISTENT_INTERACTIVE))
                 .map(MatsBrokerDestination::getHeadMessageAgeMillis)
                 .filter(OptionalLong::isPresent)
                 .mapToLong(OptionalLong::getAsLong)
                 .max();
-        if (oldestIncomingO.isPresent()) {
-            long oldestIncoming = oldestIncomingO.getAsLong();
+        if (brokerOldestIncomingO.isPresent()) {
+            long oldestIncoming = brokerOldestIncomingO.getAsLong();
             brokerHasTooOldMsgs = (oldestIncoming > TOO_OLD);
             out.html(", ")
                     .html(brokerHasTooOldMsgs ? "<span class='matsbm_messages_old'>" : "")
@@ -139,46 +139,85 @@ class BrokerOverview {
         }
         out.html("<br>\n");
 
-        // :: Header info: DLQed MESSAGES
+        // :: Header info: TOTAL DLQ MESSAGES
         // Count
         long totalNumberOfDlqMessages = destinations.stream()
-                .filter(dest -> (dest.getStageDestinationType().orElse(UNKNOWN) == DEAD_LETTER_QUEUE_MUTED)
-                        || (dest.getStageDestinationType().orElse(
-                                UNKNOWN) == DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE))
+                .filter(dest -> (dest.getStageDestinationType().orElse(UNKNOWN) == DEAD_LETTER_QUEUE)
+                        || (dest.getStageDestinationType()
+                                .orElse(UNKNOWN) == DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE))
                 .mapToLong(MatsBrokerDestination::getNumberOfQueuedMessages)
                 .sum();
         boolean brokerHasDlqMsgs = totalNumberOfDlqMessages > 0;
         out.html(brokerHasDlqMsgs ? "<span class='matsbm_messages_dlq'>" : "")
-                .html("Total DLQed messages: <b>").DATA(totalNumberOfDlqMessages).html("</b>");
+                .html("Total DLQ messages: <b>").DATA(totalNumberOfDlqMessages)
+                .html("</b>");
         // Worst
         if (brokerHasDlqMsgs) {
             long maxQueue = destinations.stream()
-                    .filter(MatsBrokerDestination::isDlq)
+                    .filter(dest -> (dest.getStageDestinationType().orElse(UNKNOWN) == DEAD_LETTER_QUEUE)
+                            || (dest.getStageDestinationType()
+                                    .orElse(UNKNOWN) == DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE))
                     .mapToLong(MatsBrokerDestination::getNumberOfQueuedMessages)
                     .max().orElse(0);
             out.html(", worst DLQ has <b>").DATA(maxQueue).html("</b> message").html(maxQueue > 1 ? "s" : "");
         }
         out.html(brokerHasDlqMsgs ? "</span>" : "");
         // Oldest
-        OptionalLong oldestDlq = destinations.stream()
-                .filter(dest -> (dest.getStageDestinationType().orElse(UNKNOWN) == DEAD_LETTER_QUEUE_MUTED)
+        OptionalLong brokerOldestDlq = destinations.stream()
+                .filter(dest -> (dest.getStageDestinationType().orElse(UNKNOWN) == DEAD_LETTER_QUEUE)
                         || (dest.getStageDestinationType().orElse(
                                 UNKNOWN) == DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE))
                 .map(MatsBrokerDestination::getHeadMessageAgeMillis)
                 .filter(OptionalLong::isPresent)
                 .mapToLong(OptionalLong::getAsLong)
                 .max();
-        if (oldestDlq.isPresent()) {
-            out.html(", oldest DLQ message is <b>").DATA(Statics.millisSpanToHuman(oldestDlq.getAsLong()))
+        if (brokerOldestDlq.isPresent()) {
+            out.html(", oldest DLQ message is <b>").DATA(Statics.millisSpanToHuman(brokerOldestDlq.getAsLong()))
                     .html("</b> old.");
         }
+
+        // :: Header info: TOTAL MUTED MESSAGES
+        // Count
+        long totalNumberOfMutedMessages = destinations.stream()
+                .filter(dest -> (dest.getStageDestinationType().orElse(UNKNOWN) == DEAD_LETTER_QUEUE_MUTED))
+                .mapToLong(MatsBrokerDestination::getNumberOfQueuedMessages)
+                .sum();
+        boolean brokerHasMutedMsgs = totalNumberOfMutedMessages > 0;
+        out.html("<br>\n");
+        out.html(brokerHasMutedMsgs ? "<span class='matsbm_messages_muted'>" : "")
+                .html("Total Muted DLQ messages: <b>").DATA(totalNumberOfMutedMessages).html("</b>");
+        // Worst
+        if (brokerHasMutedMsgs) {
+            long maxQueue = destinations.stream()
+                    .filter(dest -> (dest.getStageDestinationType().orElse(UNKNOWN) == DEAD_LETTER_QUEUE_MUTED))
+                    .mapToLong(MatsBrokerDestination::getNumberOfQueuedMessages)
+                    .max().orElse(0);
+            out.html(", worst Muted DLQ has <b>").DATA(maxQueue).html("</b> message").html(maxQueue > 1 ? "s" : "");
+        }
+        out.html(brokerHasMutedMsgs ? "</span>" : "");
+        // Oldest
+        OptionalLong brokerOldestMuted = destinations.stream()
+                .filter(dest -> (dest.getStageDestinationType().orElse(UNKNOWN) == DEAD_LETTER_QUEUE_MUTED))
+                .map(MatsBrokerDestination::getHeadMessageAgeMillis)
+                .filter(OptionalLong::isPresent)
+                .mapToLong(OptionalLong::getAsLong)
+                .max();
+        if (brokerOldestMuted.isPresent()) {
+            out.html(", oldest Muted DLQ message is <b>")
+                    .DATA(Statics.millisSpanToHuman(brokerOldestMuted.getAsLong()))
+                    .html("</b> old.");
+        }
+
+        // -- done header
         out.html("</div>\n");
 
         // ===== BUTTONS: View All vs View Bad
 
         // :: Decide whether to show all or bad only.
         // Start with deciding based on whether there are "bad" (DLQ or old)..
-        ShowWhat showWhat = (brokerHasDlqMsgs || brokerHasTooOldMsgs) ? ShowWhat.BAD : ShowWhat.ALL;
+        ShowWhat showWhat = (brokerHasTooOldMsgs || brokerHasDlqMsgs || brokerHasMutedMsgs)
+                ? ShowWhat.BAD
+                : ShowWhat.ALL;
         // .. override with any "show" parameter
         String[] showParam = requestParameters.get("show");
         if (showParam != null) {
