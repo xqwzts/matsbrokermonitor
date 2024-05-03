@@ -205,9 +205,31 @@
     padding: 0.1em 0.3em 0.1em 0.3em
 }
 
+.matsbm_messages_muted {
+    background-color: #0d60ea;
+    color: white;
+    margin-left: -0.3em;
+    padding: 0.1em 0.3em 0.1em 0.3em
+}
+
+.matsbm_messages_wiretap {
+    background-color: #0d60ea;
+    color: white;
+    margin-left: -0.3em;
+    padding: 0.1em 0.3em 0.1em 0.3em
+}
+
 /* :: Buttons: ViewAll, ViewBad */
 
 .matsbm_button_show_all {
+    background-color: #008CBA;
+    transition: background-color 0.7s, color 0.7s;
+    position: relative;
+    z-index: 2;
+}
+
+.matsbm_button_show_non_zero {
+    margin-left: 0.8em;
     background-color: #008CBA;
     transition: background-color 0.7s, color 0.7s;
     position: relative;
@@ -308,14 +330,6 @@
     /*overflow: hidden;*/
     vertical-align: top;
 }
-
-/* Markers for states of ep-groups and eps: Has incoming messages, Has DLQs */
-.matsbm_marker_has_old_msgs {
-}
-
-.matsbm_marker_has_dlqs {
-}
-
 
 /* epids and queue/topic labels */
 

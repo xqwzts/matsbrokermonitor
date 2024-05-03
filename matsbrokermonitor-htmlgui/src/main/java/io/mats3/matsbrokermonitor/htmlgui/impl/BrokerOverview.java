@@ -1,12 +1,20 @@
 package io.mats3.matsbrokermonitor.htmlgui.impl;
 
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.DEAD_LETTER_QUEUE;
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.DEAD_LETTER_QUEUE_MUTED;
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE;
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.NON_PERSISTENT_INTERACTIVE;
 import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.STANDARD;
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.UNKNOWN;
+import static io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType.WIRETAP;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.stream.Stream;
 
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerInfo;
@@ -34,7 +42,7 @@ class BrokerOverview {
         out.html("<div class='matsbm_heading'>");
 
         Optional<BrokerSnapshot> snapshotO = matsBrokerMonitor.getSnapshot();
-        if (!snapshotO.isPresent()) {
+        if (snapshotO.isEmpty()) {
             out.html("<h1>Have not gotten an update from the broker yet!</h1>");
             out.html("</div>\n");
             // Don't output last </div>, as caller does it.
@@ -96,25 +104,26 @@ class BrokerOverview {
         }
         out.html(")</i><br>");
 
-        // ==== QUEUE & DLQ SUMMARY
+        // ==== HEADER INCOMING & DLQ SUMMARY
 
-        // ::: Heading Queued Messages
+        // :: Header info: INCOMING MESSAGES
+        // Count
         boolean brokerHasTooOldMsgs = false;
         out.html("<div class='matsbm_overview_message'>\n");
-        long totalNumberOfIncomingMessages = destinations.stream()
-                .filter(dest -> !dest.isDlq())
-                .mapToLong(MatsBrokerDestination::getNumberOfQueuedMessages)
-                .sum();
-        out.html("Total queued messages: <b>").DATA(totalNumberOfIncomingMessages).html("</b>");
+        long totalNumberOfIncomingMessages = stack.getTotalNumberOfQueuedMessages(STANDARD)
+                + stack.getTotalNumberOfQueuedMessages(NON_PERSISTENT_INTERACTIVE);
+
+        out.html("Total incoming messages: <b>").DATA(totalNumberOfIncomingMessages).html("</b>");
+        // Worst
         if (totalNumberOfIncomingMessages > 0) {
-            long maxStage = destinations.stream()
-                    .filter(dest -> !dest.isDlq())
-                    .mapToLong(MatsBrokerDestination::getNumberOfQueuedMessages)
-                    .max().orElse(0);
+            long maxStage = Math.max(stack.getMaxNumberOfMessages(STANDARD),
+                    stack.getMaxNumberOfMessages(NON_PERSISTENT_INTERACTIVE));
             out.html(", worst queue has <b>").DATA(maxStage).html("</b> message").html(maxStage > 1 ? "s" : "");
         }
+        // Oldest
         OptionalLong oldestIncomingO = destinations.stream()
-                .filter(dest -> !dest.isDlq())
+                .filter(dest -> (dest.getStageDestinationType().orElse(UNKNOWN) == STANDARD)
+                        || (dest.getStageDestinationType().orElse(UNKNOWN) == NON_PERSISTENT_INTERACTIVE))
                 .map(MatsBrokerDestination::getHeadMessageAgeMillis)
                 .filter(OptionalLong::isPresent)
                 .mapToLong(OptionalLong::getAsLong)
@@ -130,15 +139,18 @@ class BrokerOverview {
         }
         out.html("<br>\n");
 
-        // ::: Heading DLQed Messages
-        boolean brokerHasDlqMsgs;
+        // :: Header info: DLQed MESSAGES
+        // Count
         long totalNumberOfDlqMessages = destinations.stream()
-                .filter(MatsBrokerDestination::isDlq)
+                .filter(dest -> (dest.getStageDestinationType().orElse(UNKNOWN) == DEAD_LETTER_QUEUE_MUTED)
+                        || (dest.getStageDestinationType().orElse(
+                                UNKNOWN) == DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE))
                 .mapToLong(MatsBrokerDestination::getNumberOfQueuedMessages)
                 .sum();
-        brokerHasDlqMsgs = totalNumberOfDlqMessages > 0;
+        boolean brokerHasDlqMsgs = totalNumberOfDlqMessages > 0;
         out.html(brokerHasDlqMsgs ? "<span class='matsbm_messages_dlq'>" : "")
                 .html("Total DLQed messages: <b>").DATA(totalNumberOfDlqMessages).html("</b>");
+        // Worst
         if (brokerHasDlqMsgs) {
             long maxQueue = destinations.stream()
                     .filter(MatsBrokerDestination::isDlq)
@@ -147,7 +159,11 @@ class BrokerOverview {
             out.html(", worst DLQ has <b>").DATA(maxQueue).html("</b> message").html(maxQueue > 1 ? "s" : "");
         }
         out.html(brokerHasDlqMsgs ? "</span>" : "");
-        OptionalLong oldestDlq = destinations.stream().filter(MatsBrokerDestination::isDlq)
+        // Oldest
+        OptionalLong oldestDlq = destinations.stream()
+                .filter(dest -> (dest.getStageDestinationType().orElse(UNKNOWN) == DEAD_LETTER_QUEUE_MUTED)
+                        || (dest.getStageDestinationType().orElse(
+                                UNKNOWN) == DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE))
                 .map(MatsBrokerDestination::getHeadMessageAgeMillis)
                 .filter(OptionalLong::isPresent)
                 .mapToLong(OptionalLong::getAsLong)
@@ -158,36 +174,47 @@ class BrokerOverview {
         }
         out.html("</div>\n");
 
+        // ===== BUTTONS: View All vs View Bad
+
         // :: Decide whether to show all or bad only.
         // Start with deciding based on whether there are "bad" (DLQ or old)..
-        boolean showBadOnly = brokerHasDlqMsgs || brokerHasTooOldMsgs;
+        ShowWhat showWhat = (brokerHasDlqMsgs || brokerHasTooOldMsgs) ? ShowWhat.BAD : ShowWhat.ALL;
         // .. override with any "show" parameter
         String[] showParam = requestParameters.get("show");
         if (showParam != null) {
-            if ("bad".equals(showParam[0])) {
-                showBadOnly = true;
+            if ("all".equals(showParam[0])) {
+                showWhat = ShowWhat.ALL;
             }
-            else if ("all".equals(showParam[0])) {
-                showBadOnly = false;
+            else if ("non_zero".equals(showParam[0])) {
+                showWhat = ShowWhat.NON_ZERO;
+            }
+            else if ("bad".equals(showParam[0])) {
+                showWhat = ShowWhat.BAD;
             }
             else {
                 throw new IllegalArgumentException("Parameter 'show' can only be 'all' or 'bad'");
             }
         }
 
-        // ===== BUTTONS: View All vs View Bad
-
         out.html("<input type='button' id='matsbm_button_show_all' value='Show All [a]'"
-                + " class='matsbm_button matsbm_button_show_all" + (showBadOnly ? "" : " matsbm_button_active")
+                + " class='matsbm_button matsbm_button_show_all"
+                + (showWhat == ShowWhat.ALL ? " matsbm_button_active" : "")
                 + "' onclick='matsbm_button_show_all_destinations(event)'>");
 
+        out.html("<input type='button' id='matsbm_button_show_non_zero' value='Show >0 [z]'"
+                + " class='matsbm_button matsbm_button_show_non_zero"
+                + (showWhat == ShowWhat.NON_ZERO ? " matsbm_button_active" : "")
+                + "' onclick='matsbm_button_show_non_zero_destinations(event)'>");
+
         out.html("<input type='button' id='matsbm_button_show_bad' value='Show Bad [b]'"
-                + " class='matsbm_button matsbm_button_show_bad" + (showBadOnly ? " matsbm_button_active" : "")
+                + " class='matsbm_button matsbm_button_show_bad"
+                + (showWhat == ShowWhat.BAD ? " matsbm_button_active" : "")
                 + "' onclick='matsbm_button_show_bad_destinations(event)'>");
 
         out.html("<input type='button' id='matsbm_button_forceupdate' value='Update Now! [u]'"
                 + " class='matsbm_button matsbm_button_forceupdate"
                 + "' onclick='matsbm_button_forceupdate(event)'>");
+
         out.html("<span id='matsbm_action_message'></span>");
         out.html("<br>\n");
 
@@ -195,23 +222,21 @@ class BrokerOverview {
 
         out.html("<div id='matsbs_toc_heading'>EndpointGroups ToC</div>\n");
         out.html("<table id='matsbm_table_toc'>\n");
-        for (MatsEndpointGroupBrokerRepresentation endpointGroup : stack.getEndpointGroups().values()) {
-            OptionalLong oldestIncomO = endpointGroup.getOldestStageHeadMessageAgeMillis(STANDARD);
-            long oldestIncoming = oldestIncomO.orElse(-1);
-            boolean hasOldMsgs = oldestIncoming > TOO_OLD;
-            long dlqMessages = endpointGroup.getTotalNumberOfQueuedMessages(StageDestinationType.DEAD_LETTER_QUEUE);
-            boolean hasDlqMsgs = dlqMessages > 0;
 
-            // ?: Should we only show bad, but there is no DLQs or old messages?
-            if (showBadOnly && !(hasDlqMsgs || hasOldMsgs)) {
-                // -> Yes, only show bad, but this is not bad, so skip.
-                continue;
-            }
+        var epGrps = new ArrayList<MatsEndpointGroupBrokerRepresentation>();
+        epGrps.addAll(stack.getEndpointGroups().values());
+        epGrps.add(stack.getRemainingDestinationsAsEndpointGroup());
 
-            out.html("<tr class='matsbm_toc_endpointgroup")
-                    .html(hasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
-                    .html(hasDlqMsgs ? " matsbm_marker_has_dlqs" : "")
-                    .html("'>");
+        boolean mutedPresent = epGrps.stream()
+                .anyMatch(epGrp -> epGrp.getTotalNumberOfQueuedMessages(DEAD_LETTER_QUEUE_MUTED) > 0);
+        boolean wiretapPresent = epGrps.stream()
+                .anyMatch(epGrp -> epGrp.getTotalNumberOfQueuedMessages(WIRETAP) > 0);
+
+        for (MatsEndpointGroupBrokerRepresentation endpointGroup : epGrps) {
+            // ?: Should we show this EndpointGroup?
+            if (!shouldShowEndpointGroup(endpointGroup, showWhat)) continue;
+
+            out.html("<tr class='matsbm_toc_endpointgroup'>");
             out.html("<td><div class='matsbm_toc_content'>");
             String endpointGroupId = endpointGroup.getEndpointGroup().trim().isEmpty()
                     ? "{empty string}"
@@ -219,34 +244,103 @@ class BrokerOverview {
             out.html("<a href='#").DATA(endpointGroupId).html("'>")
                     .DATA(endpointGroupId)
                     .html("</a>");
-            out.html("</div></td><td><div class='matsbm_toc_content'>");
-            long incomingMessages = endpointGroup.getTotalNumberOfQueuedMessages(STANDARD);
+            out.html("</div></td>");
+
+            // ::: ToC entry
+
+            // :: Standard incoming
+
+            out.html("<td><div class='matsbm_toc_content'>");
+            long incomingMessages = endpointGroup.getTotalNumberOfQueuedMessages(STANDARD)
+                    + endpointGroup.getTotalNumberOfQueuedMessages(NON_PERSISTENT_INTERACTIVE);
             out.html("ΣQ:<b>").DATA(incomingMessages).html("</b>");
             if (incomingMessages > 0) {
-                long maxStage = endpointGroup.getMaxStageNumberOfMessages(STANDARD);
+                long maxStage = Math.max(endpointGroup.getMaxNumberOfMessages(STANDARD),
+                        endpointGroup.getMaxNumberOfMessages(NON_PERSISTENT_INTERACTIVE));
                 out.html(", worst:<b>").DATA(maxStage).html("</b>");
             }
+            OptionalLong oldestIncomO = Stream.of(endpointGroup.getOldestHeadMessageAgeMillis(STANDARD),
+                    endpointGroup.getOldestHeadMessageAgeMillis(NON_PERSISTENT_INTERACTIVE))
+                    .filter(OptionalLong::isPresent)
+                    .mapToLong(OptionalLong::getAsLong)
+                    .max();
             if (oldestIncomO.isPresent()) {
+                long oldestIncoming = oldestIncomO.getAsLong();
+                boolean hasOldMsgs = oldestIncoming > TOO_OLD;
                 out.html(", ").html(hasOldMsgs ? "<span class='matsbm_messages_old'>" : "")
                         .html("oldest:")
                         .html("<b>").DATA(Statics.millisSpanToHuman(oldestIncoming)).html("</b>")
                         .html(hasOldMsgs ? "</span>" : "");
             }
-            out.html("</div></td><td><div class='matsbm_toc_content'>");
+            out.html("</div></td>");
+
+            // :: DLQ
+
+            out.html("<td><div class='matsbm_toc_content'>");
+            long dlqMessages = endpointGroup.getTotalNumberOfQueuedMessages(DEAD_LETTER_QUEUE)
+                    + endpointGroup.getTotalNumberOfQueuedMessages(DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE);
+
             out.html(dlqMessages > 0 ? "<span class='matsbm_messages_dlq'>" : "")
                     .html("ΣDLQ:<b>").DATA(dlqMessages).html("</b>");
             if (dlqMessages > 0) {
-                long maxQueue = endpointGroup.getMaxStageNumberOfMessages(StageDestinationType.DEAD_LETTER_QUEUE);
+                long maxQueue = Math.max(endpointGroup.getMaxNumberOfMessages(
+                        DEAD_LETTER_QUEUE),
+                        endpointGroup.getMaxNumberOfMessages(DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE));
                 out.html(", worst:<b>").DATA(maxQueue).html("</b>");
             }
             out.html("</span>");
-            OptionalLong oldestDlqO = endpointGroup.getOldestStageHeadMessageAgeMillis(
-                    StageDestinationType.DEAD_LETTER_QUEUE);
+            OptionalLong oldestDlqO = Stream.of(endpointGroup.getOldestHeadMessageAgeMillis(DEAD_LETTER_QUEUE),
+                    endpointGroup.getOldestHeadMessageAgeMillis(DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE))
+                    .filter(OptionalLong::isPresent)
+                    .mapToLong(OptionalLong::getAsLong)
+                    .max();
             if (oldestDlqO.isPresent()) {
                 out.html(", oldest:<b>").DATA(Statics.millisSpanToHuman(oldestDlqO.getAsLong()))
                         .html("</b>.");
             }
-            out.html("</div></td></tr>");
+            out.html("</div></td>");
+
+            // :: Muted
+            if (mutedPresent) {
+                out.html("<td><div class='matsbm_toc_content'>");
+                long mutedMessages = endpointGroup.getTotalNumberOfQueuedMessages(DEAD_LETTER_QUEUE_MUTED);
+
+                out.html(mutedMessages > 0 ? "<span class='matsbm_messages_muted'>" : "")
+                        .html("ΣMuted:<b>").DATA(mutedMessages).html("</b>");
+                if (mutedMessages > 0) {
+                    long maxQueue = endpointGroup.getMaxNumberOfMessages(DEAD_LETTER_QUEUE_MUTED);
+                    out.html(", worst:<b>").DATA(maxQueue).html("</b>");
+                }
+                out.html("</span>");
+                OptionalLong oldestMuted = endpointGroup.getOldestHeadMessageAgeMillis(DEAD_LETTER_QUEUE_MUTED);
+                if (oldestMuted.isPresent()) {
+                    out.html(", oldest:<b>").DATA(Statics.millisSpanToHuman(oldestMuted.getAsLong()))
+                            .html("</b>.");
+                }
+                out.html("</div></td>");
+            }
+
+            // :: Wiretap
+            if (wiretapPresent) {
+                out.html("<td><div class='matsbm_toc_content'>");
+                long wiretapMessages = endpointGroup.getTotalNumberOfQueuedMessages(WIRETAP);
+
+                out.html(wiretapMessages > 0 ? "<span class='matsbm_messages_wiretap'>" : "")
+                        .html("ΣWiretap:<b>").DATA(wiretapMessages).html("</b>");
+                if (wiretapMessages > 0) {
+                    long maxQueue = endpointGroup.getMaxNumberOfMessages(WIRETAP);
+                    out.html(", worst:<b>").DATA(maxQueue).html("</b>");
+                }
+                out.html("</span>");
+                OptionalLong oldestWiretap = endpointGroup.getOldestHeadMessageAgeMillis(WIRETAP);
+                if (oldestWiretap.isPresent()) {
+                    out.html(", oldest:<b>").DATA(Statics.millisSpanToHuman(oldestWiretap.getAsLong()))
+                            .html("</b>.");
+                }
+                out.html("</div></td>");
+            }
+
+            out.html("</tr>\n");
         }
         out.html("</table>");
         out.html("<br>\n");
@@ -256,17 +350,16 @@ class BrokerOverview {
         // :: Global DLQ
         if (stack.getBrokerDefaultGlobalDlq().isPresent()) {
             MatsBrokerDestination globalDlq = stack.getBrokerDefaultGlobalDlq().get();
-            boolean hasDlqMsgs = globalDlq.getNumberOfQueuedMessages() > 0;
+            boolean globalDlqHasMsgs = globalDlq.getNumberOfQueuedMessages() > 0;
             // ?: Do we have DLQs, or should we show all?
-            if (hasDlqMsgs || !showBadOnly) {
-
+            if (globalDlqHasMsgs || (showWhat == ShowWhat.ALL)) {
                 out.html("<div class='matsbm_endpoint_group")
-                        .html(hasDlqMsgs ? " matsbm_marker_has_dlqs" : "")
+                        .html(globalDlqHasMsgs ? " matsbm_marker_has_dlqs" : "")
                         .html("'>");
                 out.html("<h2>Global DLQ</h2><br>");
                 out.html("<table class='matsbm_table_endpointgroup'>");
                 out.html("<tr class='matsbm_endpoint_group_row")
-                        .html(hasDlqMsgs ? " matsbm_marker_has_dlqs" : "")
+                        .html(globalDlqHasMsgs ? " matsbm_marker_has_dlqs" : "")
                         .html("'>");
                 out.html("<td>");
                 out.html("<div class='matsbm_bo_stageid matsbm_bo_stageid_queue'>")
@@ -288,30 +381,14 @@ class BrokerOverview {
 
         // :: Foreach EndpointGroup
         for (MatsEndpointGroupBrokerRepresentation endpointGroup : stack.getEndpointGroups().values()) {
-            // :: EndpointGroup
 
-            boolean epgrHasOldMsgs = endpointGroup.getAllDestinations().stream()
-                    .filter(dest -> !dest.isDlq())
-                    .map(MatsBrokerDestination::getHeadMessageAgeMillis)
-                    .anyMatch(age -> age.orElse(-1) > TOO_OLD);
-
-            boolean epgrHasDlqsmsgs = endpointGroup.getAllDestinations().stream()
-                    .filter(MatsBrokerDestination::isDlq)
-                    .map(MatsBrokerDestination::getNumberOfQueuedMessages)
-                    .anyMatch(count -> count > 0);
-
-            // ?: Should we only show bad, but there is no DLQs or old messages in this endpoint group?
-            if (showBadOnly && !(epgrHasDlqsmsgs || epgrHasOldMsgs)) {
-                // -> Yes, only show bad, but this is not bad, so skip.
-                continue;
-            }
+            // ?: Should we show this EndpointGroup?
+            if (!shouldShowEndpointGroup(endpointGroup, showWhat)) continue;
 
             String endpointGroupId = endpointGroup.getEndpointGroup().trim().isEmpty()
                     ? "{empty string}"
                     : endpointGroup.getEndpointGroup();
             out.html("<div class='matsbm_endpoint_group")
-                    .html(epgrHasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
-                    .html(epgrHasDlqsmsgs ? " matsbm_marker_has_dlqs" : "")
                     .html("' id='").DATA(endpointGroupId).html("'>\n");
             out.html("<a href='#").DATA(endpointGroupId).html("'>");
             out.html("<h2>").DATA(endpointGroupId).html("</h2></a><br>\n");
@@ -320,26 +397,10 @@ class BrokerOverview {
             out.html("<table class='matsbm_table_endpointgroup'>");
             for (MatsEndpointBrokerRepresentation endpoint : endpointGroup.getEndpoints().values()) {
 
-                boolean epHasOldMsgs = endpoint.getAllDestinations().stream()
-                        .filter(dest -> !dest.isDlq())
-                        .map(MatsBrokerDestination::getHeadMessageAgeMillis)
-                        .anyMatch(age -> age.orElse(-1) > TOO_OLD);
+                // ?: Should we show this Endpoint?
+                if (!shouldShowEndpoint(endpoint, showWhat)) continue;
 
-                boolean epHasDlqsMsgs = endpoint.getAllDestinations().stream()
-                        .filter(MatsBrokerDestination::isDlq)
-                        .map(MatsBrokerDestination::getNumberOfQueuedMessages)
-                        .anyMatch(count -> count > 0);
-
-                // ?: Should we only show bad, but there is no DLQs or old messages in this endpoint?
-                if (showBadOnly && !(epHasDlqsMsgs || epHasOldMsgs)) {
-                    // -> Yes, only show bad, but this is not bad, so skip.
-                    continue;
-                }
-
-                out.html("<tr class='matsbm_endpoint_group_row")
-                        .html(epHasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
-                        .html(epHasDlqsMsgs ? " matsbm_marker_has_dlqs" : "")
-                        .html("'>");
+                out.html("<tr class='matsbm_endpoint_group_row'>");
                 String endpointId = endpoint.getEndpointId();
                 Map<Integer, MatsStageBrokerRepresentation> stages = endpoint.getStages();
 
@@ -349,11 +410,11 @@ class BrokerOverview {
                 // There will either be an incoming, or a DLQ, otherwise the stage wouldn't be defined.
                 MatsBrokerDestination firstDestinationOrDlq = first.getDestination(STANDARD)
                         .or(() -> first.getDestination(StageDestinationType.NON_PERSISTENT_INTERACTIVE))
-                        .or(() -> first.getDestination(StageDestinationType.DEAD_LETTER_QUEUE))
+                        .or(() -> first.getDestination(DEAD_LETTER_QUEUE))
                         .or(() -> first.getDestination(
-                                StageDestinationType.DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE))
+                                DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE))
                         .or(() -> first.getDestination(StageDestinationType.DEAD_LETTER_QUEUE_MUTED))
-                        .or(() -> first.getDestination(StageDestinationType.WIRETAP))
+                        .or(() -> first.getDestination(WIRETAP))
                         .orElse(null);
 
                 // ?: Assert that we actually got a destination
@@ -366,10 +427,7 @@ class BrokerOverview {
                     continue;
                 }
 
-                out.html("<tr class='matsbm_endpoint_group_row")
-                        .html(epHasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
-                        .html(epHasDlqsMsgs ? " matsbm_marker_has_dlqs" : "")
-                        .html("'>");
+                out.html("<tr class='matsbm_endpoint_group_row'>");
 
                 boolean privateEp = endpointId.contains(".private.");
                 boolean queue = firstDestinationOrDlq
@@ -414,7 +472,7 @@ class BrokerOverview {
                     }
 
                     Optional<MatsBrokerDestination> dlqDest = stage.getDestination(
-                            StageDestinationType.DEAD_LETTER_QUEUE);
+                            DEAD_LETTER_QUEUE);
                     if (dlqDest.isPresent()) {
                         if (!incomingPresent || (dlqDest.get().getNumberOfQueuedMessages() > 0)) {
                             out_queueCount(out, dlqDest.get());
@@ -425,7 +483,7 @@ class BrokerOverview {
                     }
 
                     Optional<MatsBrokerDestination> npiaDlqDest = stage.getDestination(
-                            StageDestinationType.DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE);
+                            DEAD_LETTER_QUEUE_NON_PERSISTENT_INTERACTIVE);
                     if (npiaDlqDest.isPresent()) {
                         if (!incomingPresent || (npiaDlqDest.get().getNumberOfQueuedMessages() > 0)) {
                             out_queueCount(out, npiaDlqDest.get());
@@ -447,7 +505,7 @@ class BrokerOverview {
                     }
 
                     Optional<MatsBrokerDestination> wiretapDest = stage.getDestination(
-                            StageDestinationType.WIRETAP);
+                            WIRETAP);
                     if (wiretapDest.isPresent()) {
                         if (!incomingPresent || (wiretapDest.get().getNumberOfQueuedMessages() > 0)) {
                             out_queueCount(out, wiretapDest.get());
@@ -471,6 +529,9 @@ class BrokerOverview {
         }
 
         // :: Remaining Queues and Topics.
+        boolean rqtHasAnyMessages = stack.getRemainingDestinations().stream()
+                .anyMatch(dest -> dest.getNumberOfQueuedMessages() > 0);
+
         boolean rqtHasOldMsgs = stack.getRemainingDestinations().stream()
                 .anyMatch(dest -> dest.getHeadMessageAgeMillis().orElse(0) > TOO_OLD);
 
@@ -478,66 +539,113 @@ class BrokerOverview {
                 .filter(MatsBrokerDestination::isDlq)
                 .anyMatch(dest -> dest.getNumberOfQueuedMessages() > 0);
 
-        // ?: Remaining Qs/Ts: If we're NOT only showing bad, OR there are bads, then show it.
-        if (!showBadOnly || (rqtHasOldMsgs || rqtHasDlqs)) {
+        // ?: Remaining Qs/Ts: Should we show the box at all?
+        if ((showWhat == ShowWhat.ALL)
+                || (rqtHasAnyMessages && (showWhat == ShowWhat.NON_ZERO))
+                || ((rqtHasOldMsgs || rqtHasDlqs) && (showWhat == ShowWhat.BAD))) {
             // -> Let's show it.
             String endpointGroupId = "Remaining Queues and Topics";
-            out.html("<br/><div class='matsbm_endpoint_group matsbm_endpoint_group_remaining")
-                    .html(rqtHasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
-                    .html("' id='").DATA(endpointGroupId).html("'>\n");
+            out.html("<br/><div class='matsbm_endpoint_group matsbm_endpoint_group_remaining' id='")
+                    .DATA(endpointGroupId).html("'>\n");
             out.html("<a href='#").DATA(endpointGroupId).html("'>");
             out.html("<h2><i>Remaining Queues and Topics (not"
                     + " " + Statics.MATS3_HTML + "-related)</i></h2></a><br>\n");
 
-            // :: Foreach Endpoint
+            // :: Foreach Remaining Queue/Topic
             out.html("<table class='matsbm_table_endpointgroup'>");
             for (MatsBrokerDestination destination : stack.getRemainingDestinations()) {
 
+                boolean destinationHasAnyMessages = destination.getNumberOfQueuedMessages() > 0;
                 boolean destinationHasOldMsgs = destination.getHeadMessageAgeMillis().orElse(0) > TOO_OLD;
                 boolean destinationHasDlqs = destination.isDlq() && (destination.getNumberOfQueuedMessages() > 0);
 
-                // ?: Should we only show bad, but there is no DLQs or old messages in this endpoint?
-                if (showBadOnly && !(destinationHasOldMsgs || destinationHasDlqs)) {
-                    // -> Yes, only show bad, but this is not bad, so skip.
-                    continue;
+                // ?: Should we show this queue/topic?
+                if ((showWhat == ShowWhat.ALL)
+                        || (destinationHasAnyMessages && (showWhat == ShowWhat.NON_ZERO))
+                        || ((destinationHasOldMsgs || destinationHasDlqs) && (showWhat == ShowWhat.BAD))) {
+                    out.html("<tr class='matsbm_endpoint_group_row'>");
+                    String endpointId = destination.getDestinationName();
+
+                    // :: Find whether endpoint is a queue or topic.
+                    // There will either be an incoming, or a DLQ, otherwise the stage wouldn't be defined.
+                    boolean queue = destination.getDestinationType() == DestinationType.QUEUE;
+
+                    out.html("<td><div class='matsbm_bo_stageid")
+                            .html(" matsbm_bo_stageid").html(queue ? "_queue" : "_topic")
+                            .html("'>")
+                            .DATA(endpointId).html("</div></td>");
+
+                    out.html("<td><div class='matsbm_label")
+                            .html(" matsbm_label").html(queue ? "_queue" : "_topic")
+                            .html("'>")
+                            .DATA(queue ? "Queue" : "Topic").html("</div></td>");
+
+                    // :: Foreach Stage
+                    out.html("<td>");
+                    out.html("<div class='matsbm_stage_box'>");
+                    out_queueCount(out, destination);
+                    out.html("<div class='matsbm_stage_initial'> <i>&nbsp;&nbsp;")
+                            .DATA(destination.getFqDestinationName())
+                            .html("</i></div>");
+                    out.html("</div>"); // /matsbm_stage_box
+                    out.html("</td>");
+                    out.html("</tr>\n");
                 }
-
-                out.html("<tr class='matsbm_endpoint_group_row")
-                        .html(destinationHasOldMsgs ? " matsbm_marker_has_old_msgs" : "")
-                        .html(destinationHasDlqs ? " matsbm_marker_has_dlqs" : "")
-                        .html("'>");
-                String endpointId = destination.getDestinationName();
-
-                // :: Find whether endpoint is a queue or topic.
-                // There will either be an incoming, or a DLQ, otherwise the stage wouldn't be defined.
-                boolean queue = destination.getDestinationType() == DestinationType.QUEUE;
-
-                out.html("<td><div class='matsbm_bo_stageid")
-                        .html(" matsbm_bo_stageid").html(queue ? "_queue" : "_topic")
-                        .html("'>")
-                        .DATA(endpointId).html("</div></td>");
-
-                out.html("<td><div class='matsbm_label")
-                        .html(" matsbm_label").html(queue ? "_queue" : "_topic")
-                        .html("'>")
-                        .DATA(queue ? "Queue" : "Topic").html("</div></td>");
-
-                // :: Foreach Stage
-                out.html("<td>");
-                out.html("<div class='matsbm_stage_box'>");
-                out_queueCount(out, destination);
-                out.html("<div class='matsbm_stage_initial'> <i>&nbsp;&nbsp;")
-                        .DATA(destination.getFqDestinationName())
-                        .html("</i></div>");
-                out.html("</div>"); // /matsbm_stage_box
-                out.html("</td>");
-                out.html("</tr>\n");
             }
             out.html("</table>\n");
             out.html("</div>\n");
         }
 
         // Don't output last </div>, as caller does it.
+    }
+
+    private static boolean shouldShowEndpointGroup(MatsEndpointGroupBrokerRepresentation endpointGroup,
+            ShowWhat showWhat) {
+        boolean epgrHasOldMsgsOnIncoming = endpointGroup.getAllDestinations().stream()
+                .filter(dest -> !dest.isDlq())
+                .map(MatsBrokerDestination::getHeadMessageAgeMillis)
+                .anyMatch(age -> age.orElse(-1) > TOO_OLD);
+
+        boolean epgrHasDlqsMsgs = endpointGroup.getAllDestinations().stream()
+                .filter(MatsBrokerDestination::isDlq)
+                .map(MatsBrokerDestination::getNumberOfQueuedMessages)
+                .anyMatch(count -> count > 0);
+
+        boolean epgrHasAnyNonZeroQueues = endpointGroup.getAllDestinations().stream()
+                .map(MatsBrokerDestination::getNumberOfQueuedMessages)
+                .anyMatch(count -> count > 0);
+
+        return (showWhat == ShowWhat.ALL)
+                || (showWhat == ShowWhat.NON_ZERO && epgrHasAnyNonZeroQueues)
+                || (showWhat == ShowWhat.BAD && (epgrHasOldMsgsOnIncoming || epgrHasDlqsMsgs));
+    }
+
+    private static boolean shouldShowEndpoint(MatsEndpointBrokerRepresentation endpoint, ShowWhat showWhat) {
+        boolean epgrHasOldMsgsOnIncoming = endpoint.getAllDestinations().stream()
+                .filter(dest -> !dest.isDlq())
+                .map(MatsBrokerDestination::getHeadMessageAgeMillis)
+                .anyMatch(age -> age.orElse(-1) > TOO_OLD);
+
+        boolean epgrHasDlqsMsgs = endpoint.getAllDestinations().stream()
+                .filter(MatsBrokerDestination::isDlq)
+                .map(MatsBrokerDestination::getNumberOfQueuedMessages)
+                .anyMatch(count -> count > 0);
+
+        boolean epgrHasAnyNonZeroQueues = endpoint.getAllDestinations().stream()
+                .map(MatsBrokerDestination::getNumberOfQueuedMessages)
+                .anyMatch(count -> count > 0);
+
+        return (showWhat == ShowWhat.ALL)
+                || (showWhat == ShowWhat.NON_ZERO && epgrHasAnyNonZeroQueues)
+                || (showWhat == ShowWhat.BAD && (epgrHasOldMsgsOnIncoming || epgrHasDlqsMsgs));
+    }
+
+    private enum ShowWhat {
+        ALL,
+
+        NON_ZERO,
+
+        BAD
     }
 
     static void out_queueCount(Outputter out, MatsBrokerDestination destination) throws IOException {

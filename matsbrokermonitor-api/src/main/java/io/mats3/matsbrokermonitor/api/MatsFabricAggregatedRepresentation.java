@@ -1,6 +1,7 @@
 package io.mats3.matsbrokermonitor.api;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -42,23 +43,31 @@ public interface MatsFabricAggregatedRepresentation {
         return MatsFabricAggregatorImpl.stack_interal(matsDestinations);
     }
 
-    default long getTotalNumberOfQueuedMessages(StageDestinationType StageDestinationType) {
+    /**
+     * Returns the total number of queued messages for all destinations in the Mats fabric, or for a specific
+     * {@link StageDestinationType} if specified - <code>null</code> means all destination types.
+     *
+     * @param stageDestinationType
+     *            the type of the destination to count, or <code>null</code> to count all destinations.
+     * @return the total number of queued messages for all destinations in the Mats fabric, or for a specific
+     *         {@link StageDestinationType} if specified - <code>null</code> means all destination types.
+     */
+    default long getTotalNumberOfQueuedMessages(StageDestinationType stageDestinationType) {
         long total = 0;
         for (MatsEndpointBrokerRepresentation endpoint : getEndpoints().values()) {
-            total += endpoint.getTotalNumberOfQueuedMessages(StageDestinationType);
+            total += endpoint.getTotalNumberOfQueuedMessages(stageDestinationType);
         }
         return total;
     }
 
     /**
-     * @return the max of
-     *         {@link MatsEndpointBrokerRepresentation#getOldestStageHeadMessageAgeMillis(StageDestinationType)
+     * @return the max of {@link MatsEndpointBrokerRepresentation#getOldestHeadMessageAgeMillis(StageDestinationType...)
      *         endpoint.getOldestMessageAgeMillis(queueType)} for {@link #getEndpoints() all endpoints} of the Mats
      *         fabric, if no Endpoint has a message, {@link OptionalLong#empty()} is returned.
      */
-    default OptionalLong getOldestStageHeadMessageAgeMillis(StageDestinationType StageDestinationType) {
+    default OptionalLong getOldestHeadMessageAgeMillis(StageDestinationType... stageDestinationType) {
         return getEndpoints().values().stream()
-                .map(e -> e.getOldestStageHeadMessageAgeMillis(StageDestinationType))
+                .map(e -> e.getOldestHeadMessageAgeMillis(stageDestinationType))
                 .filter(OptionalLong::isPresent)
                 .map(OptionalLong::getAsLong)
                 .max(Comparator.naturalOrder())
@@ -67,12 +76,12 @@ public interface MatsFabricAggregatedRepresentation {
     }
 
     /**
-     * @return the max of {@link MatsEndpointBrokerRepresentation#getMaxStageNumberOfMessages(StageDestinationType)
+     * @return the max of {@link MatsEndpointBrokerRepresentation#getMaxNumberOfMessages(StageDestinationType)
      *         endpoint.getMaxStageNumberOfMessages(queueType)} for all Endpoints in the Mats fabric.
      */
-    default long getMaxStageNumberOfMessages(StageDestinationType StageDestinationType) {
+    default long getMaxNumberOfMessages(StageDestinationType stageDestinationType) {
         return getEndpoints().values().stream()
-                .map(e -> e.getMaxStageNumberOfMessages(StageDestinationType))
+                .map(e -> e.getMaxNumberOfMessages(stageDestinationType))
                 .max(Comparator.naturalOrder())
                 .orElse(0L);
     }
@@ -139,6 +148,8 @@ public interface MatsFabricAggregatedRepresentation {
      */
     List<MatsBrokerDestination> getRemainingDestinations();
 
+    MatsEndpointGroupBrokerRepresentation getRemainingDestinationsAsEndpointGroup();
+
     /**
      * @return all {@link MatsBrokerDestination}s, including those which are not part of any Endpoint (i.e. including
      *         non-Mats3 relevant destinations).
@@ -164,26 +175,26 @@ public interface MatsFabricAggregatedRepresentation {
         }
 
         /**
-         * @return the max of {@link MatsEndpointBrokerRepresentation#getMaxStageNumberOfMessages(StageDestinationType)
+         * @return the max of {@link MatsEndpointBrokerRepresentation#getMaxNumberOfMessages(StageDestinationType)
          *         endpoint.getMaxStageNumberOfMessages()} {@link #getEndpoints() all endpoints} of the EndpointGroup,
          *         if no Endpoint has a message, <code>0</code> is returned.
          */
-        default long getMaxStageNumberOfMessages(StageDestinationType StageDestinationType) {
+        default long getMaxNumberOfMessages(StageDestinationType StageDestinationType) {
             return getEndpoints().values().stream()
-                    .map(e -> e.getMaxStageNumberOfMessages(StageDestinationType))
+                    .map(e -> e.getMaxNumberOfMessages(StageDestinationType))
                     .max(Comparator.naturalOrder())
                     .orElse(0L);
         }
 
         /**
          * @return the max of
-         *         {@link MatsEndpointBrokerRepresentation#getOldestStageHeadMessageAgeMillis(StageDestinationType)
+         *         {@link MatsEndpointBrokerRepresentation#getOldestHeadMessageAgeMillis(StageDestinationType...)
          *         endpoint.getStageOldestHeadMessageAgeMillis()} for {@link #getEndpoints() all endpoints} of the
          *         EndpointGroup, if no Endpoints has a message, {@link OptionalLong#empty()} is returned.
          */
-        default OptionalLong getOldestStageHeadMessageAgeMillis(StageDestinationType StageDestinationType) {
+        default OptionalLong getOldestHeadMessageAgeMillis(StageDestinationType StageDestinationType) {
             return getEndpoints().values().stream()
-                    .map(e -> e.getOldestStageHeadMessageAgeMillis(StageDestinationType))
+                    .map(e -> e.getOldestHeadMessageAgeMillis(StageDestinationType))
                     .filter(OptionalLong::isPresent)
                     .map(OptionalLong::getAsLong)
                     .max(Comparator.naturalOrder())
@@ -207,24 +218,28 @@ public interface MatsFabricAggregatedRepresentation {
 
         Map<Integer, MatsStageBrokerRepresentation> getStages();
 
-        default long getTotalNumberOfQueuedMessages(StageDestinationType StageDestinationType) {
+        default long getTotalNumberOfQueuedMessages(StageDestinationType stageDestinationType) {
             long total = 0;
             for (MatsStageBrokerRepresentation stage : getStages().values()) {
-                total += stage.getDestination(StageDestinationType)
-                        .map(MatsBrokerDestination::getNumberOfQueuedMessages)
-                        .orElse(0L);
+                total += stageDestinationType == null
+                        ? stage.getAllDestinations().stream().mapToLong(
+                                MatsBrokerDestination::getNumberOfQueuedMessages).sum()
+                        : stage.getDestination(stageDestinationType)
+                                .map(MatsBrokerDestination::getNumberOfQueuedMessages)
+                                .orElse(0L);
             }
             return total;
         }
 
         /**
-         * @return the max of {@link MatsStageBrokerRepresentation#getHeadMessageAgeMillis(StageDestinationType)
+         * @return the max of
+         *         {@link MatsStageBrokerRepresentation#getOldestHeadMessageAgeMillis(StageDestinationType...)
          *         stage.getHeadMessageAgeMillis()} for {@link #getStages() all Stages} of the Endpoint, if no Stages
          *         has a message, {@link OptionalLong#empty()} is returned.
          */
-        default OptionalLong getOldestStageHeadMessageAgeMillis(StageDestinationType StageDestinationType) {
+        default OptionalLong getOldestHeadMessageAgeMillis(StageDestinationType... stageDestinationType) {
             return getStages().values().stream()
-                    .map(s -> s.getHeadMessageAgeMillis(StageDestinationType))
+                    .map(s -> s.getOldestHeadMessageAgeMillis(stageDestinationType))
                     .filter(OptionalLong::isPresent)
                     .map(OptionalLong::getAsLong)
                     .max(Comparator.naturalOrder())
@@ -232,9 +247,9 @@ public interface MatsFabricAggregatedRepresentation {
                     .orElse(OptionalLong.empty());
         }
 
-        default long getMaxStageNumberOfMessages(StageDestinationType StageDestinationType) {
+        default long getMaxNumberOfMessages(StageDestinationType stageDestinationType) {
             return getStages().values().stream()
-                    .map(s -> s.getNumberOfMessages(StageDestinationType))
+                    .map(s -> s.getNumberOfMessages(stageDestinationType))
                     .max(Comparator.naturalOrder())
                     .orElse(0L);
         }
@@ -270,7 +285,7 @@ public interface MatsFabricAggregatedRepresentation {
          * 
          * @return the {@link MatsBrokerDestination} from the specified {@link StageDestinationType} of the Stage.
          */
-        Optional<MatsBrokerDestination> getDestination(StageDestinationType StageDestinationType);
+        Optional<MatsBrokerDestination> getDestination(StageDestinationType stageDestinationType);
 
         /**
          * @return all Stage-relevant {@link MatsBrokerDestination}s.
@@ -281,14 +296,19 @@ public interface MatsFabricAggregatedRepresentation {
          * @return {@link MatsBrokerDestination#getHeadMessageAgeMillis()} if
          *         {@link #getDestination(StageDestinationType)} is present.
          */
-        default OptionalLong getHeadMessageAgeMillis(StageDestinationType StageDestinationType) {
-            return getDestination(StageDestinationType)
+        default OptionalLong getOldestHeadMessageAgeMillis(StageDestinationType... stageDestinationType) {
+            return Arrays.stream(stageDestinationType)
+                    .map(this::getDestination)
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
                     .map(MatsBrokerDestination::getHeadMessageAgeMillis)
-                    .orElse(OptionalLong.empty());
+                    .filter(OptionalLong::isPresent)
+                    .mapToLong(OptionalLong::getAsLong)
+                    .max();
         }
 
-        default long getNumberOfMessages(StageDestinationType StageDestinationType) {
-            return getDestination(StageDestinationType)
+        default long getNumberOfMessages(StageDestinationType stageDestinationType) {
+            return getDestination(stageDestinationType)
                     .map(MatsBrokerDestination::getNumberOfQueuedMessages)
                     .orElse(0L);
         }
@@ -392,7 +412,7 @@ public interface MatsFabricAggregatedRepresentation {
 
             // :: Stack endpoints up into "EndpointGroups"
             // [EndpointGroupId, [EndpointId, EndpointRepresentation]]
-            TreeMap<String, TreeMap<String, MatsEndpointBrokerRepresentation>> services = endpointBrokerRepresentations
+            TreeMap<String, TreeMap<String, MatsEndpointBrokerRepresentation>> endpointsGrouped = endpointBrokerRepresentations
                     .values().stream()
                     .map(e -> (MatsEndpointBrokerRepresentation) e)
                     .collect(Collectors.groupingBy(e -> {
@@ -405,7 +425,7 @@ public interface MatsFabricAggregatedRepresentation {
                                 throw new IllegalStateException("Collision! [" + ep1 + "], [" + ep2 + "]");
                             }, TreeMap::new)));
 
-            TreeMap<String, MatsEndpointGroupBrokerRepresentation> matsServiceBrokerRepresentations = services
+            TreeMap<String, MatsEndpointGroupBrokerRepresentation> endpointGroupBrokerRepresentations = endpointsGrouped
                     .entrySet()
                     .stream()
                     .collect(Collectors.toMap(Entry::getKey,
@@ -417,29 +437,54 @@ public interface MatsFabricAggregatedRepresentation {
             ArrayList<MatsBrokerDestination> sortedDestinations = new ArrayList<>(matsBrokerDestinations);
             sortedDestinations.sort(Comparator.comparing(MatsBrokerDestination::getFqDestinationName));
 
+            // Make a synthetic "remaining destinations" endpointGroup
+            // [EndpointGroupId, [EndpointId, EndpointRepresentation]]
+            TreeMap<String, MatsEndpointBrokerRepresentation> remainingEndpoints = new TreeMap<>();
+            for (MatsBrokerDestination remainDest : remainingDestinations) {
+                // Create the single fake stage of the "endpoint"
+                var stage = new MatsStageBrokerRepresentationImpl(0, remainDest.getDestinationName());
+                stage._destinations.put(remainDest.isDlq()
+                        ? StageDestinationType.DEAD_LETTER_QUEUE
+                        : StageDestinationType.STANDARD, remainDest);
+
+                // Create the fake endpoint
+                var endpoint = new MatsEndpointBrokerRepresentationImpl(remainDest.getDestinationName());
+                endpoint._stages.put(0, stage);
+
+                // Put it into the remainingEndpoints map
+                remainingEndpoints.put(remainDest.getDestinationName(), endpoint);
+            }
+            // Create the fake endpoint group
+            var remainingEndpointGroup = new MatsEndpointGroupBrokerRepresentationImpl("Remaining Queues and Topics",
+                    remainingEndpoints);
+
             return new MatsFabricAggregatedRepresentationImpl(globalDlq,
-                    matsServiceBrokerRepresentations, endpointBrokerRepresentations,
-                    sortedDestinations, remainingDestinations);
+                    endpointGroupBrokerRepresentations, endpointBrokerRepresentations,
+                    sortedDestinations, remainingDestinations, remainingEndpointGroup);
         }
 
         private static class MatsFabricAggregatedRepresentationImpl implements MatsFabricAggregatedRepresentation {
             private final MatsBrokerDestination _globalDlq;
-            private final Map<String, ? extends MatsEndpointGroupBrokerRepresentation> _matsServiceBrokerRepresentations;
+            private final Map<String, ? extends MatsEndpointGroupBrokerRepresentation> _matsEndpointGroupBrokerRepresentations;
             private final Map<String, ? extends MatsEndpointBrokerRepresentation> _matsEndpointBrokerRepresentations;
+
+            private final MatsEndpointGroupBrokerRepresentation _remainingEndpointsAsEndpointGroup;
 
             private final List<MatsBrokerDestination> _allDestinations;
             private final List<MatsBrokerDestination> _remainingDestinations;
 
             private MatsFabricAggregatedRepresentationImpl(MatsBrokerDestination globalDlq,
-                    Map<String, ? extends MatsEndpointGroupBrokerRepresentation> matsServiceBrokerRepresentations,
+                    Map<String, ? extends MatsEndpointGroupBrokerRepresentation> matsEndpointGroupBrokerRepresentations,
                     Map<String, ? extends MatsEndpointBrokerRepresentation> matsEndpointBrokerRepresentations,
                     List<MatsBrokerDestination> allDestinations,
-                    List<MatsBrokerDestination> remainingDestinations) {
-                _matsServiceBrokerRepresentations = matsServiceBrokerRepresentations;
+                    List<MatsBrokerDestination> remainingDestinations,
+                    MatsEndpointGroupBrokerRepresentation remainingEndpointsAsEndpointGroup) {
+                _matsEndpointGroupBrokerRepresentations = matsEndpointGroupBrokerRepresentations;
                 _matsEndpointBrokerRepresentations = matsEndpointBrokerRepresentations;
                 _globalDlq = globalDlq;
                 _allDestinations = allDestinations;
                 _remainingDestinations = remainingDestinations;
+                _remainingEndpointsAsEndpointGroup = remainingEndpointsAsEndpointGroup;
             }
 
             @Override
@@ -454,12 +499,17 @@ public interface MatsFabricAggregatedRepresentation {
 
             @Override
             public Map<String, MatsEndpointGroupBrokerRepresentation> getEndpointGroups() {
-                return Collections.unmodifiableMap(_matsServiceBrokerRepresentations);
+                return Collections.unmodifiableMap(_matsEndpointGroupBrokerRepresentations);
             }
 
             @Override
             public List<MatsBrokerDestination> getRemainingDestinations() {
                 return Collections.unmodifiableList(_remainingDestinations);
+            }
+
+            @Override
+            public MatsEndpointGroupBrokerRepresentation getRemainingDestinationsAsEndpointGroup() {
+                return _remainingEndpointsAsEndpointGroup;
             }
 
             @Override
@@ -546,8 +596,8 @@ public interface MatsFabricAggregatedRepresentation {
             }
 
             @Override
-            public Optional<MatsBrokerDestination> getDestination(StageDestinationType StageDestinationType) {
-                return Optional.ofNullable(_destinations.get(StageDestinationType));
+            public Optional<MatsBrokerDestination> getDestination(StageDestinationType stageDestinationType) {
+                return Optional.ofNullable(_destinations.get(stageDestinationType));
             }
 
             @Override
