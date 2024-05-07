@@ -5,6 +5,7 @@ import static io.mats3.matsbrokermonitor.htmlgui.SetupTestMatsEndpoints.SUBSCRIP
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URL;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -53,6 +54,14 @@ import org.eclipse.jetty.webapp.WebXmlConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.storebrand.healthcheck.HealthCheckLogger;
+import com.storebrand.healthcheck.HealthCheckRegistry;
+import com.storebrand.healthcheck.HealthCheckRegistry.CreateReportRequest;
+import com.storebrand.healthcheck.HealthCheckReportDto;
+import com.storebrand.healthcheck.impl.HealthCheckRegistryImpl;
+import com.storebrand.healthcheck.impl.ServiceInfo;
+import com.storebrand.healthcheck.output.HealthCheckTextOutput;
+
 import ch.qos.logback.core.CoreConstants;
 import io.mats3.MatsFactory;
 import io.mats3.MatsFactory.FactoryConfig;
@@ -78,6 +87,7 @@ import io.mats3.matsbrokermonitor.htmlgui.SetupTestMatsEndpoints.DataTO;
 import io.mats3.matsbrokermonitor.htmlgui.SetupTestMatsEndpoints.StateTO;
 import io.mats3.matsbrokermonitor.htmlgui.impl.MatsBrokerMonitorHtmlGuiImpl;
 import io.mats3.matsbrokermonitor.jms.JmsMatsBrokerBrowseAndActions;
+import io.mats3.matsbrokermonitor.stbhealthcheck.MatsStorebrandHealthCheck;
 import io.mats3.serial.MatsSerializer;
 import io.mats3.serial.json.MatsSerializerJson;
 import io.mats3.test.MatsTestHelp;
@@ -102,6 +112,9 @@ public class MatsBrokerMonitor_TestJettyServer {
     private static String SERVICE_2 = SERVICE + ".SecondSubService";
     private static String SERVICE_3 = "Another Group With Spaces.SubService";
 
+    private static final String APP_NAME = "MatsBrokerMonitor";
+    private static final String APP_VERSION = "#testing#";
+
     @WebListener
     public static class SCL_Endre implements ServletContextListener {
 
@@ -119,8 +132,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             // MatsSerializer
             MatsSerializer<String> matsSerializer = MatsSerializerJson.create();
             // Create the MatsFactory
-            _matsFactory = JmsMatsFactory.createMatsFactory_JmsOnlyTransactions(
-                    MatsBrokerMonitor_TestJettyServer.class.getSimpleName(), "*testing*",
+            _matsFactory = JmsMatsFactory.createMatsFactory_JmsOnlyTransactions(APP_NAME, APP_VERSION,
                     JmsMatsJmsSessionHandler_Pooling.create(connFactory, PoolingKeyInitiator.FACTORY,
                             PoolingKeyStageProcessor.FACTORY),
                     matsSerializer);
@@ -131,7 +143,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             // .. Concurrency of only 2
             factoryConfig.setConcurrency(SetupTestMatsEndpoints.BASE_CONCURRENCY);
             // .. Mats Managed DLQ Divert, only a few deliveries
-            ((JmsMatsFactory) _matsFactory).setMatsManagedDlqDivert(3);
+            ((JmsMatsFactory<?>) _matsFactory).setMatsManagedDlqDivert(3);
             // .. Use port number of current server as postfix for name of MatsFactory, and of nodename
             Integer portNumber = (Integer) sc.getAttribute(CONTEXT_ATTRIBUTE_PORTNUMBER);
             factoryConfig.setName(getClass().getSimpleName() + "_" + portNumber);
@@ -250,6 +262,18 @@ public class MatsBrokerMonitor_TestJettyServer {
 
             // Put it in ServletContext, for servlet to get
             sc.setAttribute("matsBrokerMonitorHtmlGui1", matsBrokerMonitorHtmlGui1);
+
+            // ::: Create Storebrand HealthCheckRegistry and Mats3 HealthCheck
+            HealthCheckLogger healthCheckLogger = dto -> log.info("HealthCheck: " + dto);
+            HealthCheckRegistryImpl healthCheckRegistry = new HealthCheckRegistryImpl(Clock.systemDefaultZone(),
+                    healthCheckLogger, new ServiceInfo(APP_NAME, APP_VERSION));
+            MatsStorebrandHealthCheck.registerMatsHealthCheck(healthCheckRegistry, _matsFactory);
+            MatsStorebrandHealthCheck.registerMatsHealthCheck(healthCheckRegistry, _matsFactory);
+            // Start the HealthCheck subsystem
+            healthCheckRegistry.startHealthChecks();
+
+            // .. put the HealtCheckRegistry in the ServletContext, for the HealthCheckServlet to get.
+            sc.setAttribute(HealthCheckRegistry.class.getName(), healthCheckRegistry);
         }
 
         @Override
@@ -272,12 +296,34 @@ public class MatsBrokerMonitor_TestJettyServer {
         protected void doGet(HttpServletRequest req, HttpServletResponse res) throws IOException {
             res.setContentType("text/html; charset=utf-8");
             PrintWriter out = res.getWriter();
-            out.println("<h1>Menu</h1>");
+            out.println("<title>MBM Menu</title>");
+            out.println("<h1>MatsBrokerMonitor TestJettyServer Menu</h1>");
             out.println("<a href=\"./matsbrokermonitor\">MatsBrokerMonitor HTML GUI</a><br>");
-            out.println("<a href=\"./sendRequest?count=1\">Send Mats requests, count=1</a><br>");
-            out.println("<a href=\"./forceUpdate\">Force Update (full) via " + MatsBrokerMonitorBroadcastReceiver.class
-                    .getSimpleName() + "</a><br>");
-            out.println("<a href=\"./shutdown\">Shutdown</a><br>");
+            out.println("<a href=\"./healthcheck\">HealthCheck - using Storebrand HealthCheck</a><br>");
+            out.println("<a href=\"./sendRequest?count=1\">Send Mats requests, count=1</a>");
+            out.println(" - <i>or</i> - <a href=\"./sendRequest?count=500\">count=500</a>");
+            out.println(" - <i>or</i> - <a href=\"./sendRequest?count=2000\">count=2000</a><br>");
+            out.println("<a href=\"./forceUpdate\">Force Update (full) 'remotely' via <code>"
+                    + MatsBrokerMonitorBroadcastReceiver.class.getSimpleName() + "</code></a><br>");
+            out.println("<br/><a href=\"./shutdown\">Shutdown - to test clean shutdown procedure</a><br>");
+        }
+    }
+
+    /**
+     * HealthCheckRegistry
+     */
+    @WebServlet("/healthcheck")
+    public static class HealthCheck extends HttpServlet {
+        @Override
+        protected void doGet(HttpServletRequest req, HttpServletResponse res) throws IOException {
+            res.setContentType("text/plain; charset=utf-8");
+            boolean sync = req.getParameter("sync") != null;
+            PrintWriter out = res.getWriter();
+            HealthCheckRegistry healthCheckRegistry = (HealthCheckRegistry) req.getServletContext()
+                    .getAttribute(HealthCheckRegistry.class.getName());
+            HealthCheckReportDto report = healthCheckRegistry
+                    .createReport(new CreateReportRequest().forceFreshData(sync));
+            HealthCheckTextOutput.printHealthCheckReport(report, out);
         }
     }
 
@@ -443,6 +489,25 @@ public class MatsBrokerMonitor_TestJettyServer {
                                 .request(dto, initialTargetSto);
                     });
 
+            // :: A bunch of messages to SuperSlow
+            matsFactory.getDefaultInitiator().initiateUnchecked(
+                    (msg) -> {
+                        for (int i = 0; i < Math.max(1, countF / 2); i++) {
+                            msg.traceId(MatsTestHelp.traceId() + i)
+                                    .from("/sendRequestInitiated")
+                                    .to(SERVICE_1 + SetupTestMatsEndpoints.SERVICE_SUPERSLOW)
+                                    .replyTo(SERVICE_1 + SetupTestMatsEndpoints.TERMINATOR, sto)
+                                    .request(dto, new StateTO(1, 2));
+                        }
+
+                        for (int i = 0; i < countF; i++) {
+                            msg.traceId(MatsTestHelp.traceId() + i)
+                                    .from("/sendRequestInitiated")
+                                    .to(SERVICE_2 + SetupTestMatsEndpoints.SERVICE_SUPERSLOW)
+                                    .replyTo(SERVICE_2 + SetupTestMatsEndpoints.TERMINATOR, sto)
+                                    .request(dto, new StateTO(1, 2));
+                        }
+                    });
 
 
             // :: Send a message to the ActiveMQ and Artemis Global DLQs
@@ -524,7 +589,6 @@ public class MatsBrokerMonitor_TestJettyServer {
                         + StageDestinationType.STANDARD.getMidfix()
                         + "FakeMatsEndpoint.someMethodWithAllQueues.stage1");
 
-
                 connection.close();
             }
             catch (JMSException e) {
@@ -532,7 +596,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             }
 
             // :: Chill till this has really gotten going.
-            out.println("Chilling 200 ms to let the ["+countF+"] request messages really get into the system.\n");
+            out.println("Chilling 200 ms to let the [" + countF + "] request messages really get into the system.\n");
             takeNap(200);
 
             Future<Reply<DataTO>> futureNonInteractive = sendAFuturize(out, matsFuturizer, false);
@@ -642,6 +706,7 @@ public class MatsBrokerMonitor_TestJettyServer {
             out.println("<!DOCTYPE html>");
             out.println("<html>");
             out.println("  <head>");
+            out.println("    <title>MBM HTML GUI</title>");
             if (includeBootstrap3) {
                 out.println("    <script src=\"https://code.jquery.com/jquery-1.10.1.min.js\"></script>\n");
                 out.println("    <link rel=\"stylesheet\" href=\"https://netdna.bootstrapcdn.com/"

@@ -1,0 +1,9 @@
+dependencies {
+    api "io.mats3:mats-api:$matsVersion" // install(..) method use MatsFactory
+    api "com.storebrand.healthcheck:healthcheck-api:$stbHealthCheckVersion"// install(..) method use HealthCheckRegistry
+
+    implementation project(":matsbrokermonitor-broadcastreceiver")
+    implementation project(":matsbrokermonitor-api")
+
+    compileOnly "org.slf4j:slf4j-api:$slf4jVersion"
+}

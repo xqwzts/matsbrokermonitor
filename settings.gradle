@@ -24,7 +24,8 @@ rootProject.name = 'matsbrokermonitor'
 
 include 'matsbrokermonitor-api', 'matsbrokermonitor-activemq', 'matsbrokermonitor-jms',
         'matsbrokermonitor-htmlgui', 'matsbrokermonitor-app',
-        'matsbrokermonitor-broadcastandcontrol', 'matsbrokermonitor-broadcastreceiver'
+        'matsbrokermonitor-broadcastandcontrol', 'matsbrokermonitor-broadcastreceiver',
+        'matsbrokermonitor-stbhealthcheck'
 
 println "** Java: ${ System.getProperty('java.version') }, Groovy: $GroovySystem.version," +
         " Gradle: ${ gradle.gradleVersion }, Charset.defaultCharset(): ${Charset.defaultCharset() }" +

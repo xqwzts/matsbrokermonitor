@@ -10,18 +10,21 @@ import io.mats3.MatsEndpoint.MatsRefuseMessageException;
 import io.mats3.MatsEndpoint.ProcessContext;
 import io.mats3.MatsFactory;
 import io.mats3.matsbrokermonitor.htmlgui.SetupTestMatsEndpoints.ThisIsARandomInnerClass.ThisIsYetAnotherLevelOfInnerClass.MatsThisIsNotReallyAMatsException;
+import io.mats3.test.MatsTestHelp;
 
 /**
  * @author Endre Stølsvik 2021-12-31 01:50 - http://stolsvik.com/, endre@stolsvik.com
  */
 public class SetupTestMatsEndpoints {
 
-    public static int BASE_CONCURRENCY = 5;
+    public static int BASE_CONCURRENCY = 2;
 
     static void setupMatsTestEndpoints(String servicePrefix, MatsFactory matsFactory) {
         setupMainMultiStagedService(servicePrefix, matsFactory);
         setupMidMultiStagedService(servicePrefix, matsFactory);
         setupLeafService(servicePrefix, matsFactory);
+
+        setupSuperSlowService(servicePrefix, matsFactory);
 
         setupTerminator(servicePrefix, matsFactory);
         setupSubscriptionTerminator(servicePrefix, matsFactory);
@@ -30,6 +33,7 @@ public class SetupTestMatsEndpoints {
     static final String SERVICE_MAIN = ".mainService";
     static final String SERVICE_MID = ".private.midMethod";
     static final String SERVICE_LEAF = ".private.leafMethod";
+    static final String SERVICE_SUPERSLOW = ".superSlowMethod";
     static final String TERMINATOR = ".terminator";
     static final String SUBSCRIPTION_TERMINATOR = ".subscriptionTerminator";
 
@@ -49,6 +53,15 @@ public class SetupTestMatsEndpoints {
                     return new DataTO(dto.number * dto.multiplier, dto.string + ":FromLeafService");
                 });
         single.getEndpointConfig().setConcurrency(BASE_CONCURRENCY * 6);
+    }
+
+    public static void setupSuperSlowService(String servicePrefix, MatsFactory matsFactory) {
+        matsFactory.single(servicePrefix + SERVICE_SUPERSLOW, DataTO.class,
+                DataTO.class,
+                (context, dto) -> {
+                    MatsTestHelp.takeNap(60_000);
+                    return new DataTO(dto.number, dto.string + ":FromSuperSlowService");
+                });
     }
 
     public static void setupMidMultiStagedService(String servicePrefix, MatsFactory matsFactory) {
@@ -178,7 +191,7 @@ public class SetupTestMatsEndpoints {
                 throw new ToStringMatsRefuseMessageException("ToStringMatsRefuseMessageException [Special toString (\n"
                         + "{some.package.looking.Information=Looking like an exception})]: Check 1, 2, 3)"
                         + "{qurlies}[brackets]$<lessgreater>\"quotes\"%\\!;* <- special chars!})]\n"
-                        + "some.package.looking.Information: So it looks like exception here."
+                        + "some.package.looking.Information: So it looks like classname here."
                         + " 2x Linefeeds after here, should be culled.\n\n",
                         new IllegalArgumentException("Nested 1",
                                 new IllegalStateException("Nested 2",
@@ -189,7 +202,7 @@ public class SetupTestMatsEndpoints {
                         + " [Special toString case that made problems (\n"
                         + "{some.package.looking.Information=Looking like an exception})]: Check 1, 2, 3)"
                         + "{qurlies}[brackets]$<lessgreater>\"quotes\"%\\!;* <- special chars!})]\n"
-                        + "some.package.looking.Information: So it looks like exception here. "
+                        + "some.package.looking.Information: So it looks like classname here. "
                         + "Here's a tab followed with 'at', then some text, to see if we trip on that: \tat test ok!\n",
                         new IllegalArgumentException("Nested 1",
                                 new IllegalStateException("Nested 2",

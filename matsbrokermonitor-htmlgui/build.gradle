@@ -18,6 +18,7 @@ dependencies {
     testImplementation project(":matsbrokermonitor-jms")
     testImplementation project(":matsbrokermonitor-broadcastandcontrol")
     testImplementation project(":matsbrokermonitor-broadcastreceiver")
+    testImplementation project(":matsbrokermonitor-stbhealthcheck")
 
     // MATS STUFF:
     // Need the JMS Mats
@@ -30,6 +31,10 @@ dependencies {
     testImplementation "io.mats3:mats-intercept-logging:$matsVersion"
     // We want the localinspect tool
     testImplementation "io.mats3:mats-localinspect:$matsVersion"
+
+    // Storebrand HealthCheck implementation
+    testImplementation "com.storebrand.healthcheck:healthcheck-impl:$stbHealthCheckVersion"
+    testImplementation "com.storebrand.healthcheck:healthcheck-output:$stbHealthCheckVersion"
 
     // JMS API
     testCompileOnly "$jmsApiDependency"
