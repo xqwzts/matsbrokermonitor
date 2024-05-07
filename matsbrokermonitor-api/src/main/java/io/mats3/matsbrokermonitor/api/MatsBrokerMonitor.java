@@ -176,9 +176,6 @@ public interface MatsBrokerMonitor extends Closeable {
     }
 
     interface MatsBrokerDestination {
-        String STAGE_ATTRIBUTE_DESTINATION = "mats.mbm.Queue";
-        String STAGE_ATTRIBUTE_DLQ = "mats.mbm.DLQ";
-
         /**
          * Queue or Topic.
          */
@@ -258,11 +255,17 @@ public interface MatsBrokerMonitor extends Closeable {
             private final boolean _dlq;
             private final String _midfix;
             private final String _typeName;
+            private final String _stageAttribute;
+            private final String _stageAttributeSize;
+            private final String _stageAttributeAge;
 
             StageDestinationType(boolean dlq, String midfix, String typeName) {
                 _dlq = dlq;
                 _midfix = midfix;
                 _typeName = typeName;
+                _stageAttribute = "mats.mbm." + this.name();
+                _stageAttributeSize = _stageAttribute + ".size";
+                _stageAttributeAge = _stageAttribute + ".age";
             }
 
             public boolean isDlq() {
@@ -275,6 +278,46 @@ public interface MatsBrokerMonitor extends Closeable {
 
             public String getTypeName() {
                 return _typeName;
+            }
+
+            /**
+             * The standard MatsBrokerMonitor 'broadcastreceiver' module will set a set of stage attribute on the Mats
+             * Stage when it gets updates from the MatsBrokerMonitor - the key will be this value, and the value will be
+             * the corresponding {@link MatsBrokerDestination} instance. If there are no value for the key, it means
+             * that this type of stage destination either is not present on the broker, or has zero messages.
+             * <p>
+             * Value is "mats.mbm.&lt;StageDestinationType.name()&gt;".
+             *
+             * @return the Mats-specific stage attribute for this type of stage destination.
+             */
+            public String getStageAttribute() {
+                return _stageAttribute;
+            }
+
+            /**
+             * Specialization of {@link #getStageAttribute()} for the size (queue length) of this type of stage
+             * destination - whose value will be a plain Long (or <code>null</code> if there are no messages).
+             * <p>
+             * Value is "mats.mbm.&lt;StageDestinationType.name()&gt;.size".
+             *
+             * @return the Mats-specific stage attribute for the size of this type of stage destination. The value is a
+             *         Long, or <code>null</code> if there are no messages.
+             */
+            public String getStageAttributeSize() {
+                return _stageAttributeSize;
+            }
+
+            /**
+             * Specialization of {@link #getStageAttribute()} for the age of the head message (in millis) of this type
+             * of stage destination - whose value will be a plain Long (or <code>null</code> if there are no messages).
+             * <p>
+             * Value is "mats.mbm.&lt;StageDestinationType.name()&gt;.age".
+             *
+             * @return the Mats-specific stage attribute for the age of the head message (in millis) of this type of
+             *         stage destination. The value is a Long, or <code>null</code> if there are no messages.
+             */
+            public String getStageAttributeAge() {
+                return _stageAttributeAge;
             }
         }
 

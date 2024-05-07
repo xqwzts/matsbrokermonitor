@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import io.mats3.MatsEndpoint;
 import io.mats3.MatsFactory;
+import io.mats3.MatsFactory.MatsPlugin;
 import io.mats3.MatsInitiator;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerInfo;
@@ -26,10 +27,16 @@ import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.UpdateEvent;
  * Rather simple utility which {@link MatsBrokerMonitor#registerListener(Consumer) subscribes} to {@link UpdateEvent}s
  * from the {@link MatsBrokerMonitor}, publishing them to the Mats fabric on the topic
  * {@link #BROADCAST_UPDATE_EVENT_TOPIC_ENDPOINT_ID}.
+ * <p>
+ * <b>Note that life cycling of the provided MatsBrokerMonitor is handled by this class:</b> When the instance of this
+ * class is {@link #start(MatsFactory) started} by the MatsFactory, it will invoke {@link MatsBrokerMonitor#start()
+ * start} on the MatsBrokerMonitor, and when this instance is {@link #close() closed} by the MatsFactory, it will
+ * {@link MatsBrokerMonitor#close() close} the MatsBrokerMonitor.
  *
+ * 
  * @author Endre Stølsvik 2022-11-12 10:33 - http://stolsvik.com/, endre@stolsvik.com
  */
-public class MatsBrokerMonitorBroadcastAndControl implements Closeable {
+public class MatsBrokerMonitorBroadcastAndControl implements Closeable, MatsPlugin {
     private static final Logger log = LoggerFactory.getLogger(MatsBrokerMonitorBroadcastAndControl.class);
 
     /**
@@ -54,44 +61,58 @@ public class MatsBrokerMonitorBroadcastAndControl implements Closeable {
      */
     private static final String SUPPRESS_LOGGING_TRACE_PROPERTY_KEY = "mats.SuppressLogging";
 
-    private final Consumer<UpdateEvent> _eventUpdateListener;
-
     private final MatsBrokerMonitor _matsBrokerMonitor;
 
-    private final MatsEndpoint<?, ?> _commandEndpoint;
-
+    /**
+     * Creates a {@link MatsBrokerMonitorBroadcastAndControl} instance, installs it as a {@link MatsPlugin} on the
+     * provided {@link MatsFactory}, and returns the instance - <b>Note that lifecycling of the provided
+     * {@link MatsBrokerMonitor} is handled by this class:</b> When this instance is {@link #start(MatsFactory) started}
+     * by the MatsFactory, it will invoke {@link MatsBrokerMonitor#start() start} on the MatsBrokerMonitor, and when
+     * this instance is {@link #close() closed} by the MatsFactory, it will {@link MatsBrokerMonitor#close() close} the
+     * MatsBrokerMonitor.
+     * 
+     * @param matsBrokerMonitor
+     *            the {@link MatsBrokerMonitor} to listen to - note that life-cycle of this instance is managed by this
+     *            class, "forwarded" from the {@link MatsFactory}.
+     * @param matsFactory
+     *            the {@link MatsFactory} to install the plugin on.
+     * @return the created {@link MatsBrokerMonitorBroadcastAndControl} instance.
+     */
     public static MatsBrokerMonitorBroadcastAndControl install(MatsBrokerMonitor matsBrokerMonitor,
             MatsFactory matsFactory) {
-        return new MatsBrokerMonitorBroadcastAndControl(matsBrokerMonitor, matsFactory);
+        MatsBrokerMonitorBroadcastAndControl broadcastAndControl = new MatsBrokerMonitorBroadcastAndControl(
+                matsBrokerMonitor, matsFactory);
+        matsFactory.getFactoryConfig().installPlugin(broadcastAndControl);
+        return broadcastAndControl;
     }
+
+    private Consumer<UpdateEvent> _eventUpdateListener;
+
+    private MatsEndpoint<?, ?> _commandEndpoint;
+
+    // ----- IMPLEMENTATION: MatsPlugin MatsBrokerMonitorBroadcastAndControl -----
 
     @Override
-    public void close() {
-        _matsBrokerMonitor.removeListener(_eventUpdateListener);
-        _commandEndpoint.remove(5000);
-    }
-
-    private MatsBrokerMonitorBroadcastAndControl(MatsBrokerMonitor matsBrokerMonitor, MatsFactory matsFactory) {
-        _matsBrokerMonitor = matsBrokerMonitor;
-
-        String topicEndpointId = BROADCAST_UPDATE_EVENT_TOPIC_ENDPOINT_ID;
-
-        MatsInitiator matsInitiator = matsFactory.getDefaultInitiator();
+    public void start(MatsFactory matsFactory) {
+        // Start the MatsBrokerMonitor, as per contract in JavaDoc.
+        _matsBrokerMonitor.start();
 
         // :: Create the MatsBrokerMonitor UpdateEvent listener
+        MatsInitiator matsInitiator = matsFactory.getDefaultInitiator();
         _eventUpdateListener = updateEvent -> {
             if (updateEvent.isUpdateEventOriginatedOnThisNode()) {
-                log.debug("Got UpdateEvent from MBM originating from this MBM/host (fullUpdate:[" + updateEvent
-                        .isFullUpdate() + "]) - broadcasting to [" + topicEndpointId + "].");
+                log.info("Got UpdateEvent from MBM originating from this MBM/host (fullUpdate:[" + updateEvent
+                        .isFullUpdate() + "]) - broadcasting to [" + BROADCAST_UPDATE_EVENT_TOPIC_ENDPOINT_ID + "].");
 
                 BroadcastUpdateEventDto dto = BroadcastUpdateEventDto.of(updateEvent);
 
+                // Send the UpdateEvent to the topic endpoint
                 matsInitiator.initiateUnchecked(init -> init
                         .traceId("MatsBrokerMonitorBroadcastUpdate:"
                                 + Long.toString(Math.abs(ThreadLocalRandom.current().nextLong()), 36))
                         .from("MatsBrokerMonitorBroadcaster")
                         .setTraceProperty(SUPPRESS_LOGGING_TRACE_PROPERTY_KEY, Boolean.TRUE)
-                        .to(topicEndpointId)
+                        .to(BROADCAST_UPDATE_EVENT_TOPIC_ENDPOINT_ID)
                         .publish(dto));
             }
             else {
@@ -99,12 +120,12 @@ public class MatsBrokerMonitorBroadcastAndControl implements Closeable {
             }
         };
         // .. register it
-        matsBrokerMonitor.registerListener(_eventUpdateListener);
+        _matsBrokerMonitor.registerListener(_eventUpdateListener);
 
         // :: Create the Command listener
         // On the off chance (i.e. only in the TestServer!) that another MatsBrokerMonitor command listener has already
         // been installed on this MatsFactory, we do not need to install one more.
-        if (!matsFactory.getEndpoint(MATSBROKERMONITOR_CONTROL).isPresent()) {
+        if (matsFactory.getEndpoint(MATSBROKERMONITOR_CONTROL).isEmpty()) {
             _commandEndpoint = matsFactory.terminator(MATSBROKERMONITOR_CONTROL, void.class,
                     MatsBrokerMonitorCommandDto.class, (ctx, state, command) -> {
                         // :: Is this FORCE_UPDATE or FORCE_UPDATE_FULL command?
@@ -121,6 +142,30 @@ public class MatsBrokerMonitorBroadcastAndControl implements Closeable {
                     + "] on this MatsFactory, can't install one more, ignoring.");
         }
 
+    }
+
+    @Override
+    public void preStop() {
+        // Remove the command endpoint, just to be clean.
+        if (_commandEndpoint != null) {
+            _commandEndpoint.remove(15_000);
+            _commandEndpoint = null;
+        }
+        // Remove us as listener from MatsBrokerMonitor
+        _matsBrokerMonitor.removeListener(_eventUpdateListener);
+        // .. and close the MatsBrokerMonitor, as per contract in JavaDoc.
+        _matsBrokerMonitor.close();
+    }
+
+    // TODO: Remove ASAP, once users have removed their call. Latest 2025.
+    @Override
+    public void close() {
+        log.error("DO NOT INVOKE THIS METHOD!", new Exception("This method is deprecated -"
+                + " the MatsFactory will handle it, by invoking preStop() and stop()."));
+    }
+
+    private MatsBrokerMonitorBroadcastAndControl(MatsBrokerMonitor matsBrokerMonitor, MatsFactory matsFactory) {
+        _matsBrokerMonitor = matsBrokerMonitor;
     }
 
     /**

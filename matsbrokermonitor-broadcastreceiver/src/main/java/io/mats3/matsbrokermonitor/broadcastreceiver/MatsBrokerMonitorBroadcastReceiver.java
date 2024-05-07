@@ -1,6 +1,5 @@
 package io.mats3.matsbrokermonitor.broadcastreceiver;
 
-import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -17,18 +16,20 @@ import org.slf4j.LoggerFactory;
 
 import io.mats3.MatsEndpoint;
 import io.mats3.MatsFactory;
+import io.mats3.MatsFactory.MatsPlugin;
 import io.mats3.MatsStage;
 import io.mats3.MatsStage.StageConfig;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerInfo;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.BrokerInfoDto;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination;
+import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestination.StageDestinationType;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.MatsBrokerDestinationDto;
 import io.mats3.matsbrokermonitor.api.MatsBrokerMonitor.UpdateEvent;
 
 /**
  * @author Endre Stølsvik 2022-11-12 10:34 - http://stolsvik.com/, endre@stolsvik.com
  */
-public class MatsBrokerMonitorBroadcastReceiver implements Closeable {
+public class MatsBrokerMonitorBroadcastReceiver implements MatsPlugin {
     private static final Logger log = LoggerFactory.getLogger(MatsBrokerMonitorBroadcastReceiver.class);
 
     /**
@@ -41,13 +42,6 @@ public class MatsBrokerMonitorBroadcastReceiver implements Closeable {
     private static final String BROADCAST_UPDATE_EVENT_TOPIC_ENDPOINT_ID = "mats.MatsBrokerMonitor.broadcastUpdate";
 
     /**
-     * Copied from MatsInterceptable.MatsLoggingInterceptor.
-     * <p>
-     * We accept that this won't be logged, as it will be annoying noise without much merit.
-     */
-    private static final String SUPPRESS_LOGGING_ENDPOINT_ALLOWS_ATTRIBUTE_KEY = "mats.SuppressLoggingAllowed";
-
-    /**
      * Copied from MatsBrokerMonitorBroadcastAndControl
      * <p>
      * The EndpointId to which one may request operations, currently forceUpdate.
@@ -56,14 +50,23 @@ public class MatsBrokerMonitorBroadcastReceiver implements Closeable {
      */
     public static final String MATSBROKERMONITOR_CONTROL = "mats.MatsBrokerMonitor.control";
 
+    /**
+     * Copied from MatsInterceptable.MatsLoggingInterceptor.
+     * <p>
+     * We accept that this won't be logged, as it will be annoying noise without much merit.
+     */
+    private static final String SUPPRESS_LOGGING_ENDPOINT_ALLOWS_ATTRIBUTE_KEY = "mats.SuppressLoggingAllowed";
+
     private MatsEndpoint<Void, Void> _broadcastReceiver;
 
-    private MatsFactory _matsFactory;
+    private final MatsFactory _matsFactory;
 
     private final CopyOnWriteArrayList<Consumer<UpdateEvent>> _listeners = new CopyOnWriteArrayList<>();
 
     public static MatsBrokerMonitorBroadcastReceiver install(MatsFactory matsFactory) {
-        return new MatsBrokerMonitorBroadcastReceiver(matsFactory);
+        MatsBrokerMonitorBroadcastReceiver broadcastReceiver = new MatsBrokerMonitorBroadcastReceiver(matsFactory);
+        matsFactory.getFactoryConfig().installPlugin(broadcastReceiver);
+        return broadcastReceiver;
     }
 
     public void forceUpdate(String correlationId, boolean full) {
@@ -83,62 +86,58 @@ public class MatsBrokerMonitorBroadcastReceiver implements Closeable {
         _listeners.remove(listener);
     }
 
-    @Override
-    public void close() {
-        // Remove the SubscriptionTerminator Endpoint from MatsFactory, just to be clean.
-        _broadcastReceiver.remove(5_000);
-        // Null out Receiver, just to be clean (help GC)
-        _broadcastReceiver = null;
-        // Null out MatsFactory, just to be clean (help GC)
-        _matsFactory = null;
-        // No more listeners
-        _listeners.clear();
-    }
+    // ----- IMPLEMENTATION: MatsPlugin MatsBrokerMonitorBroadcastReceiver -----
 
     private MatsBrokerMonitorBroadcastReceiver(MatsFactory matsFactory) {
         _matsFactory = matsFactory;
+    }
+
+    @Override
+    public void start(MatsFactory matsFactory) {
         // :: Create the SubscriptionTerminator receiving the broadcast from MatsBrokerMonitorBroadcastAndControl
         _broadcastReceiver = matsFactory.subscriptionTerminator(BROADCAST_UPDATE_EVENT_TOPIC_ENDPOINT_ID, void.class,
                 BroadcastUpdateEventDto.class, (ctx, state, updateEvent) -> {
                     NavigableMap<String, MatsBrokerDestination> eventDestinations = updateEvent.getEventDestinations();
-                    if (log.isTraceEnabled()) log.info("Received Update: FullUpdate:[" + updateEvent.isFullUpdate()
+                    if (log.isDebugEnabled()) log.debug("Received Update: FullUpdate:[" + updateEvent.isFullUpdate()
                             + "], CorrelationId:[" + updateEvent.getCorrelationId()
                             + "], # of destinations:[" + eventDestinations.size() + "].");
 
-                    // :: Move the Queues/Topics, and all DLQs, over to handy maps keyed on stageId
-                    Map<String, MatsBrokerDestination> destMap = new HashMap<>();
-                    Map<String, MatsBrokerDestination> dlqMap = new HashMap<>();
+                    // :: Move all MatsBrokerDestination to a Map with StageId as key, and then a Map with
+                    // StageDestinationType as key.
+                    Map<String, Map<StageDestinationType, MatsBrokerDestination>> destMap = new HashMap<>();
                     for (MatsBrokerDestination dest : eventDestinations.values()) {
-                        if (dest.getMatsStageId().isPresent()) {
-                            if (dest.isDlq()) {
-                                dlqMap.put(dest.getMatsStageId().get(), dest);
-                                if (log.isTraceEnabled())
-                                    log.trace(" \\- Received DLQ info [" + dest.getNumberOfQueuedMessages()
-                                            + " msgs] for stage [" + dest.getMatsStageId().get() + "]");
-                            }
-                            else {
-                                destMap.put(dest.getMatsStageId().get(), dest);
-                                if (log.isTraceEnabled())
-                                    log.trace(" \\- Received Destination info [" + dest.getNumberOfQueuedMessages()
-                                            + " msgs] for stage [" + dest.getMatsStageId().get() + "]");
-                            }
+                        if (dest.getMatsStageId().isPresent() && dest.getStageDestinationType().isPresent()) {
+                            Map<StageDestinationType, MatsBrokerDestination> stageMap = destMap
+                                    .computeIfAbsent(dest.getMatsStageId().get(), __ -> new HashMap<>());
+                            stageMap.put(dest.getStageDestinationType().get(), dest);
+                            log.info(" \\- Received [" + dest.getStageDestinationType().get() + "] info ["
+                                    + dest.getNumberOfQueuedMessages()
+                                    + " msgs] for stage [" + dest.getMatsStageId().get() + "]");
                         }
                     }
 
-                    // :: For all Stages for all Endpoints in the MatsFactory, add or remove Queue/Topic and DLQ as
-                    // attribute on the StageConfig, using above maps.
+                    // :: For all Stages for all Endpoints in the MatsFactory, add the destination info as a set of
+                    // attributes on the StageConfig, using above maps. If we don't have info for a stage, we null it.
                     List<MatsEndpoint<?, ?>> endpoints = matsFactory.getEndpoints();
                     for (MatsEndpoint<?, ?> endpoint : endpoints) {
                         List<? extends MatsStage<?, ?, ?>> stages = endpoint.getStages();
                         for (MatsStage<?, ?, ?> stage : stages) {
                             StageConfig<?, ?, ?> stageConfig = stage.getStageConfig();
                             String stageId = stageConfig.getStageId();
-                            // If destMap returns null, that is what we want to set.
-                            stageConfig.setAttribute(MatsBrokerDestination.STAGE_ATTRIBUTE_DESTINATION,
-                                    destMap.get(stageId));
-                            // If dlqMap returns null, that is what we want to set.
-                            stageConfig.setAttribute(MatsBrokerDestination.STAGE_ATTRIBUTE_DLQ,
-                                    dlqMap.get(stageId));
+                            Map<StageDestinationType, MatsBrokerDestination> typeMap = destMap.get(stageId);
+                            for (StageDestinationType enumV : StageDestinationType.values()) {
+                                // We want to set null if the destination is not present in the update.
+                                MatsBrokerDestination dest = typeMap != null
+                                        ? typeMap.get(enumV) // might return null, which is correct.
+                                        : null;
+                                stageConfig.setAttribute(enumV.getStageAttribute(), dest);
+                                stageConfig.setAttribute(enumV.getStageAttributeAge(), dest != null
+                                        ? dest.getHeadMessageAgeMillis()
+                                        : null);
+                                stageConfig.setAttribute(enumV.getStageAttributeSize(), dest != null
+                                        ? dest.getNumberOfQueuedMessages()
+                                        : null);
+                            }
                         }
                     }
 
@@ -158,6 +157,15 @@ public class MatsBrokerMonitorBroadcastReceiver implements Closeable {
         // Allow for log suppression for this SubscriptionTerminator
         _broadcastReceiver.getEndpointConfig().setAttribute(SUPPRESS_LOGGING_ENDPOINT_ALLOWS_ATTRIBUTE_KEY,
                 Boolean.TRUE);
+    }
+
+    @Override
+    public void preStop() {
+        // Remove and null the SubscriptionTerminator Endpoint from MatsFactory, just to be clean.
+        _broadcastReceiver.remove(15_000);
+        _broadcastReceiver = null;
+        // No more listeners
+        _listeners.clear();
     }
 
     /**

@@ -1,6 +1,6 @@
 dependencies {
-    api "io.mats3:mats-api:$matsVersion"
-    api project(":matsbrokermonitor-api")
+    api "io.mats3:mats-api:$matsVersion" // install(..) method needs MatsFactory
+    api project(":matsbrokermonitor-api") // install(..) method needs MatsBrokerMonitor
 
     compileOnly "org.slf4j:slf4j-api:$slf4jVersion"
 }

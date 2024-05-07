@@ -1,7 +1,7 @@
 // matsbrokermonitor-jms
 
 dependencies {
-    api project(":matsbrokermonitor-api")
+    api project(":matsbrokermonitor-api") // JmsMatsBrokerBrowseAndActions implements MatsBrokerBrowseAndActions
 
     compileOnly "$jmsApiDependency"
     compileOnly "org.slf4j:slf4j-api:$slf4jVersion"

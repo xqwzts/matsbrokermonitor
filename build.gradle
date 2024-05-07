@@ -20,6 +20,8 @@ ext {
     jmsApiDependency = 'jakarta.jms:jakarta.jms-api:2.0.3' // Following Mats3's lead. Only CompileOnly.
     jacksonVersion = '2.17.0'
 
+    stbHealthCheckVersion = '0.4.0+2023-04-25' // For 'matsbrokermonitor-stb-healthcheck'
+
     // === For testing
     activeMqVersion = '5.18.4'
     artemisMqVersion = '2.33.0'
