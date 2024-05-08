@@ -341,14 +341,9 @@ public class ActiveMqBrokerStatsQuerierImpl implements ActiveMqBrokerStatsQuerie
                 Queue requestQueuesQueue_main;
                 Topic requestTopicsTopic_main;
 
-                // -> No, this is a bad prefix that cannot utilize the wildcard syntax, so have to ask for every
-                // single queue and topic.
+                // We're asking for ALL queues and topics.
                 String queryRequestDestination_all = QUERY_REQUEST_DESTINATION_PREFIX + ".>";
 
-                log.info("The matsDestinationPrefix was set to [" + _matsDestinationPrefix + "], but this isn't"
-                        + " a proper \"path-style\" prefix (it is not ending with a dot), thus cannot restrict"
-                        + " the query to mats-specific destinations, but must query for all destinations by"
-                        + " employing [" + queryRequestDestination_all + "]");
                 requestQueuesQueue_main = session.createQueue(queryRequestDestination_all);
                 requestTopicsTopic_main = session.createTopic(queryRequestDestination_all);
 

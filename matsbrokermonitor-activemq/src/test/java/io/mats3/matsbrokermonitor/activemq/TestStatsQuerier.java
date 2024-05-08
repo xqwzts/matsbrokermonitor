@@ -91,9 +91,9 @@ public class TestStatsQuerier {
         Assert.assertTrue("Didn't get update from StatsQuerier.", await);
         log.info("###! StatsQuerier evidently got its first update.");
 
-        Assert.assertNull(correlationIdX[0]);
-        Assert.assertTrue(fullUpdateX[0]);
-        Assert.assertTrue(sameNode[0]);
+        Assert.assertNull("We should not have correlationId on the first update!", correlationIdX[0]);
+        Assert.assertTrue("The first update should be a full update!", fullUpdateX[0]);
+        Assert.assertTrue("The update should be from the same node - since we only have one!", sameNode[0]);
 
         // :: ACT 1
 
@@ -108,8 +108,8 @@ public class TestStatsQuerier {
         Assert.assertTrue("Didn't get update from StatsQuerier.", await);
 
         Assert.assertEquals(correlationId, correlationIdX[0]);
-        Assert.assertFalse(fullUpdateX[0]);
-        Assert.assertTrue(sameNode[0]);
+        Assert.assertFalse("This was supposed to be a non-full-update!", fullUpdateX[0]);
+        Assert.assertTrue("The update should be from the same node - since we only have one!", sameNode[0]);
 
         // :: ACT 2
 
@@ -124,8 +124,8 @@ public class TestStatsQuerier {
         Assert.assertTrue("Didn't get update from StatsQuerier.", await);
 
         Assert.assertEquals(correlationId, correlationIdX[0]);
-        Assert.assertTrue(fullUpdateX[0]);
-        Assert.assertTrue(sameNode[0]);
+        Assert.assertTrue("This was supposed to be a full-update!", fullUpdateX[0]);
+        Assert.assertTrue("The update should be from the same node - since we only have one!", sameNode[0]);
 
         log.info("Got event from StatsQuerier");
         statsQuerier.close();
