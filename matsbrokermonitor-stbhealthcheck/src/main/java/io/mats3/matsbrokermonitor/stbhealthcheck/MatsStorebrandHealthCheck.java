@@ -34,7 +34,7 @@ import io.mats3.matsbrokermonitor.broadcastreceiver.MatsBrokerMonitorBroadcastRe
  * <p>
  * When you have a {@link HealthCheckRegistry} instance, you can provide that to the static method
  * {@link #registerMatsHealthCheck(HealthCheckRegistry, MatsFactory, CharSequence...)} to get a decent health check for
- * Queues (age-of-head-message) and DLQs (messages present).
+ * Queues (old messages) and DLQs (messages present).
  * 
  * @author Endre Stølsvik 2024-05-06 18:32 - http://stolsvik.com/, endre@stolsvik.com
  */
@@ -53,11 +53,15 @@ public class MatsStorebrandHealthCheck {
     private static final double UPDATE_INTERVAL_TOO_LONG_MINUTES = 15;
 
     /**
+     * Installs a HealthCheck on the provided {@link HealthCheckRegistry} for the provided {@link MatsFactory}, checking
+     * the health of the MatsFactory's Queues (old messages) and DLQs (messages present).
      *
-     *
-     * @param healthCheckRegistry The HealthCheckRegistry to register the health check with.
-     * @param matsFactory The MatsFactory to check health for.
-     * @param responsible Responsible parties for the health check, if not provided, defaults to "Developers".
+     * @param healthCheckRegistry
+     *            The HealthCheckRegistry to register the health check with.
+     * @param matsFactory
+     *            The MatsFactory to check health for.
+     * @param responsible
+     *            Responsible parties for the health check, if not provided, defaults to "Developers".
      */
     public static void registerMatsHealthCheck(HealthCheckRegistry healthCheckRegistry, MatsFactory matsFactory,
             CharSequence... responsible) {
@@ -199,7 +203,7 @@ public class MatsStorebrandHealthCheck {
                         }
                         else {
                             checkContext.text("There are <100 DLQed messages total: DEGRADED_MINOR.");
-                            fault.turnOffAxes(Axis.DEGRADED_PARTIAL);
+                            fault.turnOffAxes(Axis.DEGRADED_PARTIAL, Axis.CRITICAL_WAKE_PEOPLE_UP);
                         }
                         checkContext.text("You must go the MatsBrokerMonitor to inspect, reissue or delete these!");
                         return fault;
