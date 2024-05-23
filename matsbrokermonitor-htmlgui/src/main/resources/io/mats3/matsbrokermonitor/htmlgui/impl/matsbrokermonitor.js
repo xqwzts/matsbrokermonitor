@@ -1036,6 +1036,12 @@ function matsbm_hover_call_out() {
     }
 }
 
+// Copy text to clipboard
+
+function matsbm_copy_clipboard(event, text) {
+    navigator.clipboard.writeText(text);
+}
+
 // ::: CODE TO BE RUN AFTER DOMContentLoaded
 
 // :: Adding event listeners for "limit messages" text field, shall only allow numbers.

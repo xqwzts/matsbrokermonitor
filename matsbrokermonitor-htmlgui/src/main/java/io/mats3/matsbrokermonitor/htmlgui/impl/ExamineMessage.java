@@ -207,6 +207,18 @@ public class ExamineMessage {
 
         // :: DLQ Exception, if any
 
+        // .. SVG-sprite: awesome-clipboard
+        // (from font-awesome, via https://leungwensen.github.io/svg-icon/#awesome)
+        out.html("<svg display='none'>\n"
+                + "  <symbol viewBox='0 0 1792 1792' id='clipboard'>\n"
+                + "    <path d='M768 1664h896v-640h-416q-40 0-68-28t-28-68V512H768v1152zm256-1440v-64q0-13-9.5-22.5T992"
+                + "             128H288q-13 0-22.5 9.5T256 160v64q0 13 9.5 22.5T288 256h704q13 0 22.5-9.5t9.5-22.5zm256"
+                + "             672h299l-299-299v299zm512 128v672q0 40-28 68t-68 28H736q-40 0-68-28t-28-68v-160H96q-40"
+                + "             0-68-28t-28-68V96q0-40 28-68T96 0h1088q40 0 68 28t28 68v328q21 13 36 28l408 408q28 28"
+                + "             48 76t20 88z'/>"
+                + "  </symbol>"
+                + "</svg>");
+
         part_DlqInformation(out, matsBrokerDestination.getStageDestinationType().orElse(UNKNOWN), msgRepr, matsTrace);
 
         // :: MATS TRACE! - do we have any?!
@@ -646,8 +658,8 @@ public class ExamineMessage {
         // ?: Do we have a Stage Origin? (This SHALL be present if we have any DLQ information, but hey ho)
         if (brokerMsg.getDlqStageOrigin().isPresent()) {
             out.html("<br/><div class='matsbm_box_call_or_state'>\n"
-                    + "<b>Stage Origin</b> (\"Debug Info\"):\n"
-                    + "<div class='matsbm_box_call_or_state_div'>");
+                    + "<b>Stage Origin</b> (\"Debug Info\"):");
+
             String debugInfo = brokerMsg.getDlqStageOrigin().get();
             if (debugInfo.trim().isEmpty()) {
                 debugInfo = "{none present}";
@@ -662,6 +674,12 @@ public class ExamineMessage {
                 debugInfo = "<i><b>" + app + "</b> v.<b>" + version + "</b> @ <b>" + hostname + "</b></i>\n"
                         + debugInfo;
             }
+            out.html("<a href='javascript:void(0)' onclick='matsbm_copy_clipboard(event, `")
+                    .DATA(debugInfo)
+                    .html("`)'>");
+            out.html("<svg class='matsbm_copy_clipboard'><use xlink:href=\"#clipboard\" /></svg>");
+            out.html("</a>\n");
+            out.html("<div class='matsbm_box_call_or_state_div'>");
             out.html(debugInfo);
             out.html("</div></div><br>\n");
         }
@@ -669,10 +687,17 @@ public class ExamineMessage {
         // ?: Do we have a stacktrace?
         if (brokerMsg.getDlqExceptionStacktrace().isPresent()) {
             // -> Yes, we have a stacktrace
+            String stacktrace = brokerMsg.getDlqExceptionStacktrace().get();
+
             out.html("<br/><div class='matsbm_box_call_or_state'>\n");
             out.html("Final <b>Exception</b> which caused the DLQ:");
+            out.html("<a href='javascript:void(0)' onclick='matsbm_copy_clipboard(event, `")
+                    .DATA(stacktrace)
+                    .html("`)'>");
+            out.html("<svg class='matsbm_copy_clipboard'><use xlink:href=\"#clipboard\" /></svg>");
+            out.html("</a>\n");
             out.html("<div class='matsbm_box_call_or_state_div'>");
-            out.DATA(brokerMsg.getDlqExceptionStacktrace().get());
+            out.DATA(stacktrace);
             out.html("</div></div><br>\n");
         }
         out.html("</div>\n");
@@ -1163,7 +1188,12 @@ public class ExamineMessage {
         }
         else if (data instanceof String) {
             String stringData = (String) data;
-            out.html("String[").DATA(stringData.length()).html(" chars]<br>\n");
+            out.html("String[").DATA(stringData.length()).html(" chars] ");
+            out.html("<a href='javascript:void(0)' onclick='matsbm_copy_clipboard(event, JSON.stringify(")
+                    .DATA(stringData)
+                    .html("))'>");
+            out.html("<svg class='matsbm_copy_clipboard'><use xlink:href=\"#clipboard\" /></svg>");
+            out.html("</a><br>\n");
 
             try {
                 String jsonData = new ObjectMapper().readTree(stringData).toPrettyString();

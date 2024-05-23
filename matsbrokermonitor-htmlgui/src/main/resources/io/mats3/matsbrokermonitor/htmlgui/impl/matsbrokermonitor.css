@@ -896,6 +896,13 @@
     margin-top: -2em;
 }
 
+.matsbm_copy_clipboard {
+    width: 1.5em;
+    height: 1.5em;
+    transform: translateY(0.4em);
+    margin-top: -2em;
+}
+
 .matsbm_table_matstrace_dlqrow {
     background-color: #f44336;
     color: white;
