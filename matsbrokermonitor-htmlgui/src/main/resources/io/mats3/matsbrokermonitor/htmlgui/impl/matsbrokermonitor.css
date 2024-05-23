@@ -896,6 +896,34 @@
     margin-top: -2em;
 }
 
+.matsbm_button_copy {
+    position: absolute;
+    top: 0.2em;
+    right: 0.2em;
+    border: 1px solid;
+    border-radius: 5px;
+    background: none;
+    opacity: 0.3;
+    z-index: 100;
+    transition: all 0.2s;
+}
+
+.matsbm_button_copy:hover {
+    opacity: 1;
+}
+
+.matsbm_button_copied {
+    opacity: 1;
+    fill: #009879;
+}
+
+.matsbm_button_icon {
+    width: 1.5em;
+    height: 1.5em;
+    transform: translateY(0.2em);
+    transition: all 0.2s;
+}
+
 .matsbm_table_matstrace_dlqrow {
     background-color: #f44336;
     color: white;
@@ -972,6 +1000,7 @@
     margin: 0.2em 0 0.2em 0.5em;
     padding: 0.2em 0.2em 0.2em 0.2em;
     max-width: calc(100% - 1em);
+    position: relative;
 }
 
 /* .. the actual JSON, with scrollbars */

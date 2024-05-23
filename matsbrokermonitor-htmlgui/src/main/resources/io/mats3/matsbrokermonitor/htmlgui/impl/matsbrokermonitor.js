@@ -1038,12 +1038,33 @@ function matsbm_hover_call_out() {
 
 // ::: CODE TO BE RUN AFTER DOMContentLoaded
 
-// :: Adding event listeners for "limit messages" text field, shall only allow numbers.
 document.addEventListener('DOMContentLoaded', () => {
+    // :: Adding event listeners for "limit messages" text field, shall only allow numbers.
     const input = document.getElementById('matsbm_all_limit_messages');
     if (input) {
         input.addEventListener('input', function () {
             this.value = this.value.replace(/[^\d]/g, '');
         });
     }
+
+    // :: Adding copy button to all matsbm_box_call_or_state divs
+    document.querySelectorAll('.matsbm_box_call_or_state').forEach((div) => {
+        const button = document.createElement('button');
+        button.innerHTML = '<svg class="matsbm_button_icon"><use xlink:href="#clone" /></svg>';
+        button.className = 'matsbm_button_copy';
+
+        button.addEventListener('click', () => {
+            div.querySelector('.matsbm_button_copy').innerHTML = '<svg class="matsbm_button_icon"><use xlink:href="#check" /></svg>';
+            div.querySelector('.matsbm_button_copy').classList.add('matsbm_button_copied');
+            const text = div.querySelector('.matsbm_box_call_or_state_div').innerHTML;
+            navigator.clipboard.writeText(text);
+
+            setTimeout(function () {
+                div.querySelector(".matsbm_button_copy").innerHTML = '<svg class="matsbm_button_icon"><use xlink:href="#clone" /></svg>';
+                div.querySelector('.matsbm_button_copy').classList.remove('matsbm_button_copied');
+            }, 2000);
+        });
+
+        div.appendChild(button);
+    });
 });

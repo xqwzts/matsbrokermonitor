@@ -207,6 +207,27 @@ public class ExamineMessage {
 
         // :: DLQ Exception, if any
 
+        // .. SVG-sprite: awesome-clone
+        // (from font-awesome, via https://leungwensen.github.io/svg-icon/#awesome)
+        out.html("<svg display='none'>\n"
+                + "  <symbol viewBox='0 0 1792 1792' id='clone'>\n"
+                + "    <path d='M1664 1632V544q0-13-9.5-22.5T1632 512H544q-13 0-22.5 9.5T512 544v1088q0 13 9.5 22.5"
+                + "             t22.5 9.5h1088q13 0 22.5-9.5t9.5-22.5zm128-1088v1088q0 66-47 113t-113 47H544"
+                + "             q-66 0-113-47t-47-113V544q0-66 47-113t113-47h1088q66 0 113 47t47 113zm-384-384v160"
+                + "             h-128V160q0-13-9.5-22.5T1248 128H160q-13 0-22.5 9.5T128 160v1088q0 13 9.5 22.5t22.5 9.5"
+                + "             h160v128H160q-66 0-113-47T0 1248V160Q0 94 47 47T160 0h1088q66 0 113 47t47 113z'/>"
+                + "  </symbol>"
+                + "</svg>");
+
+        // .. SVG-sprite: awesome-check
+        // (from font-awesome, via https://leungwensen.github.io/svg-icon/#awesome)
+        out.html("<svg display='none'>\n"
+                + " <symbol viewBox='0 0 1550 1188' id='check'>\n"
+                + "   <path d='M1550 232q0 40-28 68l-724 724-136 136q-28 28-68 28t-68-28l-136-136L28 662Q0 634 0 594"
+                + "            t28-68l136-136q28-28 68-28t68 28l294 295 656-657q28-28 68-28t68 28l136 136q28 28 28 68z'/>"
+                + "  </symbol>"
+                + "</svg>");
+
         part_DlqInformation(out, matsBrokerDestination.getStageDestinationType().orElse(UNKNOWN), msgRepr, matsTrace);
 
         // :: MATS TRACE! - do we have any?!
@@ -648,6 +669,7 @@ public class ExamineMessage {
             out.html("<br/><div class='matsbm_box_call_or_state'>\n"
                     + "<b>Stage Origin</b> (\"Debug Info\"):\n"
                     + "<div class='matsbm_box_call_or_state_div'>");
+
             String debugInfo = brokerMsg.getDlqStageOrigin().get();
             if (debugInfo.trim().isEmpty()) {
                 debugInfo = "{none present}";
