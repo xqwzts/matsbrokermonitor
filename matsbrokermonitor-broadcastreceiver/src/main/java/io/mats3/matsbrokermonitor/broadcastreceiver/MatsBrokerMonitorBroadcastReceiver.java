@@ -110,8 +110,8 @@ public class MatsBrokerMonitorBroadcastReceiver implements MatsPlugin {
                             Map<StageDestinationType, MatsBrokerDestination> stageMap = destMap
                                     .computeIfAbsent(dest.getMatsStageId().get(), __ -> new HashMap<>());
                             stageMap.put(dest.getStageDestinationType().get(), dest);
-                            log.info(" \\- Received [" + dest.getStageDestinationType().get() + "] info ["
-                                    + dest.getNumberOfQueuedMessages()
+                            if (log.isDebugEnabled()) log.debug(" \\- Received [" + dest.getStageDestinationType()
+                                    .get() + "] info [" + dest.getNumberOfQueuedMessages()
                                     + " msgs] for stage [" + dest.getMatsStageId().get() + "]");
                         }
                     }
@@ -148,8 +148,7 @@ public class MatsBrokerMonitorBroadcastReceiver implements MatsPlugin {
                         }
                         catch (Throwable t) {
                             log.error("The listener of class [" + listener.getClass().getName()
-                                    + "] threw when being invoked."
-                                    + " Ignoring.", t);
+                                    + "] threw when being invoked. Ignoring.", t);
                         }
                     }
                 });
